@@ -1,0 +1,36 @@
+{
+  "name": "pokemon-auto-scanner",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "verify:build": "node scripts/verify-build.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepare:opencv": "node scripts/copy-opencv.mjs",
+    "postinstall": "node scripts/copy-opencv.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/dm-sans": "^5.3.0",
+    "@fontsource-variable/manrope": "^5.3.0",
+    "@techstark/opencv-js": "4.11.0-release.1",
+    "idb": "^8.0.3",
+    "jszip": "^3.10.1",
+    "lucide-react": "^0.468.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "fake-indexeddb": "^6.2.0",
+    "typescript": "~5.9.3",
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0"
+  }
+}
