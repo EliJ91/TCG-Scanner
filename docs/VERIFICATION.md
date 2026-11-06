@@ -18,3 +18,10 @@ Browser integration was exercised in a separate local development origin with an
 - Dark mode rendered on a phone-sized viewport and remained selected after a reload. Settings and gallery controls rendered, with no page overflow at the tested phone width.
 
 This is a software and synthetic-browser verification record. Physical card-slinger performance, mobile camera optics, device audio output, glare behavior, thermal behavior, iOS/Android downloads, and production offline installation still require the hardware checklist in `MOBILE_TESTING.md`. The synthetic processing duration and session pace are not phone throughput claims.
+
+Minimal scanner layout verification:
+
+- Default screen contains the camera, Menu button, capture status/count, and Start/Pause control. Batch, settings, diagnostics, downloads, and recent cards appear only after opening the menu.
+- At 320 × 568, 375 × 667, 390 × 844, 430 × 932, 844 × 390, and 1440 × 900, the scanner is horizontally centered, vertically centered within 0.01 px, has no horizontal overflow, and keeps the main action inside the viewport.
+- Dark mode computes to `rgb(0, 0, 0)` on the page, with neutral gray panels and monochrome controls. Light mode and the persisted theme preference also work.
+- The synthetic two-card batch still completes exactly at its limit. A second card was captured while Recent cards was open, without interrupting the video. Thumbnails were absent before opening the gallery and removed when it closed. The export dialog retained its editable `Batch#001` default.

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Aperture, ArrowDownToLine, ArrowLeft, ArrowRight, AudioLines, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Expand, Focus, Gauge, Images, Layers3, LockKeyhole, Maximize, Moon, Pause, Play, RotateCw, ScanLine, Settings2, ShieldCheck, Square, Sun, Trash2, TriangleAlert, Volume2, VolumeX, X, Zap } from 'lucide-react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { Aperture, ArrowDownToLine, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Focus, Gauge, Images, Layers3, Menu, Moon, Pause, Play, RotateCw, ScanLine, Settings2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X } from 'lucide-react';
 import { useScanner } from './useScanner';
 import { useTheme } from './useTheme';
 import { downloadZip, rotateScan } from './core/export';
@@ -12,16 +12,20 @@ function BlobImage({ blob, alt, ...props }: { blob: Blob; alt: string } & React.
 }
 function Dialog({ title, children, close, wide = false }: { title: string; children: ReactNode; close: () => void; wide?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => { ref.current?.showModal(); }, []);
-  return <dialog ref={ref} className={wide ? 'dialog wide' : 'dialog'} onCancel={close} onClick={e => { if (e.target === e.currentTarget) close(); }}>
-    <div className="dialog-heading"><h2>{title}</h2><button className="icon-button" onClick={close} aria-label="Close dialog"><X size={20} /></button></div>
+  const titleId = useId();
+  useEffect(() => { const dialog = ref.current; dialog?.showModal(); return () => dialog?.close(); }, []);
+  return <dialog ref={ref} aria-labelledby={titleId} className={wide ? 'dialog wide' : 'dialog'} onCancel={event => { event.preventDefault(); close(); }} onClick={e => { if (e.target === e.currentTarget) close(); }}>
+    <div className="dialog-heading"><h2 id={titleId}>{title}</h2><button className="icon-button" onClick={close} aria-label="Close dialog"><X size={20} /></button></div>
     {children}
   </dialog>;
 }
 export default function App() {
   const s = useScanner();
   const theme = useTheme();
-  const [tab, setTab] = useState<'scanner' | 'gallery'>('scanner');
+  const [showMenu, setShowMenu] = useState(false);
+  const [showBatch, setShowBatch] = useState(false);
+  const [showGallery, setShowGallery] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [target, setTarget] = useState(50); const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false); const [selected, setSelected] = useState<string>();
   const [confirmClear, setConfirmClear] = useState(false); const [deleteId, setDeleteId] = useState<string>();
@@ -50,7 +54,7 @@ export default function App() {
     try {
       const name = exportName.trim() || defaultBatchName(s.batch.number);
       await s.renameBatch(name);
-      setLastExport(await downloadZip(s.scans, { ...s.batch, name }, setExporting)); setExportOpen(false);
+      setLastExport(await downloadZip(s.scans, { ...s.batch, name }, setExporting));
     }
     catch (err) { s.setError(`ZIP export failed: ${message(err)}. Your saved images are still on this device.`); }
     finally { setExporting(null); }
@@ -61,9 +65,9 @@ export default function App() {
     catch (err) { if (!(err instanceof DOMException && err.name === 'AbortError')) s.setError(`Sharing unavailable: ${message(err)}. Use the browser’s Downloads folder.`); }
     finally { setShareBusy(false); }
   };
-  const exportButton = (className = 'button dark') => <button className={className} disabled={!count || exporting !== null || s.pending > 0 || busy} onClick={() => { setExportName(s.batch?.name || defaultBatchName(s.batch?.number ?? 1)); setExportOpen(true); }}><ArrowDownToLine size={17} />{exporting !== null ? `Creating ZIP · ${exporting}%` : 'Download ZIP'}{exporting === null && <span className="button-count">{count}</span>}</button>;
-  const gallery = (compact = false) => <>
-    {count ? <div className={compact ? 'scan-strip' : 'gallery-grid'}>{(compact ? s.scans.slice(-6) : s.scans).map(scan => {
+  const exportButton = (className = 'button dark') => <button className={className} disabled={!count || exporting !== null || s.pending > 0 || busy} onClick={() => { setLastExport(undefined); setExportName(s.batch?.name || defaultBatchName(s.batch?.number ?? 1)); setExportOpen(true); }}><ArrowDownToLine size={17} />{exporting !== null ? `Creating ZIP · ${exporting}%` : 'Download ZIP'}{exporting === null && <span className="button-count">{count}</span>}</button>;
+  const gallery = () => <>
+    {count ? <div className="gallery-grid">{s.scans.map(scan => {
       const index = s.scans.findIndex(a => a.id === scan.id);
       return <button className="scan-tile" key={scan.id} onClick={() => setSelected(scan.id)}>
         <div className="scan-image"><BlobImage blob={scan.thumbnail} alt={`Scanned card ${index + 1}`} loading="lazy" /><span><Check size={12} /></span></div>
@@ -75,50 +79,85 @@ export default function App() {
       {a.reason && <div className="attempt-buttons"><button disabled={editingDisabled || count >= quantity} onClick={() => void s.retry(a)}><RotateCw size={13} /> Retry image</button><button onClick={() => { const url = URL.createObjectURL(a.raw), anchor = document.createElement('a'); anchor.href = url; anchor.download = `Unprocessed_${a.ordinal + 1}.jpg`; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 60000); }}>Save original</button><button disabled={editingDisabled} onClick={() => void safe(() => s.discard(a))}>Discard</button></div>}</div>
     </div>)}</div>}
   </>;
-  return <div className="app-shell">
-    <aside className="sidebar">
-      <a className="brand" href="#" onClick={e => { e.preventDefault(); setTab('scanner'); }}><span className="brand-mark"><ScanLine size={23} /></span><span>cardslinger<span className="brand-dot">.</span><small>POKÉMON AUTO SCANNER</small></span></a>
-      <div className="workspace-label">YOUR WORKSPACE</div>
-      <nav aria-label="Main navigation"><button className={tab === 'scanner' ? 'nav-item active' : 'nav-item'} onClick={() => setTab('scanner')}><ScanLine size={19} /> Scanner <span className="nav-indicator" /></button><button className={tab === 'gallery' ? 'nav-item active' : 'nav-item'} onClick={() => setTab('gallery')}><Images size={19} /> Image gallery <span className="nav-count">{count}</span></button><button className="nav-item" onClick={() => setShowSettings(true)}><Settings2 size={19} /> Settings</button></nav>
-      <div className="sidebar-tip"><span className="tip-label"><Zap size={15} /> BUILT FOR THE FLOW</span><p>Slide. Scan. Repeat.</p><small>Keep the cards moving.<br />We’ll take care of the rest.</small><div className="tip-cards"><i /><i /><i><ScanLine size={22} /></i></div></div>
-      <div className="sidebar-bottom"><div className="local-badge"><span className="green-dot" /> 100% on your device</div><p>No uploads. No account needed.</p><button onClick={() => setShowHelp(true)}><CircleHelp size={16} /> Scanning guide <ChevronRight size={15} /></button><div className="version">CARDSLINGER <span>v1.0</span></div></div>
-    </aside>
+  const openFromMenu = (open: () => void) => { setShowMenu(false); open(); };
+  const failedCount = s.attempts.filter(attempt => attempt.reason).length;
+  const scannerStatus = failedCount ? 'Scan needs review' : status;
+  const guideHeight = 70 * (s.cameraSize.width && s.cameraSize.height ? Math.min(1, .75 / (s.cameraSize.width / s.cameraSize.height)) : 1);
+  return <>
+    <main className="scanner-screen" aria-label="Card scanner">
+      <section className="scanner" aria-label="Scanner">
+        <div className={`viewfinder ${s.cameraSize.width ? 'has-camera' : ''}`}>
+          <video ref={s.videoRef} playsInline muted autoPlay aria-label="Live camera preview" />
+          <button className="menu-trigger" aria-label="Open menu" aria-haspopup="dialog" aria-expanded={showMenu} onClick={() => setShowMenu(true)}>
+            <Menu size={22} />{failedCount > 0 && <span className="menu-attention" aria-label={`${failedCount} scan${failedCount === 1 ? '' : 's'} need review`} />}
+          </button>
+          <div className="alignment-guide" style={{ height: `${guideHeight}%` }} aria-hidden="true"><i /><i /><i /><i /></div>
+          {!s.cameraSize.width && <div className="camera-placeholder"><ScanLine size={35} strokeWidth={1.25} /><p>Position a card</p></div>}
+          {s.settings.debug && s.corners && s.cameraSize.width > 0 && <svg className="boundary-svg" viewBox={`0 0 ${s.cameraSize.width} ${s.cameraSize.height}`} preserveAspectRatio="xMidYMid meet" aria-label="Last accepted card boundaries"><polygon points={s.corners.map(p => `${p.x},${p.y}`).join(' ')} /></svg>}
+        </div>
+        <div className="scanner-status" role="status" aria-live="polite">
+          <span className={`session-state ${s.session === 'scanning' ? 'is-live' : ''} ${failedCount ? 'needs-attention' : ''}`}><i /><span>{scannerStatus}</span></span>
+          <span className="scan-count" aria-label={`${count} of ${quantity} cards scanned`}>{count}<span> / {quantity}</span></span>
+        </div>
+        {s.session === 'scanning' ? <button className="button primary scan-action" onClick={s.pause}><Pause size={18} fill="currentColor" />Pause scanning</button> : <button className="button primary scan-action" disabled={!s.loaded || s.session === 'starting' || s.session === 'complete' || s.pending > 0 || failedCount > 0} onClick={() => void s.start(target)}>
+          {s.session === 'complete' ? <CheckCheck size={19} /> : <Play size={18} fill="currentColor" />}
+          {s.session === 'complete' ? 'Batch complete' : s.session === 'starting' ? 'Preparing…' : s.batch ? 'Resume scanning' : 'Start scanning'}
+        </button>}
+        {s.error && <div role="alert" className="scanner-error"><TriangleAlert size={16} /><p>{s.error}{failedCount > 0 && ' Open Menu → Recent cards to retry or discard the failed capture.'}</p><button className="icon-button" onClick={() => s.setError('')} aria-label="Dismiss error"><X size={16} /></button></div>}
+        {import.meta.env.DEV && new URLSearchParams(location.search).get('test-camera') === '1' && <div className="test-camera-controls"><small>Synthetic test camera · development only</small><button className="button outline" disabled={s.session !== 'scanning'} onClick={() => window.dispatchEvent(new Event('test-card-slide'))}>Slide test card</button></div>}
+      </section>
+    </main>
 
-    <div className="main-shell">
-      <header className="topbar"><span className="breadcrumb">Workspace <ChevronRight size={13} /><strong>{tab === 'scanner' ? 'Scanner' : 'Image gallery'}</strong></span><div className="topbar-actions"><button className="icon-button" aria-label={theme.dark ? 'Switch to light mode' : 'Switch to dark mode'} title={theme.dark ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => theme.setDark(!theme.dark)}>{theme.dark ? <Sun size={19} /> : <Moon size={19} />}</button><span className="private-label"><ShieldCheck size={15} /> Private by design</span><button className="icon-button" title={s.settings.muted ? 'Unmute sounds' : 'Mute sounds'} aria-label={s.settings.muted ? 'Unmute sounds' : 'Mute sounds'} onClick={() => s.setSettings({ ...s.settings, muted: !s.settings.muted })}>{s.settings.muted ? <VolumeX size={19} /> : <Volume2 size={19} />}</button><button className="icon-button" aria-label="Open settings" onClick={() => setShowSettings(true)}><Settings2 size={19} /></button></div></header>
-      <main>
-        <div className="page-heading"><div><div className="eyebrow"><span /> HANDS-FREE. HASSLE-FREE.</div><h1>{tab === 'scanner' ? 'Make every card count.' : 'Your cards, in order.'}</h1><p>{tab === 'scanner' ? 'Turn a stack of cards into a perfectly organized collection.' : 'Review your scans, make corrections, and export your batch.'}</p></div><button className="button outline guide-button" onClick={() => setShowHelp(true)}><CircleHelp size={16} /> Quick guide</button></div>
-        {s.error && <div role="alert" className="alert error"><TriangleAlert size={19} /><div><strong>Scanner needs attention</strong><p>{s.error}</p></div><button className="icon-button" onClick={() => s.setError('')} aria-label="Dismiss error"><X size={17} /></button></div>}
-        {import.meta.env.DEV && new URLSearchParams(location.search).get('test-camera') === '1' && <div className="alert"><TriangleAlert size={18}/><div><strong>Synthetic test camera · development only</strong><p>Generated cards exercise the real capture, worker, and storage pipeline.</p></div><button className="button outline" disabled={s.session !== 'scanning'} onClick={() => window.dispatchEvent(new Event('test-card-slide'))}>Slide test card</button></div>}
-        {lastExport && <div className="alert success"><CheckCheck size={20} /><div><strong>{lastExport.name} is ready</strong><p>Your saved images stay on this device. Check Downloads, or save through the share sheet.</p></div>{typeof navigator.share === 'function' && <button className="button outline" disabled={shareBusy} onClick={() => void shareZip()}>Share / Save</button>}<button className="icon-button" aria-label="Dismiss download message" onClick={() => setLastExport(undefined)}><X size={17} /></button></div>}
-        {s.session === 'complete' && <div className="completion" role="status"><div className="complete-icon"><CheckCheck size={24} /></div><div><span className="eyebrow">ALL CARDS ACCOUNTED FOR</span><h2>Batch complete!</h2><p>{count} / {quantity} cards scanned and saved.</p></div><div className="completion-actions">{exportButton()}<button className="button outline" onClick={() => setTab('gallery')}>Review images</button><button className="text-button" onClick={() => setConfirmClear(true)}>Start new batch <ArrowRight size={15} /></button></div></div>}
+    {showMenu && <Dialog title="Menu" close={() => setShowMenu(false)}>
+      <nav className="menu-list" aria-label="Scanner menu">
+        <button onClick={() => openFromMenu(() => setShowBatch(true))}><Layers3 size={20} /><span>Batch<small>{count} / {quantity} cards scanned</small></span><ChevronRight size={17} /></button>
+        <button onClick={() => openFromMenu(() => setShowGallery(true))}><Images size={20} /><span>Recent cards<small>{failedCount ? `${failedCount} need review` : `${count} saved`}</small></span><ChevronRight size={17} /></button>
+        <button onClick={() => openFromMenu(() => setShowSettings(true))}><Settings2 size={20} /><span>Settings</span><ChevronRight size={17} /></button>
+        <button onClick={() => openFromMenu(() => setShowHelp(true))}><CircleHelp size={20} /><span>Scanning guide</span><ChevronRight size={17} /></button>
+        {s.settings.debug && <button onClick={() => openFromMenu(() => setShowDiagnostics(true))}><Gauge size={20} /><span>Diagnostics</span><ChevronRight size={17} /></button>}
+        {s.cameraSize.width > 0 && <>
+          <div className="menu-divider" />
+          <button disabled={s.session !== 'scanning' || s.pending + count >= quantity || s.pending >= s.settings.queueLimit} onClick={() => openFromMenu(s.explicitCapture)}><Aperture size={20} /><span>Capture current card</span><ChevronRight size={17} /></button>
+          <button onClick={() => openFromMenu(s.stop)}><Square size={18} /><span>Stop camera</span><ChevronRight size={17} /></button>
+        </>}
+      </nav>
+      <div className="menu-footer">{exportButton()}{busy && <p className="setting-hint">Pause scanning to download or edit images.</p>}</div>
+    </Dialog>}
 
-        <div style={{ display: tab === 'scanner' ? 'block' : 'none' }}>
-          <div className="scanner-layout">
-            <section className="camera-panel">
-              <div className="panel-header"><h2><Camera size={18} /> Live scanner</h2><span className={`status-pill ${s.session === 'scanning' ? 'on' : ''}`}><span />{s.session === 'scanning' ? 'LIVE CAMERA' : s.cameraSize.width ? 'CAMERA READY' : 'CAMERA OFF'}</span></div>
-              <div className={`viewfinder ${s.cameraSize.width ? 'has-camera' : ''}`}>
-                <video ref={s.videoRef} playsInline muted autoPlay aria-label="Live camera preview" />
-                {!s.cameraSize.width && <div className="viewfinder-grid" />}
-                <div className="camera-top"><span><span className="record-dot" />{s.cameraSize.width ? `${s.cameraSize.width} × ${s.cameraSize.height}` : 'REAR CAMERA PREFERRED'}</span><span><LockKeyhole size={11} /> LOCAL ONLY</span></div>
-                <div className="alignment-guide"><i /><i /><i /><i />{!s.cameraSize.width && <div className="camera-placeholder"><div className="placeholder-card"><ScanLine size={32} strokeWidth={1.25} /></div><strong>A little movement.<br />A perfect capture.</strong><p>Position your phone above the slinger.<br />Start scanning, then slide in a card.</p></div>}</div>
-                {s.settings.debug && s.corners && s.cameraSize.width > 0 && <svg className="boundary-svg" viewBox={`0 0 ${s.cameraSize.width} ${s.cameraSize.height}`} preserveAspectRatio="xMidYMid meet" aria-label="Last accepted card boundaries"><polygon points={s.corners.map(p => `${p.x},${p.y}`).join(' ')} /><text x="15" y="35">Last accepted boundaries</text></svg>}
-                <div className="camera-bottom"><span><Focus size={14} /> Automatic edge detection</span><button className="camera-expand" aria-label="Expand camera preview" onClick={() => { const view = s.videoRef.current?.parentElement; if (view?.requestFullscreen) void view.requestFullscreen().catch(() => s.setError('Fullscreen preview is unavailable in this browser.')); else s.setError('Fullscreen preview is unavailable in this browser.'); }}><Expand size={16} /></button></div>
-              </div>
-              <div className="detection-bar" role="status" aria-live="polite"><span className={`detection-light ${s.session === 'scanning' ? 'live' : ''}`} /><div><strong>{status}</strong><span>{s.session === 'scanning' ? s.pending > 0 ? `${s.pending} capture${s.pending > 1 ? 's' : ''} in pipeline · wait for the ding` : 'A new scan starts with physical card movement' : s.session === 'complete' ? 'Capture has stopped automatically' : 'Automatic capture begins after a card settles'}</span></div><AudioLines size={23} /></div>
-              <div className="camera-controls">{s.session === 'scanning' ? <button className="button primary" onClick={s.pause}><Pause size={17} fill="currentColor" /> Pause scanning</button> : <button className="button primary" disabled={!s.loaded || s.session === 'starting' || s.session === 'complete' || s.pending > 0 || s.attempts.some(a => a.reason)} onClick={() => void s.start(target)}><Play size={17} fill="currentColor" />{s.session === 'starting' ? 'Preparing…' : s.batch ? 'Resume scanning' : 'Start scanning'}</button>}<button className="button outline stop-button" onClick={s.stop} disabled={s.session === 'idle'}><Square size={14} fill="currentColor" /> Stop</button><button className="capture-button" onClick={s.explicitCapture} disabled={s.session !== 'scanning' || s.pending + count >= quantity || s.pending >= s.settings.queueLimit} title="Explicitly capture the card already in view"><Aperture size={20} /><span>Capture current</span></button></div>
-              {s.notice && <p className="scanner-notice">{s.notice}</p>}
-            </section>
+    {showBatch && <Dialog title={s.batch?.name || 'Batch'} close={() => setShowBatch(false)}>
+      <div className="batch-content">
+        <label className="field-label" htmlFor="batch-quantity">Cards per batch</label>
+        <div className="quantity-options">{[10,25,50,100].map(q => <button key={q} disabled={!!s.batch || busy} aria-pressed={quantity === q} className={quantity === q ? 'selected' : ''} onClick={() => setTarget(q)}>{q}</button>)}</div>
+        <div className="custom-quantity"><label htmlFor="batch-quantity">Custom quantity</label><input id="batch-quantity" type="number" inputMode="numeric" min="1" max="10000" value={quantity} disabled={!!s.batch || busy} onChange={e => setTarget(Math.min(10000, Math.max(1, Number(e.target.value) || 1)))} /></div>
+        <div className="progress-heading"><span>{count} / {quantity} cards scanned</span><span>{Math.round(progress)}%</span></div>
+        <div className="progress-track" role="progressbar" aria-label="Batch progress" aria-valuemin={0} aria-valuemax={quantity} aria-valuenow={count}><div style={{ width: `${progress}%` }} /></div>
+        {s.batch && <p className="setting-hint batch-hint">Quantity is fixed for this batch. Start a new batch to change it.</p>}
+        {s.notice && <p className="setting-hint batch-hint">{s.notice}</p>}
+      </div>
+      <div className="dialog-footer batch-actions">{s.batch && <button className="button danger-outline" disabled={busy || s.pending > 0} onClick={() => setConfirmClear(true)}>New batch</button>}{exportButton()}</div>
+    </Dialog>}
 
-            <div className="batch-column"><section className="batch-panel"><div className="panel-header"><h2><Layers3 size={18} /> Current batch</h2><span className="batch-number">#{String(s.batch?.number ?? 1).padStart(3, '0')}</span></div><div className="batch-body"><label className="field-label" htmlFor="batch-quantity">HOW MANY CARDS?</label><div className="quantity-options">{[10,25,50,100].map(q => <button key={q} disabled={!!s.batch || busy} className={quantity === q ? 'selected' : ''} onClick={() => setTarget(q)}>{q}</button>)}</div><div className="custom-quantity"><label htmlFor="batch-quantity">Batch quantity</label><input id="batch-quantity" type="number" inputMode="numeric" min="1" max="10000" value={quantity} disabled={!!s.batch || busy} onChange={e => setTarget(Math.min(10000, Math.max(1, Number(e.target.value) || 1)))} /><span>cards</span></div><div className="progress-heading"><span>Batch progress</span><span>{Math.round(progress)}%</span></div><div className="progress-track" role="progressbar" aria-label="Batch progress" aria-valuemin={0} aria-valuemax={quantity} aria-valuenow={count}><div style={{ width: `${progress}%` }} /></div><div className="batch-counter"><strong>{String(count).padStart(2, '0')}</strong><span>/ {quantity}<small>CARDS SCANNED</small></span><div className="counter-icon"><Layers3 size={23} /></div></div><div className="batch-divider" /><div className="batch-stat"><span><Gauge size={15} /> Avg. processing</span><strong>{avg ? `${avg} ms` : '—'}</strong></div><div className="batch-stat"><span><Zap size={15} /> Measured pace</span><strong>{rate}<small> cards/min</small></strong></div><div className="batch-stat"><span><CheckCheck size={15} /> Saved on device</span><strong>{count}<small> images</small></strong></div>{exportButton('button dark export-main')}<p className="export-note"><ShieldCheck size={12} /> Full-resolution JPEGs. Sequentially named.</p>{s.batch && <button className="new-batch" disabled={busy || s.pending > 0} onClick={() => setConfirmClear(true)}>Clear batch & start fresh <ArrowRight size={13} /></button>}</div></section><div className="quality-note"><div className="quality-icon"><Maximize size={20} /></div><div><strong>Your cards. Every detail.</strong><p>Auto-cropped, perspective-corrected,<br />and saved as high-quality JPEGs.</p></div></div></div>
-          </div>
-          {s.settings.debug && <section className="debug-panel"><h2>Live diagnostics</h2><div><span>Motion <b>{((s.reading?.score ?? 0) * 100).toFixed(2)}%</b></span><span>Stability <b>{((s.reading?.stability ?? 0) * 100).toFixed(0)}%</b></span><span>Noise <b>{s.reading?.noise.toFixed(2) ?? '—'}</b></span><span>Capture state <b>{s.reading?.state ?? 'waiting'}</b></span><span>Queue <b>{s.pending} / {s.fallback ? 1 : s.settings.queueLimit}</b></span><span>Analysis <b>{timingLabel(s.timing)}</b></span><span>Processing <b>{avg ? `${avg} ms` : '—'}</b></span><span>Failures <b>{s.attempts.filter(a => a.reason).length}</b></span><span>Cycle <b>{s.reading?.cycle ?? 0}</b></span><span>Sharpness <b>{latest?.sharpness.toFixed(1) ?? '—'}</b></span><span>Confidence <b>{latest ? `${Math.round(latest.confidence * 100)}%` : '—'}</b></span><span>Engine <b>{s.fallback ? 'Main thread' : 'Web Worker'}</b></span></div></section>}
-          <section className="recent-panel"><div className="section-heading"><div><h2>Recent scans <span>{count}</span></h2><p>Every card, automatically in its place.</p></div><button className="text-button" onClick={() => setTab('gallery')}>View gallery <ArrowRight size={15} /></button></div>{gallery(true)}</section>
-        </div>{tab === 'gallery' && <section className="gallery-panel"><div className="section-heading"><div><h2>Batch #{String(s.batch?.number ?? 1).padStart(3,'0')} <span>{count} images</span></h2><p>{busy ? 'Pause scanning to rotate or delete images.' : 'Select a card to inspect, rotate, or remove it.'}</p></div>{exportButton()}</div>{gallery()}</section>}
-        <footer><span><ShieldCheck size={13} /> Your collection never leaves your device.</span><span>Made for the way you collect.</span></footer>
-      </main>
-      <nav className="mobile-nav" aria-label="Mobile navigation"><button className={tab === 'scanner' ? 'active' : ''} onClick={() => setTab('scanner')}><ScanLine size={20} />Scanner</button><button className={tab === 'gallery' ? 'active' : ''} onClick={() => setTab('gallery')}><Images size={20} />Gallery {count > 0 && `(${count})`}</button><button onClick={() => setShowSettings(true)}><Settings2 size={20} />Settings</button></nav>
-    </div>
+    {showGallery && <Dialog title="Recent cards" close={() => setShowGallery(false)} wide>
+      <div className="gallery-heading"><p>{count} saved{busy ? ' · pause to edit' : ''}</p>{exportButton()}</div>
+      {gallery()}
+    </Dialog>}
+
+    {showDiagnostics && <Dialog title="Diagnostics" close={() => setShowDiagnostics(false)}><div className="diagnostics-grid">
+      <span>Motion<b>{((s.reading?.score ?? 0) * 100).toFixed(2)}%</b></span>
+      <span>Stability<b>{((s.reading?.stability ?? 0) * 100).toFixed(0)}%</b></span>
+      <span>Noise<b>{s.reading?.noise.toFixed(2) ?? '—'}</b></span>
+      <span>Capture state<b>{s.reading?.state ?? 'waiting'}</b></span>
+      <span>Queue<b>{s.pending} / {s.fallback ? 1 : s.settings.queueLimit}</b></span>
+      <span>Analysis<b>{timingLabel(s.timing)}</b></span>
+      <span>Avg. processing<b>{avg ? `${avg} ms` : '—'}</b></span>
+      <span>Measured pace<b>{rate} cards/min</b></span>
+      <span>Failures<b>{failedCount}</b></span>
+      <span>Cycle<b>{s.reading?.cycle ?? 0}</b></span>
+      <span>Sharpness<b>{latest?.sharpness.toFixed(1) ?? '—'}</b></span>
+      <span>Confidence<b>{latest ? `${Math.round(latest.confidence * 100)}%` : '—'}</b></span>
+      <span>Engine<b>{s.fallback ? 'Main thread' : 'Web Worker'}</b></span>
+      <span>Camera<b>{s.cameraSize.width ? `${s.cameraSize.width} × ${s.cameraSize.height}` : 'Off'}</b></span>
+    </div></Dialog>}
 
     {showSettings && <Dialog title="Scanner settings" close={() => setShowSettings(false)}><div className="settings-content">
       <p className="dialog-intro">Fine-tune for your lighting, phone, and card feed. Pause before changing detection or camera settings.</p>
@@ -141,20 +180,20 @@ export default function App() {
       <h3><Volume2 size={16} /> Sound & diagnostics</h3>
       <Toggle label="Scan confirmation sounds" checked={!s.settings.muted} onChange={v => s.setSettings({ ...s.settings, muted: !v })} />
       <Setting label="Volume" value={`${Math.round(s.settings.volume * 100)}%`}><input aria-label="Sound volume" type="range" min="0" max="1" step="0.05" value={s.settings.volume} onChange={e => s.setSettings({ ...s.settings, volume: +e.target.value })} /></Setting><button className="button outline" onClick={() => void s.testSound()}><Volume2 size={16} /> Test scan sound</button>
-      <Toggle label="Show live diagnostics" checked={s.settings.debug} hint="Motion scores, stability, processing times, and last accepted corners." onChange={v => s.setSettings({ ...s.settings, debug: v })} />
+      <Toggle label="Show live diagnostics" checked={s.settings.debug} hint="Adds Diagnostics to the menu and shows the last accepted corners on the preview." onChange={v => s.setSettings({ ...s.settings, debug: v })} />
       <h3><ArrowDownToLine size={16} /> Install for your workbench</h3><p className="setting-hint">After the first online load finishes caching, the scanner works offline. On iPhone, use Safari → Share → Add to Home Screen.</p>{installPrompt && <button className="button dark" onClick={() => { void installPrompt.prompt(); setInstallPrompt(undefined); }}>Install CardSlinger</button>}
     </div><div className="dialog-footer"><button className="button dark" onClick={() => setShowSettings(false)}>Done</button></div></Dialog>}
     {showHelp && <Dialog title="A smooth scan, every time." close={() => setShowHelp(false)}><div className="guide-content"><p className="dialog-intro">Set up once. Then let your card-slinger do its thing.</p>{[
       ['Mount & light', 'Mount your phone firmly above the white enclosure. Keep all four card edges visible and leave a little space around them. Use even side lighting to reduce holo glare.'],
-      ['Set your batch', 'Choose how many valid cards you want. Tap Start scanning and allow camera access. Your first scan needs physical movement; use Capture current to scan a card already in place.'],
+      ['Set your batch', 'Open Menu → Batch to choose a quantity. Tap Start scanning and allow camera access. Your first scan needs movement; Menu → Capture current card intentionally scans a card already in place.'],
       ['Slide, settle, listen', 'Slide each card fully into position. A ding means its corrected image has been saved. Identical cards work because the scanner tracks movement. Slow down if the queue fills.'],
-      ['Review & download', 'The final card gets a ding and a distinct three-note alarm. Capture stops automatically. Review images, rotate any upside-down cards, then download your ZIP.'],
+      ['Review & download', 'The final card gets a ding and a distinct three-note alarm. Capture stops automatically. Open Menu → Recent cards to review and rotate images, then download your ZIP from the menu.'],
     ].map(([title, text], i) => <div className="guide-step" key={title}><span>{String(i + 1).padStart(2,'0')}</span><div><h3>{title}</h3><p>{text}</p></div></div>)}<div className="guide-callout"><ShieldCheck size={18} /><p>Scans stay in this browser’s local storage. Download your batch before clearing browser data. Pausing, reloading, or resuming always waits for new movement.</p></div></div><div className="dialog-footer"><button className="button primary" onClick={() => setShowHelp(false)}>Ready to scan <ArrowRight size={16} /></button></div></Dialog>}
-    {confirmClear && <Dialog title="Start a fresh batch?" close={() => setConfirmClear(false)}><div className="confirm-content"><p>This deletes this batch’s {count} saved images and {s.attempts.length} retained captures from this device. Download your ZIP first if you want to keep them.</p>{exportButton()}<p className="setting-hint">A download does not automatically clear your batch.</p></div><div className="dialog-footer"><button className="button outline" onClick={() => setConfirmClear(false)}>Keep batch</button><button className="button danger" disabled={editingDisabled} onClick={() => void safe(async () => { await s.clear(); setLastExport(undefined); setConfirmClear(false); setTab('scanner'); })}><Trash2 size={15} /> Delete & start new</button></div></Dialog>}
-    {exportOpen && <Dialog title="Download your batch" close={() => { if (exporting === null) setExportOpen(false); }}><div className="confirm-content"><p>Give this batch a name before saving your archive.</p><label className="select-setting batch-name-field" htmlFor="export-batch-name">Batch name<input id="export-batch-name" autoFocus type="text" maxLength={100} value={exportName} disabled={exporting !== null} placeholder={defaultBatchName(s.batch?.number ?? 1)} onChange={e => setExportName(e.target.value)} /></label><p className="archive-preview">{archiveFilename(exportName, s.batch?.number ?? 1)}</p><p className="setting-hint">{count} accepted images · sequential Pokémon filenames inside the ZIP. The batch name is remembered for your next download.</p>{exporting !== null && <div className="progress-track" role="progressbar" aria-label="ZIP export progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={exporting}><div style={{width:`${exporting}%`}} /></div>}</div><div className="dialog-footer"><button className="button outline" disabled={exporting !== null} onClick={() => setExportOpen(false)}>Cancel</button><button className="button dark" disabled={exporting !== null || s.pending > 0 || busy} onClick={() => void exportBatch()}><ArrowDownToLine size={16}/>{exporting !== null ? `Creating ZIP · ${exporting}%` : `Download ZIP · ${count} images`}</button></div></Dialog>}
+    {confirmClear && <Dialog title="Start a fresh batch?" close={() => setConfirmClear(false)}><div className="confirm-content"><p>This deletes this batch’s {count} saved images and {s.attempts.length} retained captures from this device. Download your ZIP first if you want to keep them.</p>{exportButton()}<p className="setting-hint">A download does not automatically clear your batch.</p></div><div className="dialog-footer"><button className="button outline" onClick={() => setConfirmClear(false)}>Keep batch</button><button className="button danger" disabled={editingDisabled} onClick={() => void safe(async () => { await s.clear(); setLastExport(undefined); setConfirmClear(false); setShowBatch(false); setShowGallery(false); setShowMenu(false); })}><Trash2 size={15} /> Delete & start new</button></div></Dialog>}
+    {exportOpen && <Dialog title="Download your batch" close={() => { if (exporting === null) setExportOpen(false); }}><div className="confirm-content">{lastExport ? <div className="export-success" role="status"><strong>{lastExport.name} is ready</strong><p>Saved scans stay on this device.</p>{typeof navigator.share === 'function' && <button className="button outline" disabled={shareBusy} onClick={() => void shareZip()}>Share / Save</button>}</div> : <p>Give this batch a name before saving your archive.</p>}<label className="select-setting batch-name-field" htmlFor="export-batch-name">Batch name<input id="export-batch-name" autoFocus type="text" maxLength={100} value={exportName} disabled={exporting !== null} placeholder={defaultBatchName(s.batch?.number ?? 1)} onChange={e => setExportName(e.target.value)} /></label><p className="archive-preview">{archiveFilename(exportName, s.batch?.number ?? 1)}</p><p className="setting-hint">{count} accepted images · sequential Pokémon filenames inside the ZIP. The batch name is remembered for your next download.</p>{exporting !== null && <div className="progress-track" role="progressbar" aria-label="ZIP export progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={exporting}><div style={{width:`${exporting}%`}} /></div>}</div><div className="dialog-footer"><button className="button outline" disabled={exporting !== null} onClick={() => setExportOpen(false)}>Cancel</button><button className="button dark" disabled={exporting !== null || s.pending > 0 || busy} onClick={() => void exportBatch()}><ArrowDownToLine size={16}/>{exporting !== null ? `Creating ZIP · ${exporting}%` : `Download ZIP · ${count} images`}</button></div></Dialog>}
     {active && <Dialog title={filename(s.scans.findIndex(a => a.id === active.id))} close={() => setSelected(undefined)} wide><div className="review-image"><BlobImage blob={active.blob} alt="Full-resolution scanned card" /></div><div className="review-meta"><span>{active.width} × {active.height} · JPEG</span><span>{Math.round(active.processingMs)} ms · {Math.round(active.confidence * 100)}% edge confidence</span></div><div className="dialog-footer review-actions"><button className="icon-button" aria-label="Previous card" disabled={s.scans[0].id === active.id} onClick={() => setSelected(s.scans[s.scans.findIndex(a => a.id === active.id) - 1]?.id)}><ArrowLeft size={20} /></button><button className="button outline" disabled={editingDisabled} onClick={() => void safe(async () => s.updateScan(await rotateScan(active)))}><RotateCw size={16} /> Rotate 180°</button><button className="button danger-outline" disabled={editingDisabled} onClick={() => setDeleteId(active.id)}><Trash2 size={16} /> Delete</button><button className="icon-button" aria-label="Next card" disabled={latest?.id === active.id} onClick={() => setSelected(s.scans[s.scans.findIndex(a => a.id === active.id) + 1]?.id)}><ArrowRight size={20} /></button></div></Dialog>}
     {deleteId && <Dialog title="Delete this scan?" close={() => setDeleteId(undefined)}><div className="confirm-content"><p>The image will be removed and exported filenames will stay sequential. Scanning stays paused until you explicitly resume.</p></div><div className="dialog-footer"><button className="button outline" onClick={() => setDeleteId(undefined)}>Keep image</button><button className="button danger" disabled={editingDisabled} onClick={() => void safe(async () => { const scan = s.scans.find(a => a.id === deleteId); if (scan) await s.remove(scan); setSelected(undefined); setDeleteId(undefined); })}>Delete image</button></div></Dialog>}
-  </div>;
+  </>;
 }
 function timingLabel(ms: number) { return `${ms.toFixed(1)} ms`; }
 function Setting({ label, value, hint, children }: { label: string; value?: string; hint?: string; children: ReactNode }) {

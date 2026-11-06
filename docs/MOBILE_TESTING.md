@@ -10,7 +10,8 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 - [ ] Verify portrait/landscape phone orientations; rotating during capture must pause safely.
 - [ ] Test available camera selection, zoom, torch, and locks. Unsupported controls should be absent or report an error without losing images.
 - [ ] Tap Start and test volume/mute. Verify sound unlock, silent-mode behavior, and phone hardware volume. Wake lock is optional.
-- [ ] Toggle light/dark from the header and Settings; reload to confirm persistence. Check contrast and controls in both modes.
+- [ ] Toggle light/dark through Menu → Settings; reload to confirm persistence. Dark mode must use pure black and neutral gray surfaces. Check contrast and controls in both modes.
+- [ ] At 320, 375, 390, and 430 px widths, verify the scanner is horizontally centered and its Start/Pause control fits on screen. No sidebar, bottom navigation, batch panel, or recent-card thumbnails should be visible until opened from Menu.
 
 ## Detection and image quality
 

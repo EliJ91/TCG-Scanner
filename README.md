@@ -27,15 +27,17 @@ npm run verify:build # verify cached production assets and offline worker behavi
 ## Use the scanner
 
 1. Mount the phone securely above the slinger. Use diffuse light from the sides. All four edges must be visible with background around the card. Fill roughly 20–80% of the camera area with one card.
-2. Select a batch quantity and press **Start scanning**. Allow camera access. This gesture also unlocks Web Audio and requests a screen wake lock where supported.
+2. Open the **Menu** button in the scanner's upper-right corner, choose **Batch**, and set the quantity. Close the menu and press **Start scanning**. Allow camera access. This gesture also unlocks Web Audio and requests a screen wake lock where supported.
 3. Slide a card fully into place. The motion detector needs a physical transition, then 220 ms of stability by default. It does not use artwork equality. Two identical cards can be scanned in succession.
 4. A short ding means a validated, corrected JPEG has been durably saved. Feed the next card. Watch the queue and slow down when it fills. The pipeline can process one image while detecting the next transition.
 5. The final successful card gets its ding followed by a distinct descending three-note alarm. The capture controller stops accepting captures at the reserved batch limit.
-6. Open the gallery, rotate any upside-down cards, and **Download ZIP**. Edit the batch name in the download dialog; it defaults to `Batch#001`, `Batch#002`, etc., and your edit is remembered for later exports. The archive is named after this batch (for example `Batch#001.zip` or `Trade night.zip`). Images inside keep sequential filenames: `Pokemon_0001.jpg`, `Pokemon_0002.jpg`, etc. No gaps are introduced by failed or deleted scans. ZIP order follows physical capture order.
+6. Open **Menu → Recent cards**, rotate any upside-down cards, and **Download ZIP** from the menu or gallery. Edit the batch name in the download dialog; it defaults to `Batch#001`, `Batch#002`, etc., and your edit is remembered for later exports. The archive is named after this batch (for example `Batch#001.zip` or `Trade night.zip`). Images inside keep sequential filenames: `Pokemon_0001.jpg`, `Pokemon_0002.jpg`, etc. No gaps are introduced by failed or deleted scans. ZIP order follows physical capture order.
 
-Toggle dark/light mode using the sun/moon button in the header or the **Dark mode** switch in Settings. The initial theme follows your device preference and your selection is remembered locally.
+The main screen contains only the centered scanner, capture status, scan count, and Start/Pause control. Batch controls, recent cards, downloads, settings, and the guide stay hidden behind the **Menu** button. Opening a menu or gallery keeps the camera mounted and detection running. Recent-card thumbnails are rendered only while the gallery is open.
 
-The scanner does not automatically capture a stationary card on first start, resume, reload, or recovery. To intentionally capture an existing card, press **Capture current** while scanning. Pause or stop never cancels already captured images; they finish processing and storage. Keep the app in the foreground. Going into the background, camera interruption, rotation, or severe analysis delay pauses the scanner.
+Toggle dark/light mode under **Menu → Settings → Dark mode**. Dark mode uses a pure black background and neutral gray surfaces, with monochrome controls. The initial theme follows your device preference and your selection is remembered locally.
+
+The scanner does not automatically capture a stationary card on first start, resume, reload, or recovery. To intentionally capture an existing card, use **Menu → Capture current card** while scanning. **Stop camera** is also in the menu. Pause or stop never cancels already captured images; they finish processing and storage. Keep the app in the foreground. Going into the background, camera interruption, rotation, or severe analysis delay pauses the scanner.
 
 Batch size is immutable once a batch exists. Download and explicitly clear the batch to start a different one. **Clearing deletes the active batch**; downloads never clear it automatically. Only one active batch is presented in the UI.
 
@@ -43,7 +45,7 @@ Batch size is immutable once a batch exists. Download and explicitly clear the b
 
 Raw full-frame JPEGs are staged in IndexedDB **before** processing. Accepted JPEG + thumbnail storage and deletion of the raw attempt happen in one transaction. Reload recovers saved scans and interrupted raw attempts; it never silently resumes the camera.
 
-A failure pauses scanning and does not count as a successful scan. The original image appears under **Needs your attention** in both scanner and gallery. Improve settings and retry that image, save the original, or discard it and physically rescan the card. Blurry source images and images with missing boundaries need a physical recapture. A raw retry preserves its original capture ordinal, so it returns to the right place in the export. Resolve retained failures before resuming automatic capture.
+A failure pauses scanning and does not count as a successful scan. A scanner alert and menu badge indicate that a scan needs review. Open **Menu → Recent cards** to see the retained original under **Needs your attention**. Improve settings and retry that image, save the original, or discard it and physically rescan the card. Blurry source images and images with missing boundaries need a physical recapture. A raw retry preserves its original capture ordinal, so it returns to the right place in the export. Resolve retained failures before resuming automatic capture.
 
 If browser storage fails or fills, the current raw capture remains in session memory and the scanner pauses. Save its original before closing the page, free storage, then retry. The app requests persistent storage, but browsers may deny it or evict data. Private browsing and OS storage policies can limit retention. Export regularly. Neither a download nor a share operation can guarantee the user actually saved a file; keep the browser batch until you have checked your archive.
 
@@ -64,7 +66,7 @@ Deleting a stored scan reduces the count and pauses the scanner, including a pre
 
 Torch, zoom, focus, exposure, and white balance controls appear only when the browser exposes them. Let autofocus and exposure settle before locking supported adjustments. Unsupported requests display a message. Camera selection is available after permission if multiple cameras are exposed. Resolution changes require stopping the camera; queue-capacity changes require a new batch.
 
-Debug mode exposes motion and noise scores, stability, cycle number, capture state, queue length, analysis timing, processing duration, focus score, confidence, and **last accepted** boundaries. The preview guide is framing assistance, not a required crop calibration. Detection always examines the actual captured image.
+Enable debug mode in Settings to add **Diagnostics** to the menu. It exposes motion and noise scores, stability, cycle number, capture state, queue length, analysis timing, processing duration, focus score, confidence, and **last accepted** boundaries. The preview guide is framing assistance, not a required crop calibration. Detection always examines the actual captured image.
 
 ## How it works
 
