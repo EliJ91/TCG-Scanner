@@ -2,6 +2,8 @@
 
 A mobile-first React + TypeScript application for hands-free scanning above a physical card-slinger. Camera frames, OpenCV processing, JPEGs, recovery data, and ZIP files stay in the browser. No card recognition service, upload, backend, or account is required by the application.
 
+Live app: [elij91.github.io/TCG-Scanner](https://elij91.github.io/TCG-Scanner/). Source: [EliJ91/TCG-Scanner](https://github.com/EliJ91/TCG-Scanner).
+
 ## Run locally
 
 Requires Node **22.12+** (or Node 24+), npm, and a modern browser.
@@ -93,7 +95,9 @@ If the queue is full, a settled card is held for capture when a slot frees. If a
 
 ## HTTPS deployment and offline installation
 
-The build is a static site. Upload the **contents of `dist/`** to any HTTPS static host (Cloudflare Pages, Netlify, Vercel static hosting, GitHub Pages at a root custom domain, or an HTTPS server). No environment variables or server APIs are needed. The app currently expects deployment at the **origin root `/`**; subpath deployments require adjusting its absolute worker, manifest, and offline asset paths.
+The build is a static site. GitHub Actions tests, builds, verifies offline support, and publishes `main` automatically to **GitHub Pages** using `.github/workflows/deploy-pages.yml`. The workflow gets the deployment base path from GitHub Pages; camera workers, local OpenCV, icons, PWA scope, and offline caches all follow that path. No account or sign-in is needed to use the hosted app. GitHub Pages must have **GitHub Actions** selected as its publishing source.
+
+To deploy elsewhere, upload the **contents of `dist/`** to an HTTPS static host (Cloudflare Pages, Netlify, Vercel static hosting, or an HTTPS server). The default build uses the origin root `/`. For a subpath, set `VITE_BASE_PATH=/TCG-Scanner/` before `npm run build`, or run `npm run build -- --base=/TCG-Scanner/`. Run `npm run verify:build` after either build; it checks the actual deployment prefix, PWA paths, and offline cache behavior. Set the base back to `/` for a custom root domain. No server APIs or runtime secrets are needed.
 
 Recommended headers:
 

@@ -5,7 +5,7 @@ Automated validation:
 - TypeScript strict checks and Vite production build pass.
 - 34 tests exercise motion, batch reservations, recovery, ZIP ordering/names, and the real OpenCV WASM boundary/validation pipeline, including mild perspective and landscape-to-portrait correction.
 - `npm audit` reports zero vulnerabilities in the installed dependency graph.
-- `npm run verify:build` verifies all 20 production precache assets, offline navigation/OpenCV/worker responses with network unavailable, bundled fonts, and exclusion of the development camera fixture.
+- `npm run verify:build` verifies all 20 production precache assets, offline navigation/OpenCV/worker responses with network unavailable, bundled fonts, and exclusion of the development camera fixture. Both root (`/`) and GitHub Pages (`/TCG-Scanner/`) builds pass; PWA start paths, icons, worker paths, and cache isolation are checked for the actual build prefix.
 
 Browser integration was exercised in a separate local development origin with an explicitly enabled synthetic canvas camera:
 

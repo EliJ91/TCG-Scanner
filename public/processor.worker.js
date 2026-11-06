@@ -1,7 +1,7 @@
 /* Classic worker keeps the packaged UMD OpenCV runtime fully local. */
 let ready;
 async function initialize() {
-  importScripts('/vendor/opencv.js', '/vision.js');
+  importScripts('vendor/opencv.js', 'vision.js');
   const runtime = self.cv;
   const cv = runtime && typeof runtime.then === 'function' ? await runtime : runtime;
   if (!cv?.Mat) throw new Error('OpenCV could not initialize. Reload while online once, then try again.');

@@ -22,7 +22,7 @@ export class Processor {
   private async initialize() {
     try {
       await new Promise<void>((resolve, reject) => {
-        const worker = new Worker('/processor.worker.js'); this.worker = worker;
+        const worker = new Worker(`${import.meta.env.BASE_URL}processor.worker.js`); this.worker = worker;
         const timeout = setTimeout(() => reject(new Error('Processing engine startup timed out.')), 30000);
         worker.onerror = () => { clearTimeout(timeout); reject(new Error('Image worker unavailable.')); this.rejectAll('The image worker stopped. Raw captures are retained for retry.'); };
         worker.onmessage = ({ data }) => {
@@ -36,7 +36,7 @@ export class Processor {
     } catch {
       this.worker?.terminate(); this.worker = undefined; this.fallback = true;
       fallbackRuntime ??= (async () => {
-        await loadScript('/vendor/opencv.js'); await loadScript('/vision.js');
+        await loadScript(`${import.meta.env.BASE_URL}vendor/opencv.js`); await loadScript(`${import.meta.env.BASE_URL}vision.js`);
         const cv = await globals.cv;
         if (!(cv as { Mat?: unknown })?.Mat) throw new Error('OpenCV initialization failed. Reload the application while online.');
         return cv;
