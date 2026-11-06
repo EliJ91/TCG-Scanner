@@ -12,12 +12,15 @@ const deletedCaches = [];
 let onlineFetches = 0;
 let skippedWaiting = 0;
 const context = {
-  URL, Promise,
+  URL, Promise, Request,
   self: { location: { origin: 'https://scanner.test' }, clients: { claim: async () => {} }, skipWaiting: async () => { skippedWaiting++; }, addEventListener: (name, handler) => handlers.set(name, handler) },
   caches: {
     open: async () => ({
       addAll: async files => {
-        for (const file of files) {
+        for (const request of files) {
+          assert.equal(request.cache, 'reload', 'Updated workers must bypass stale HTTP-cached cropper/runtime files');
+          const url = new URL(request.url); assert.equal(url.origin, 'https://scanner.test');
+          const file = url.pathname;
           assert.ok(file.startsWith(base), `Cache URL stays inside app scope: ${file}`);
           const local = resolve(root, file.slice(base.length));
           assert.ok(local.startsWith(root + '\\') || local.startsWith(root + '/'), 'Cache path stays inside dist');

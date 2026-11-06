@@ -11,6 +11,7 @@
 - Preference tests restore camera selection, resolution, zoom, flashlight and locks from the browser cache before async loading. Reset restores defaults without deleting the batch or saved photos. A stale camera ID falls back to the rear camera.
 - ZIP ordering/name/recovery tests remain green. The app's Web Share code and Share / Save interface are removed; ZIP download remains.
 - Production verification checks all 20 precache assets, offline navigation/OpenCV/worker responses, scope isolation and exclusion of synthetic-camera/feed/delay controls. Both root and GitHub Pages deployment prefixes are checked.
+- Installing an updated offline worker uses reload requests for every precache asset, preventing the browser HTTP cache from supplying an older unhashed cropper or worker script. The offline test checks this request policy.
 
 Live browser automation was unavailable for this update because browser use is disabled in Work settings. No new real-device or browser-throughput claim is made. Use `MOBILE_TESTING.md` to measure one-card-per-second feeds on actual iOS/Android hardware, including silver/holographic cards, downloads, heat and offline installation.
 
