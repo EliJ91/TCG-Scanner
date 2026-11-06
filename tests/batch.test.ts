@@ -21,8 +21,8 @@ describe('batch reservations and ordered durable commits', () => {
   it('recovers a failed slot without counting it', async () => {
     const { c, failures } = setup(1); const a = c.reserve()!;
     c.settle(a, { error: new Error('No corners') }); await c.idle();
-    expect(c.count).toBe(0); expect(failures).toHaveLength(1); expect(c.running).toBe(false);
-    c.start(); const replacement = c.reserve()!; c.settle(replacement, { value: 8 }); await c.idle(); expect(c.count).toBe(1);
+    expect(c.count).toBe(0); expect(failures).toHaveLength(1); expect(c.running).toBe(true);
+    const replacement = c.reserve()!; c.settle(replacement, { value: 8 }); await c.idle(); expect(c.count).toBe(1);
   });
   it('continues saving pending images when paused', async () => {
     const { c, saved } = setup(); const a = c.reserve()!; c.pause();

@@ -27,35 +27,35 @@ npm run verify:build # verify cached production assets and offline worker behavi
 ## Use the scanner
 
 1. Mount the phone securely above the slinger. Use diffuse light from the sides. All four edges must be visible with background around the card. Fill roughly 20–80% of the camera area with one card.
-2. Open the **Menu** button in the scanner's upper-right corner, choose **Batch**, and set the quantity. Close the menu, tap **Enable camera**, and choose **Allow** in the browser's camera prompt. Once the live preview appears, tap **Start scanning**. That second gesture unlocks Web Audio and requests a screen wake lock where supported.
-3. Slide a card fully into place. The motion detector needs a physical transition, then 220 ms of stability by default. It does not use artwork equality. Two identical cards can be scanned in succession.
+2. The camera preview opens as soon as the app opens. Choose **Allow** if the browser asks; if it requires a tap, use **Enable camera**. Set the quantity in **Menu → Batch**. Tap the batch name/pencil in the camera's upper-left corner to rename it at any time, including before the first photo.
+3. Choose **Auto** or **Manual** below the preview. Auto starts with **Start scanning**, then waits for the whole visible camera image to stay still for **1.2 seconds** before the first photo and after each new card movement. Manual uses **Take photo** and captures only on a tap. The zoom slider at the bottom of the preview adjusts framing from 1× to 3× in either mode.
 4. A short ding means a validated, corrected JPEG has been durably saved. Feed the next card. Watch the queue and slow down when it fills. The pipeline can process one image while detecting the next transition.
 5. The final successful card gets its ding followed by a distinct descending three-note alarm. The capture controller stops accepting captures at the reserved batch limit.
 6. Open **Menu → Recent cards**, rotate any upside-down cards, and **Download ZIP** from the menu or gallery. Edit the batch name in the download dialog; it defaults to `Batch#001`, `Batch#002`, etc., and your edit is remembered for later exports. The archive is named after this batch (for example `Batch#001.zip` or `Trade night.zip`). Images inside keep sequential filenames: `Pokemon_0001.jpg`, `Pokemon_0002.jpg`, etc. No gaps are introduced by failed or deleted scans. ZIP order follows physical capture order.
 
-The main screen contains only the centered scanner, capture status, scan count, and Start/Pause control. Batch controls, recent cards, downloads, settings, and the guide stay hidden behind the **Menu** button. Opening a menu or gallery keeps the camera mounted and detection running. Recent-card thumbnails are rendered only while the gallery is open.
+The centered scanner includes a visible editable batch name, zoom slider, capture mode, count, and capture control. Batch quantity, recent cards, downloads, settings, and the guide stay behind **Menu**. Opening a menu or gallery keeps the camera mounted and detection running. Recent-card thumbnails render only while the gallery is open.
 
 Toggle dark/light mode under **Menu → Settings → Dark mode**. Dark mode uses a pure black background and neutral gray surfaces, with monochrome controls. The initial theme follows your device preference and your selection is remembered locally.
 
 ### Mobile camera access
 
-**Enable camera** requests the camera directly from your tap. It stays available while saved data is loading and does not wait for IndexedDB, OpenCV, audio, or ZIP initialization. The preview opens before scanning starts. A processing-engine failure pauses capture while keeping an already granted camera preview available.
+The app requests the preview automatically on entry, independently of saved-data loading or processing initialization. **Enable camera** remains the direct tap fallback when browser policy requires interaction. Opening the preview never starts photographing cards by itself. Processing failures report an error and keep the session and preview active.
 
 Open the HTTPS app directly in **Safari on iPhone** or **Chrome on Android**. Some chat, social, GitHub, and other embedded browsers do not expose a camera API or disallow camera permission prompts. If detected, the app displays an **Open scanner in Safari or Chrome** link. The app cannot override its host app's camera restrictions. If you previously denied permission, allow Camera for this site in your browser's site settings and tap Enable camera again.
 
 The preview is visible during startup, explicitly muted, and marked for inline playback before its stream is attached. Startup listens for metadata/playing events before calling `play()` and also bounds a pending playback promise, avoiding a silent indefinite Safari wait. Preferred resolution constraints fall back to simpler camera requests when unsupported; permission denials are never retried as resolution errors. Device enumeration, capabilities, and settings APIs are optional and cannot tear down a working preview.
 
-The scanner does not automatically capture a stationary card on first start, resume, reload, or recovery. To intentionally capture an existing card, use **Menu → Capture current card** while scanning. **Stop camera** is also in the menu. Pause or stop never cancels already captured images; they finish processing and storage. Keep the app in the foreground. Going into the background, camera interruption, rotation, or severe analysis delay pauses the scanner.
+Auto deliberately captures the first stationary card after the quiet interval when a new batch starts. After a capture, it requires fresh movement followed by stillness to avoid repeating the same card. Resuming a partially scanned batch does not recapture its last stationary card. Manual never fires on a timer. Mode switches do not restart the camera. Use **Pause scanning** or **Menu → Stop camera** to pause explicitly; pending snapshots still finish. Background browsers may suspend camera hardware, so the app reconnects on return while preserving scan intent. It never bypasses a denied permission.
 
 Batch size is immutable once a batch exists. Download and explicitly clear the batch to start a different one. **Clearing deletes the active batch**; downloads never clear it automatically. Only one active batch is presented in the UI.
 
 ## Errors, retries, and storage
 
-Raw full-frame JPEGs are staged in IndexedDB **before** processing. Accepted JPEG + thumbnail storage and deletion of the raw attempt happen in one transaction. Reload recovers saved scans and interrupted raw attempts; it never silently resumes the camera.
+Raw JPEGs of the selected zoom framing are staged in IndexedDB **before** processing. Accepted JPEG + thumbnail storage and deletion of the raw attempt happen in one transaction. Reload recovers saved scans and interrupted raw attempts and opens the preview; actual capture requires Start scanning or Take photo.
 
-A failure pauses scanning and does not count as a successful scan. A scanner alert and menu badge indicate that a scan needs review. Open **Menu → Recent cards** to see the retained original under **Needs your attention**. Improve settings and retry that image, save the original, or discard it and physically rescan the card. Blurry source images and images with missing boundaries need a physical recapture. A raw retry preserves its original capture ordinal, so it returns to the right place in the export. Resolve retained failures before resuming automatic capture.
+A failed image produces a distinct low buzz, releases its batch slot, and **does not pause scanning or count as success**. Reposition the card and let Auto try the next settled movement, or tap Take photo again in Manual. The failed original is retained under **Menu → Recent cards → Needs your attention**. You can pause explicitly to retry/edit/discard stored images. Raw retries retain their original capture ordinal and export order. Success uses a high ding; completion uses a separate descending three-note alarm. Browsers require a user interaction before audible playback, so sounds unlock on capture/start/mode controls. Volume and mute apply to all sounds.
 
-If browser storage fails or fills, the current raw capture remains in session memory and the scanner pauses. Save its original before closing the page, free storage, then retry. The app requests persistent storage, but browsers may deny it or evict data. Private browsing and OS storage policies can limit retention. Export regularly. Neither a download nor a share operation can guarantee the user actually saved a file; keep the browser batch until you have checked your archive.
+If storage fails, the session stays active and retains the original. It applies storage backpressure instead of taking unlimited unsavable photos, and retries retained snapshots every three seconds while active. The camera remains visible. Save originals before closing, and free storage if needed. Missing camera access similarly waits/reconnects; an app cannot photograph without hardware or count an unsaved image. Browser eviction/private browsing can limit persistence. Export regularly and keep the browser batch until you have checked the downloaded archive.
 
 Deleting a stored scan reduces the count and pauses the scanner, including a previously completed batch. It never starts scanning automatically. Resume explicitly to fill the open slot. Gallery edits are disabled during capture or pending processing.
 
@@ -63,8 +63,10 @@ Deleting a stored scan reduces the count and pauses the scanner, including a pre
 
 | Control | Default | Notes |
 | --- | --- | --- |
-| Stability | 220 ms | Adjustable 150–800 ms; raise it for vibration or autofocus |
-| Motion threshold | 5.5% | Fraction of changed luma pixels after exposure-shift compensation |
+| Capture mode | Auto | Manual takes one snapshot per tap |
+| Auto capture delay | 1200 ms | Adjustable 300–3000 ms of continuous stillness across the entire visible image |
+| Motion threshold | 2.5% | Fraction of changed luma pixels after exposure-shift compensation |
+| Zoom | 1× | Preview slider, 1–3× center crop; capture and motion use identical framing |
 | JPEG quality | 95% | Raw staging JPEGs use 100%; export uses saved correction |
 | Output width | 1260 px maximum | Never upscales; portrait height follows 63:88 |
 | Minimum sharpness | 45 | Laplacian variance measured at normalized 360 px card width |
@@ -72,7 +74,7 @@ Deleting a stored scan reduces the count and pauses the scanner, including a pre
 | Queue capacity | 2 | Includes capture, processing, and durable storage |
 | ImageCapture | Off | Optional `grabFrame()`, with video-canvas fallback |
 
-Torch, zoom, focus, exposure, and white balance controls appear only when the browser exposes them. Let autofocus and exposure settle before locking supported adjustments. Unsupported requests display a message. Camera selection is available after permission if multiple cameras are exposed. Resolution changes require stopping the camera; queue-capacity changes require a new batch.
+The zoom slider works on all supported browsers using the original camera pixels, without enlarging saved pixels. Higher zoom reduces the available source area; keep every card edge visible. Torch, focus, exposure, and white balance controls depend on the device. Camera selection appears after permission when available. Resolution changes require stopping the camera; queue capacity changes require a new batch.
 
 Enable debug mode in Settings to add **Diagnostics** to the menu. It exposes motion and noise scores, stability, cycle number, capture state, queue length, analysis timing, processing duration, focus score, confidence, and **last accepted** boundaries. The preview guide is framing assistance, not a required crop calibration. Detection always examines the actual captured image.
 
@@ -89,7 +91,8 @@ The modules have separate responsibilities:
 | `public/vision.js` | Shared actual OpenCV boundary detection, geometry, perspective warp, blur rejection, JPEG encoding |
 | `src/core/processor.ts` | Worker lifecycle, deadlines, main-thread compatibility fallback |
 | `src/core/storage.ts` | IndexedDB transactions, raw staging, recovery |
-| `src/core/audio.ts` | Generated scan ding and completion alarm |
+| `src/core/audio.ts` | Generated success ding, distinct error buzz, and completion alarm |
+| `src/core/zoom.ts` | Shared center-crop geometry for live framing, analysis, and snapshots |
 | `src/core/export.ts` | Ordered ZIP creation and 180° image correction |
 | `src/useScanner.ts` | Capture orchestration, interruptions, physical-cycle rearming |
 
@@ -101,7 +104,7 @@ The worker detects multi-threshold Canny edges with morphological closing, finds
 
 Reservations are made **before** taking a snapshot. `stored + reserved <= target` is enforced by the controller, including during storage. Pending results commit in capture order even if processing finishes out of order. A failed slot is released only after its ordered result is resolved. Successful export names are generated from the ordered stored list, so no filename gaps occur. The batch remains incomplete if the final reserved image fails.
 
-If the queue is full, a settled card is held for capture when a slot frees. If another physical card cycle begins before that held card can be captured, the scanner pauses and reports the overrun. The operator must inspect and rescan missed cards. Arbitrarily fast feeds cannot be buffered without bound on phones. Compatibility fallback forces capacity to one and requires slower feeding.
+If the queue is full, a settled card is held for capture when a slot frees. If another card moves before the held card can be captured, the scanner sounds/reports an overrun and keeps running. Inspect recent cards and retake any missed physical card. Arbitrarily fast feeds cannot be buffered without bound on phones. Compatibility fallback forces capacity to one and requires slower feeding.
 
 ## HTTPS deployment and offline installation
 
@@ -127,12 +130,12 @@ The production build generates a content-versioned service worker and pre-caches
 
 ## Validation and limitations
 
-`npm test` covers motion/stability, stationary cards, duplicate triggers, identical consecutive artwork, rapid movement, additive lighting changes, camera noise, interruptions, out-of-order completion, pending final slots, failed capture/storage, slot recovery, pause/resume, deletion, numbering, batch-name defaults and safe archive names, ZIP ordering, IndexedDB recovery, and actual OpenCV detection/warping with synthetic white/silver/yellow-like/dark borders, rotation, missing edges, invalid geometry, and blur.
+`npm test` covers automatic preview startup, Auto/Manual switching, quiet placement timing, shared zoom framing, distinct error audio, continuous error/storage/camera recovery, motion/stability, stationary duplicate prevention, identical consecutive artwork, rapid movement, additive lighting changes, camera noise, interruptions, out-of-order completion, pending final slots, failed capture/storage, slot recovery, pause/resume, deletion, numbering, concurrent batch renaming, safe archive names, ZIP ordering, IndexedDB recovery, and actual OpenCV detection/warping with synthetic white/silver/yellow-like/dark borders, rotation, missing edges, invalid geometry, and blur.
 
-For an end-to-end development fixture, open `http://127.0.0.1:5173/?test-camera=1`. This explicitly labeled, development-only mode generates a local canvas camera. Set a small batch, start scanning, and press **Slide test card** to animate a new physical transition through the real detector, OpenCV worker, IndexedDB, gallery, and ZIP pipeline. It never requests a physical camera and is removed from production builds. Use the different `127.0.0.1` origin to keep fixture scans separate from `localhost` scans. It verifies browser integration, not real hardware performance.
+For an end-to-end development fixture, open `http://127.0.0.1:5173/?test-camera=1`. This explicitly labeled, development-only mode generates a local canvas camera. Set a small batch, start scanning, and press **Slide test card** to animate a new physical transition through the real detector, OpenCV worker, IndexedDB, gallery, and ZIP pipeline. **Blank test frame** exercises rejected captures; Slide restores the valid card. It never requests a physical camera and is removed from production builds. Use the different `127.0.0.1` origin to keep fixture scans separate from `localhost` scans. It verifies browser integration, not real hardware performance.
 
 The synthetic tests verify algorithms, not the lighting, optics, or mechanics of your slinger. **The real phone + card-slinger acceptance test must still be run** using `docs/MOBILE_TESTING.md`. No particular cards-per-minute rate is guaranteed or claimed. The UI displays measured session pace only after multiple scans, and excludes paused time; after reload the pace is unavailable until new session scans are collected.
 
-White-on-white edges with no visible contrast, heavy glare, large perspective, hidden corners, hands or another card forming a competing rectangle, and featureless/overexposed frames can defeat geometric detection. Use side lighting and full visible edges. Confidence is a geometry heuristic, not a calibrated probability. Some pathological images may need manual rejection in the gallery. No browser can recover a physically skipped identical card that never produced observable motion. Thermal throttling and long analysis gaps stop scanning for operator review. Older Safari may use the slower main-thread fallback. Large ZIPs require memory; export smaller batches on constrained devices. JPEG rotation re-encodes once at 98% quality.
+White-on-white edges with no visible contrast, heavy glare, large perspective, hidden corners, hands or another card forming a competing rectangle, and featureless/overexposed frames can defeat geometric detection. Use side lighting and full visible edges. Confidence is a geometry heuristic, not a calibrated probability. Some pathological images may need manual rejection in the gallery. No browser can recover a physically skipped identical card that never produced observable motion. Long analysis gaps reset motion tracking and report an issue while scanning stays active; reposition the current card and review for missed scans. Older Safari may use the slower main-thread fallback. Large ZIPs require memory; export smaller batches on constrained devices. JPEG rotation re-encodes once at 98% quality.
 
 Technical references: [OpenCV contour documentation](https://docs.opencv.org/4.11.0/d5/daa/tutorial_js_contours_begin.html), [OpenCV perspective transformation source example](https://github.com/opencv/opencv/blob/5.x/doc/js_tutorials/js_assets/js_geometric_transformations_warpPerspective.html), [MDN ImageCapture](https://developer.mozilla.org/en-US/docs/Web/API/ImageCapture).

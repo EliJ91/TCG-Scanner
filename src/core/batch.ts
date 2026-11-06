@@ -51,7 +51,7 @@ export class BatchController<T> {
           this.count++;
           if (this.complete) this.running = false;
         } catch (error) {
-          this.running = false;
+          // Failed captures release their slot; the operator's running/paused choice is preserved.
           this.failed(error, ticket, result && 'value' in result ? result.value : undefined);
         } finally { this.slots.shift(); this.changed(); }
       }

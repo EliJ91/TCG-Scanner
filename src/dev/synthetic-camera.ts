@@ -2,7 +2,7 @@
 export function syntheticCamera() {
   const canvas = document.createElement('canvas'); canvas.width = 1000; canvas.height = 900;
   const ctx = canvas.getContext('2d')!;
-  let animation = 0, active = true, index = 0, began = -1;
+  let animation = 0, active = true, index = 0, began = -1, invalid = false;
   const card = (y: number, number: number) => {
     const x = 310, w = 380, h = 530;
     ctx.fillStyle = '#d0ce82'; ctx.fillRect(x, y, w, h);
@@ -15,14 +15,17 @@ export function syntheticCamera() {
   };
   const draw = (now: number) => {
     if (!active) return;
-    ctx.fillStyle='#f8f8f8';ctx.fillRect(0,0,1000,900);card(185,index);
+    ctx.fillStyle='#f8f8f8';ctx.fillRect(0,0,1000,900);
+    if(invalid){animation=requestAnimationFrame(draw);return;}
+    card(185,index);
     if(began>=0){const p=Math.min(1,(now-began)/400);card(-545+730*p,index+1);if(p===1){index++;began=-1;}}
     animation=requestAnimationFrame(draw);
   };
-  const slide = () => {if(began<0)began=performance.now();};
-  window.addEventListener('test-card-slide',slide); animation=requestAnimationFrame(draw);
+  const slide = () => {invalid=false;if(began<0)began=performance.now();};
+  const blank = () => {invalid=true;began=-1;};
+  window.addEventListener('test-card-slide',slide);window.addEventListener('test-card-invalid',blank); animation=requestAnimationFrame(draw);
   const stream=canvas.captureStream(30);
   stream.getVideoTracks()[0].addEventListener('ended',()=>{active=false;cancelAnimationFrame(animation);window.removeEventListener('test-card-slide',slide);});
   // track.stop does not emit ended in browsers; observe stream disposal from Camera.stop.
-  return { stream, dispose:()=>{active=false;cancelAnimationFrame(animation);window.removeEventListener('test-card-slide',slide);} };
+  return { stream, dispose:()=>{active=false;cancelAnimationFrame(animation);window.removeEventListener('test-card-slide',slide);window.removeEventListener('test-card-invalid',blank);} };
 }

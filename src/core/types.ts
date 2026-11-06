@@ -1,12 +1,13 @@
 export interface Point { x: number; y: number }
 export type Corners = [Point, Point, Point, Point];
 export interface Settings {
+  captureMode: 'auto' | 'manual'; zoom: number;
   stabilityMs: number; sensitivity: number; quality: number; outputWidth: number;
   minSharpness: number; volume: number; muted: boolean; debug: boolean;
   resolution: number; queueLimit: number; useImageCapture: boolean;
 }
 export const defaults: Settings = {
-  stabilityMs: 220, sensitivity: 0.055, quality: 0.95, outputWidth: 1260,
+  captureMode: 'auto', zoom: 1, stabilityMs: 1200, sensitivity: 0.025, quality: 0.95, outputWidth: 1260,
   minSharpness: 45, volume: 0.6, muted: false, debug: false,
   resolution: 2560, queueLimit: 2, useImageCapture: false,
 };

@@ -94,6 +94,15 @@ describe('direct mobile camera permission requests', () => {
 });
 
 describe('mobile video preview startup', () => {
+  it('uses the same centered zoom crop for the saved full-resolution snapshot', async () => {
+    const fixture=streamFixture();getUserMedia.mockResolvedValue(fixture.stream);
+    const drawImage=vi.fn();const canvas={width:0,height:0,getContext:()=>({drawImage}),toBlob:(done:(blob:Blob)=>void)=>done(new Blob(['jpeg']))};
+    vi.stubGlobal('document',{createElement:()=>canvas});
+    const preview=new Preview(), camera=new Camera(preview as unknown as HTMLVideoElement,vi.fn());
+    await camera.start(2560);camera.setZoom(2);await camera.capture();
+    expect(drawImage).toHaveBeenCalledWith(preview,320,180,640,360,0,0,640,360);
+    expect([canvas.width,canvas.height]).toEqual([640,360]);camera.stop();
+  });
   it('sets Safari inline/muted properties before play and uses actual portrait frame dimensions', async () => {
     const fixture = streamFixture(); getUserMedia.mockResolvedValue(fixture.stream);
     const preview = new Preview(); preview.videoWidth = 720; preview.videoHeight = 1280;

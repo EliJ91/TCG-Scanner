@@ -17,20 +17,23 @@ export class MotionDetector {
   private peak = 0;
   private cycle = 0;
   private lastTime: number | null = null;
+  private initialArmed = false;
   constructor(public stabilityMs = 220, public sensitivity = 0.055) {}
 
-  reset() {
+  reset(allowInitialCapture = false) {
     this.previous = undefined; this.baseline = undefined; this.state = 'waiting';
     this.motionStart = null; this.lastMotion = null; this.stableStart = null; this.peak = 0; this.lastTime = null;
+    this.initialArmed = allowInitialCapture;
   }
 
   /** Consuming a cycle requires another physical movement before another capture. */
-  consume() { this.state = 'waiting'; this.motionStart = null; this.lastMotion = null; this.stableStart = null; this.peak = 0; this.baseline = undefined; }
+  consume() { this.state = 'waiting'; this.motionStart = null; this.lastMotion = null; this.stableStart = null; this.peak = 0; this.baseline = undefined; this.initialArmed = false; }
 
   update(gray: Uint8Array, now: number): MotionReading {
     let score = 0, shift = 0, capture = false;
     if (!this.previous || this.previous.length !== gray.length || (this.lastTime !== null && now - this.lastTime > 650)) {
-      this.reset(); this.previous = gray.slice(); this.lastTime = now;
+      this.reset(this.initialArmed); this.previous = gray.slice(); this.lastTime = now;
+      if (this.initialArmed) { this.state = 'stabilizing'; this.stableStart = now; }
       return this.reading(0, 0, false, now);
     }
     const n = gray.length;
@@ -55,6 +58,7 @@ export class MotionDetector {
         this.state = 'moving'; this.motionStart = now; this.lastMotion = now; this.peak = score; this.stableStart = null; this.cycle++;
       }
     } else if (high) {
+      if (this.motionStart === null) { this.motionStart = now; this.baseline = this.previous.slice(); this.baselineMean = this.mean(this.baseline); this.cycle++; }
       this.state = 'moving'; this.lastMotion = now; this.stableStart = null; this.peak = Math.max(this.peak, score);
     } else if (low) {
       if (this.stableStart === null) this.stableStart = now;
@@ -67,8 +71,8 @@ export class MotionDetector {
           for (let i = 0; i < n; i++) if (Math.abs(gray[i] - this.baseline[i] - meanShift) > threshold) displacement++;
         }
         const duration = (this.lastMotion ?? now) - (this.motionStart ?? now);
-        if (duration >= 65 || (displacement / n >= this.sensitivity && this.peak > this.sensitivity * 1.5)) {
-          this.state = 'ready'; capture = true;
+        if (this.initialArmed || duration >= 65 || (displacement / n >= this.sensitivity && this.peak > this.sensitivity * 1.5)) {
+          this.state = 'ready'; capture = true; this.initialArmed = false;
         } else { this.consume(); }
       }
     } else { this.stableStart = null; this.state = 'moving'; }
@@ -82,7 +86,7 @@ export class MotionDetector {
   }
 }
 
-/** Reused luma buffer from the center 90% of the camera, excluding UI overlays. */
+/** Reused luma buffer for the entire visible camera image, excluding UI overlays. */
 export function toLuma(rgba: Uint8ClampedArray, output: Uint8Array) {
   for (let i = 0, p = 0; p < output.length; i += 4, p++) output[p] = (rgba[i] * 77 + rgba[i + 1] * 150 + rgba[i + 2] * 29) >> 8;
 }

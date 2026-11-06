@@ -6,6 +6,19 @@ function settle(d: MotionDetector, f: Uint8Array, start: number) {
   return [0,70,140,210,280].map(t => d.update(f, start + t));
 }
 describe('motion state machine', () => {
+  it('can arm a first auto photo after a full quiet placement interval without requiring a slide', () => {
+    const d = new MotionDetector(1200); d.reset(true);
+    for (let t = 0; t < 1200; t += 100) expect(d.update(pattern(1), t).capture).toBe(false);
+    expect(d.update(pattern(1), 1200).capture).toBe(true);
+    expect(d.update(pattern(1), 1300).capture).toBe(false);
+    d.consume(); expect(d.update(pattern(1), 1400).capture).toBe(false);
+  });
+  it('restarts the quiet countdown whenever placement movement continues', () => {
+    const d = new MotionDetector(1200); d.reset(true); d.update(pattern(1), 0);
+    d.update(pattern(1), 400); d.update(pattern(2), 800); d.update(pattern(3), 1000);
+    for (const t of [1100,1400,1700,2000]) expect(d.update(pattern(3), t).capture).toBe(false);
+    expect(d.update(pattern(3), 2300).capture).toBe(true);
+  });
   it('requires motion then stabilization', () => {
     const d = new MotionDetector(200); d.update(frame(), 0);
     expect(d.update(pattern(1), 70).state).toBe('moving');

@@ -9,6 +9,18 @@ const scan = (batchId: string, ordinal: number): Scan => ({
   width: 900, height: 1257, processingMs: 10, sharpness: 100, confidence: 0.9, corners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}], rotated: false,
 });
 describe('storage, recovery, filenames, ZIP', () => {
+  it('keeps a renamed batch and its next ordinal during concurrent scan metadata writes', async () => {
+    const b = await storage.create(5, 'Before scanning'), a = scan(b.id, 3);
+    await Promise.all([
+      storage.renameBatch(b.id, 'Renamed while scanning'),
+      storage.saveBatch({ ...b, nextOrdinal: 4 }),
+      storage.stage({ id: a.id, batchId: b.id, ordinal: 3, capturedAt: a.capturedAt, raw: a.blob, reason: '', settings: defaults }, { ...b, nextOrdinal: 4 }),
+    ]);
+    await storage.saveBatch(b);
+    const restored = await storage.load();
+    expect(restored.batch?.name).toBe('Renamed while scanning'); expect(restored.batch?.nextOrdinal).toBe(4);
+    await storage.clear(b.id);
+  });
   it('defaults to Batch#XXX and safely uses the user-edited archive name', () => {
     expect(defaultBatchName(1)).toBe('Batch#001');
     expect(defaultBatchName(1234)).toBe('Batch#1234');

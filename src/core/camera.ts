@@ -1,4 +1,5 @@
 import { CameraAccessError, cameraErrorName, requestCameraStream } from './camera-access';
+import { zoomRect } from './zoom';
 
 export interface CameraCapabilities {
   torch?: boolean; zoom?: { min: number; max: number; step: number };
@@ -13,6 +14,8 @@ export class Camera {
   private generation = 0;
   private cancelPreview?: () => void;
   private canvas = document.createElement('canvas');
+  private zoom = 1;
+  setZoom(value: number) { this.zoom = Math.max(1, Math.min(3, Number.isFinite(value) ? value : 1)); }
   constructor(public video: HTMLVideoElement, private lost: (reason: string) => void) {}
   async start(width: number, deviceId?: string) {
     this.stop();
@@ -75,12 +78,13 @@ export class Camera {
   }
   /** Canvas draw is synchronous: copies the exact stabilized frame before async encoding. */
   async capture(useImageCapture = false): Promise<Blob> {
-    if (!this.stream?.active || this.video.readyState < 2) throw new Error('Camera is not delivering frames. Reconnect and resume.');
+    if (!this.stream?.active || this.video.readyState < 2) throw new Error('Camera is not delivering frames. Waiting for reconnection.');
     let bitmap: ImageBitmap | undefined;
     if (useImageCapture && this.grabber) { try { bitmap = await this.grabber.grabFrame(); } catch { /* Compatible fallback below. */ } }
     const source = bitmap ?? this.video;
-    this.canvas.width = bitmap?.width ?? this.video.videoWidth; this.canvas.height = bitmap?.height ?? this.video.videoHeight;
-    this.canvas.getContext('2d')!.drawImage(source, 0, 0); bitmap?.close();
+    const crop = zoomRect(bitmap?.width ?? this.video.videoWidth, bitmap?.height ?? this.video.videoHeight, this.zoom);
+    this.canvas.width = crop.width; this.canvas.height = crop.height;
+    this.canvas.getContext('2d')!.drawImage(source, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height); bitmap?.close();
     return new Promise((resolve, reject) => this.canvas.toBlob(b => b ? resolve(b) : reject(new Error('Camera frame encoding failed. Try again.')), 'image/jpeg', 1));
   }
   async control(values: Record<string, unknown>) {
