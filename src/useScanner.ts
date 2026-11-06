@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BatchController, type Ticket } from './core/batch';
 import { Camera, type CameraCapabilities } from './core/camera';
+import { CameraAccessError } from './core/camera-access';
 import { MotionDetector, toLuma, type MotionReading } from './core/motion';
 import { Processor } from './core/processor';
 import { ScannerAudio } from './core/audio';
@@ -18,6 +19,11 @@ export function useScanner() {
   const [session, setSession] = useState<Session>('idle'); const sessionRef = useRef<Session>('idle');
   const [error, setError] = useState(''); const [notice, setNotice] = useState('');
   const [loaded, setLoaded] = useState(false); const [pending, setPending] = useState(0);
+  const [storageIssue, setStorageIssue] = useState(''); const storageIssueRef = useRef('');
+  const [cameraPhase, setCameraPhase] = useState<'off' | 'requesting' | 'ready'>('off');
+  const cameraPhaseRef = useRef<'off' | 'requesting' | 'ready'>('off');
+  const [openBrowserSuggested, setOpenBrowserSuggested] = useState(false);
+  const cameraRequest = useRef<Promise<void> | undefined>(undefined); const cameraEpoch = useRef(0);
   const [measuredScans, setMeasuredScans] = useState(0); const liveIds = useRef(new Set<string>());
   const [reading, setReading] = useState<MotionReading>();
   const [timing, setTiming] = useState(0); const [corners, setCorners] = useState<Corners>();
@@ -33,6 +39,7 @@ export function useScanner() {
   const elapsedRef = useRef(0); const mounted = useRef(true);
   const startToken = useRef(0);
   const changeSession = (value: Session) => { sessionRef.current = value; if (mounted.current) setSession(value); };
+  const changeCameraPhase = (value: 'off' | 'requesting' | 'ready') => { cameraPhaseRef.current = value; if (mounted.current) setCameraPhase(value); };
   const updateAttempts = (items: Attempt[]) => { attemptsRef.current = items; if (mounted.current) setAttempts(items); };
   const releaseWake = () => { void wakeLock.current?.release().catch(() => {}); wakeLock.current = undefined; };
   const endTiming = () => {
@@ -86,8 +93,15 @@ export function useScanner() {
     mounted.current = true;
     processor.current = new Processor(); audio.current = new ScannerAudio();
     let cancelled = false;
-    storage.load().then(data => {
+    const storageDeadline = setTimeout(() => {
       if (cancelled) return;
+      storageIssueRef.current = 'Browser storage is not responding. You can enable the camera, but scanning needs storage. Reload or open this page directly in Safari or Chrome.';
+      setStorageIssue(storageIssueRef.current); setError(storageIssueRef.current);
+    }, 8000);
+    storage.load().then(data => {
+      clearTimeout(storageDeadline);
+      if (cancelled) return;
+      if (storageIssueRef.current) { setError(''); setStorageIssue(''); storageIssueRef.current = ''; }
       const config = { ...defaults, ...data.settings };
       settingsRef.current = config; setSettings(config);
       if (data.batch) {
@@ -101,12 +115,26 @@ export function useScanner() {
         setNotice(data.scans.length >= b.target ? 'Completed batch recovered from this device. Your images are ready to review and download.' : 'Batch recovered from this device. Resume waits for new card movement.');
       }
       setLoaded(true);
-    }).catch(err => { setError(`Storage unavailable: ${message(err)}. Enable browser storage, then reload.`); });
-    const onHidden = () => { if (document.hidden && (sessionRef.current === 'scanning' || sessionRef.current === 'starting')) { pause('Scanning paused because the app went into the background. Check the current card before resuming.'); camera.current?.stop(); setCameraSize({ width: 0, height: 0 }); } };
+    }).catch(err => {
+      clearTimeout(storageDeadline); if (cancelled) return;
+      storageIssueRef.current = `Storage unavailable: ${message(err)}. Camera preview can still open. Enable browser storage or open this page in Safari or Chrome before scanning.`;
+      setStorageIssue(storageIssueRef.current); setError(storageIssueRef.current);
+    });
+    const onHidden = () => {
+      // A native permission prompt may temporarily hide an iOS WebView. Do not cancel it.
+      if (document.hidden && cameraPhaseRef.current !== 'requesting' && (camera.current?.stream?.active || sessionRef.current === 'scanning' || sessionRef.current === 'starting')) {
+        pause('Camera paused because the app went into the background. Enable the camera again before resuming.');
+        cameraEpoch.current++; camera.current?.stop(); changeCameraPhase('off'); setCameraSize({ width: 0, height: 0 });
+      }
+    };
     const onRotation = () => { if (sessionRef.current === 'scanning') pause('Screen orientation changed. Check card framing and resume.'); };
+    const preview = videoRef.current;
+    const resized = () => { if (camera.current?.stream?.active && preview?.videoWidth) setCameraSize({ width: preview.videoWidth, height: preview.videoHeight }); };
+    preview?.addEventListener('resize', resized);
     document.addEventListener('visibilitychange', onHidden); window.addEventListener('orientationchange', onRotation);
     return () => {
-      cancelled = true; mounted.current = false; camera.current?.stop(); processor.current?.destroy(); releaseWake();
+      cancelled = true; clearTimeout(storageDeadline); mounted.current = false; cameraEpoch.current++; camera.current?.stop(); processor.current?.destroy(); releaseWake();
+      preview?.removeEventListener('resize', resized);
       document.removeEventListener('visibilitychange', onHidden); window.removeEventListener('orientationchange', onRotation);
     };
     // The lifetime owns the camera and processor. Mutable settings are kept in refs.
@@ -182,14 +210,51 @@ export function useScanner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
-  const enableCamera = async (deviceId?: string) => {
-    if (!videoRef.current) throw new Error('Camera preview is unavailable.');
-    if (!camera.current) camera.current = new Camera(videoRef.current, pause);
-    if (camera.current.stream?.active && !deviceId) return;
-    const info = await camera.current.start(settingsRef.current.resolution, deviceId);
-    setCameraSize({ width: info.width ?? videoRef.current.videoWidth, height: info.height ?? videoRef.current.videoHeight });
-    setCapabilities(camera.current.capabilities);
-    setDevices((await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput'));
+  const enableCamera = (deviceId?: string): Promise<void> => {
+    if (!videoRef.current) return Promise.reject(new Error('Camera preview is unavailable.'));
+    if (camera.current?.stream?.active && cameraPhaseRef.current === 'ready' && !deviceId) return Promise.resolve();
+    if (cameraRequest.current) return cameraRequest.current;
+    if (!camera.current) camera.current = new Camera(videoRef.current, reason => {
+      pause(reason); cameraEpoch.current++; camera.current?.stop(); changeCameraPhase('off'); setCameraSize({ width: 0, height: 0 });
+    });
+    const epoch = ++cameraEpoch.current;
+    changeCameraPhase('requesting'); setOpenBrowserSuggested(false);
+    const reminder = setTimeout(() => {
+      if (mounted.current && cameraEpoch.current === epoch && cameraPhaseRef.current === 'requesting') {
+        setError('Still waiting for camera access. Choose Allow in the browser prompt. If no prompt appears, open this scanner directly in Safari or Chrome.');
+        setOpenBrowserSuggested(true);
+      }
+    }, 15000);
+    // start() reaches getUserMedia synchronously, inside the button's user gesture.
+    const opening = camera.current.start(settingsRef.current.resolution, deviceId).then(info => {
+      if (!mounted.current || cameraEpoch.current !== epoch || document.hidden) {
+        if (cameraEpoch.current === epoch) camera.current?.stop();
+        throw new CameraAccessError('cancelled', 'Camera startup interrupted.');
+      }
+      setCameraSize({ width: info.width ?? videoRef.current!.videoWidth, height: info.height ?? videoRef.current!.videoHeight });
+      setCapabilities(camera.current!.capabilities); changeCameraPhase('ready');
+      setError(storageIssueRef.current); setOpenBrowserSuggested(false);
+      // Enumeration is optional; unsupported or rejected enumeration must not close a working camera.
+      const enumerate = navigator.mediaDevices?.enumerateDevices?.bind(navigator.mediaDevices);
+      if (enumerate) {
+        void Promise.resolve().then(enumerate).then(items => {
+          if (mounted.current && cameraEpoch.current === epoch) setDevices(items.filter(d => d.kind === 'videoinput'));
+        }).catch(() => { if (mounted.current && cameraEpoch.current === epoch) setDevices([]); });
+      }
+    }).catch(err => {
+      if (cameraEpoch.current === epoch) { changeCameraPhase('off'); setCameraSize({ width: 0, height: 0 }); }
+      throw err;
+    }).finally(() => { clearTimeout(reminder); if (cameraRequest.current === opening) cameraRequest.current = undefined; });
+    cameraRequest.current = opening;
+    return opening;
+  };
+  const connectCamera = async () => {
+    setError(storageIssueRef.current);
+    try { await enableCamera(); }
+    catch (err) {
+      if (!mounted.current || err instanceof CameraAccessError && err.reason === 'cancelled') return;
+      setError(message(err)); setOpenBrowserSuggested(err instanceof CameraAccessError && err.openBrowser);
+    }
   };
   const start = async (target: number) => {
     if (!loaded || sessionRef.current === 'starting' || controller.current?.complete) return;
@@ -197,7 +262,8 @@ export function useScanner() {
     const token = ++startToken.current;
     changeSession('starting'); setError(''); setNotice('Loading the local image processing engine…');
     try {
-      await Promise.all([enableCamera(), processor.current!.init()]);
+      await enableCamera();
+      await processor.current!.init();
       if (startToken.current !== token || document.hidden) throw new Error('Scanner startup was interrupted. Keep the app open and resume when ready.');
       setFallback(processor.current!.fallback);
       if (!batchRef.current) {
@@ -211,9 +277,13 @@ export function useScanner() {
       const soundOk = await audioReady;
       setNotice(!soundOk ? 'Audio could not unlock. Tap the sound test in Settings.' : processor.current!.fallback ? 'Compatibility mode: processing uses the main thread. Feed one card at a time and wait for its ding.' : 'Slide a card into view. The scanner waits for movement before every capture.');
       void navigator.storage?.persist?.().catch(() => {});
-    } catch (err) { changeSession('paused'); setError(message(err)); setNotice(''); camera.current?.stop(); setCameraSize({ width: 0, height: 0 }); }
+    } catch (err) {
+      changeSession('paused'); setError(message(err)); setNotice('');
+      setOpenBrowserSuggested(err instanceof CameraAccessError && err.openBrowser);
+      // Processor/storage failures pause scanning while leaving the granted preview available.
+    }
   };
-  const stop = () => { pause(); camera.current?.stop(); setCameraSize({ width: 0, height: 0 }); setNotice('Camera stopped. Saved scans and queued captures are retained.'); };
+  const stop = () => { pause(); cameraEpoch.current++; camera.current?.stop(); changeCameraPhase('off'); setCameraSize({ width: 0, height: 0 }); setNotice('Camera stopped. Saved scans and queued captures are retained.'); };
   const retry = async (attempt: Attempt) => {
     if (pending || sessionRef.current === 'scanning' || !controller.current || controller.current.complete) return;
     const c = controller.current;
@@ -237,7 +307,7 @@ export function useScanner() {
     elapsedRef.current = 0; setElapsedMs(0); setMeasuredScans(0); liveIds.current.clear(); lastComplete.current = undefined; changeSession('idle'); setError(''); setNotice('Ready for a new batch.');
   };
   const switchCamera = async (id: string) => {
-    pause(); try { await enableCamera(id); setNotice('Camera changed. Check framing and resume.'); } catch (err) { setError(message(err)); }
+    pause(); try { await enableCamera(id); setNotice('Camera changed. Check framing and resume.'); } catch (err) { setError(message(err)); setOpenBrowserSuggested(err instanceof CameraAccessError && err.openBrowser); }
   };
   const control = async (values: Record<string, unknown>) => { try { await camera.current?.control(values); } catch (err) { setError(`Camera setting unavailable: ${message(err)}`); } };
   const lock = async (value: boolean) => { try { await camera.current?.lock(value); setNotice(value ? 'Supported camera adjustments locked.' : 'Automatic camera adjustments restored.'); } catch (err) { setError(message(err)); } };
@@ -247,7 +317,8 @@ export function useScanner() {
     const updated = { ...batchRef.current, name: name.trim() || defaultBatchName(batchRef.current.number) };
     await storage.saveBatch(updated); batchRef.current = updated; setBatch(updated);
   };
-  return { videoRef, batch, scans, attempts, settings, setSettings, session, error, setError, notice, loaded, pending,
+  return { videoRef, batch, scans, attempts, settings, setSettings, session, error, setError, notice, loaded, pending, storageIssue,
+    cameraPhase, connectCamera, openBrowserSuggested,
     reading, timing, corners, cameraSize, capabilities, fallback, devices, elapsedMs, measuredScans, start, pause: () => pause(), stop,
     retry, remove, discard, clear, switchCamera, control, lock, explicitCapture, renameBatch,
     updateScan: async (scan: Scan) => { await storage.accept(scan); setScans(items => ordered(items.map(s => s.id === scan.id ? scan : s))); },

@@ -81,7 +81,7 @@ export default function App() {
   </>;
   const openFromMenu = (open: () => void) => { setShowMenu(false); open(); };
   const failedCount = s.attempts.filter(attempt => attempt.reason).length;
-  const scannerStatus = failedCount ? 'Scan needs review' : status;
+  const scannerStatus = failedCount ? 'Scan needs review' : s.cameraPhase === 'requesting' ? 'Waiting for camera access' : s.cameraPhase === 'off' && s.session !== 'complete' ? 'Camera off' : !s.loaded ? (s.storageIssue ? 'Storage unavailable' : 'Loading saved scans') : s.session === 'idle' ? 'Camera ready' : status;
   const guideHeight = 70 * (s.cameraSize.width && s.cameraSize.height ? Math.min(1, .75 / (s.cameraSize.width / s.cameraSize.height)) : 1);
   return <>
     <main className="scanner-screen" aria-label="Card scanner">
@@ -92,18 +92,19 @@ export default function App() {
             <Menu size={22} />{failedCount > 0 && <span className="menu-attention" aria-label={`${failedCount} scan${failedCount === 1 ? '' : 's'} need review`} />}
           </button>
           <div className="alignment-guide" style={{ height: `${guideHeight}%` }} aria-hidden="true"><i /><i /><i /><i /></div>
-          {!s.cameraSize.width && <div className="camera-placeholder"><ScanLine size={35} strokeWidth={1.25} /><p>Position a card</p></div>}
+          {!s.cameraSize.width && <div className="camera-placeholder"><ScanLine size={35} strokeWidth={1.25} /><p>{s.cameraPhase === 'requesting' ? 'Choose Allow to use your camera' : 'Enable your camera to begin'}</p></div>}
           {s.settings.debug && s.corners && s.cameraSize.width > 0 && <svg className="boundary-svg" viewBox={`0 0 ${s.cameraSize.width} ${s.cameraSize.height}`} preserveAspectRatio="xMidYMid meet" aria-label="Last accepted card boundaries"><polygon points={s.corners.map(p => `${p.x},${p.y}`).join(' ')} /></svg>}
         </div>
         <div className="scanner-status" role="status" aria-live="polite">
           <span className={`session-state ${s.session === 'scanning' ? 'is-live' : ''} ${failedCount ? 'needs-attention' : ''}`}><i /><span>{scannerStatus}</span></span>
           <span className="scan-count" aria-label={`${count} of ${quantity} cards scanned`}>{count}<span> / {quantity}</span></span>
         </div>
-        {s.session === 'scanning' ? <button className="button primary scan-action" onClick={s.pause}><Pause size={18} fill="currentColor" />Pause scanning</button> : <button className="button primary scan-action" disabled={!s.loaded || s.session === 'starting' || s.session === 'complete' || s.pending > 0 || failedCount > 0} onClick={() => void s.start(target)}>
+        {s.session !== 'complete' && s.cameraPhase !== 'ready' ? <button className="button primary scan-action" disabled={s.cameraPhase === 'requesting'} onClick={() => void s.connectCamera()}><Camera size={19} />{s.cameraPhase === 'requesting' ? 'Requesting camera…' : 'Enable camera'}</button> : s.session === 'scanning' ? <button className="button primary scan-action" onClick={s.pause}><Pause size={18} fill="currentColor" />Pause scanning</button> : <button className="button primary scan-action" disabled={!s.loaded || s.session === 'starting' || s.session === 'complete' || s.pending > 0 || failedCount > 0} onClick={() => void s.start(target)}>
           {s.session === 'complete' ? <CheckCheck size={19} /> : <Play size={18} fill="currentColor" />}
-          {s.session === 'complete' ? 'Batch complete' : s.session === 'starting' ? 'Preparing…' : s.batch ? 'Resume scanning' : 'Start scanning'}
+          {s.session === 'complete' ? 'Batch complete' : !s.loaded ? (s.storageIssue ? 'Storage unavailable' : 'Loading saved scans…') : s.session === 'starting' ? 'Preparing…' : s.batch ? 'Resume scanning' : 'Start scanning'}
         </button>}
         {s.error && <div role="alert" className="scanner-error"><TriangleAlert size={16} /><p>{s.error}{failedCount > 0 && ' Open Menu → Recent cards to retry or discard the failed capture.'}</p><button className="icon-button" onClick={() => s.setError('')} aria-label="Dismiss error"><X size={16} /></button></div>}
+        {s.openBrowserSuggested && <a className="camera-browser-link" href={new URL(import.meta.env.BASE_URL, location.origin).href} target="_blank" rel="noopener noreferrer">Open scanner in Safari or Chrome <ArrowRight size={14} /></a>}
         {import.meta.env.DEV && new URLSearchParams(location.search).get('test-camera') === '1' && <div className="test-camera-controls"><small>Synthetic test camera · development only</small><button className="button outline" disabled={s.session !== 'scanning'} onClick={() => window.dispatchEvent(new Event('test-card-slide'))}>Slide test card</button></div>}
       </section>
     </main>

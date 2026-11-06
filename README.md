@@ -27,7 +27,7 @@ npm run verify:build # verify cached production assets and offline worker behavi
 ## Use the scanner
 
 1. Mount the phone securely above the slinger. Use diffuse light from the sides. All four edges must be visible with background around the card. Fill roughly 20–80% of the camera area with one card.
-2. Open the **Menu** button in the scanner's upper-right corner, choose **Batch**, and set the quantity. Close the menu and press **Start scanning**. Allow camera access. This gesture also unlocks Web Audio and requests a screen wake lock where supported.
+2. Open the **Menu** button in the scanner's upper-right corner, choose **Batch**, and set the quantity. Close the menu, tap **Enable camera**, and choose **Allow** in the browser's camera prompt. Once the live preview appears, tap **Start scanning**. That second gesture unlocks Web Audio and requests a screen wake lock where supported.
 3. Slide a card fully into place. The motion detector needs a physical transition, then 220 ms of stability by default. It does not use artwork equality. Two identical cards can be scanned in succession.
 4. A short ding means a validated, corrected JPEG has been durably saved. Feed the next card. Watch the queue and slow down when it fills. The pipeline can process one image while detecting the next transition.
 5. The final successful card gets its ding followed by a distinct descending three-note alarm. The capture controller stops accepting captures at the reserved batch limit.
@@ -36,6 +36,14 @@ npm run verify:build # verify cached production assets and offline worker behavi
 The main screen contains only the centered scanner, capture status, scan count, and Start/Pause control. Batch controls, recent cards, downloads, settings, and the guide stay hidden behind the **Menu** button. Opening a menu or gallery keeps the camera mounted and detection running. Recent-card thumbnails are rendered only while the gallery is open.
 
 Toggle dark/light mode under **Menu → Settings → Dark mode**. Dark mode uses a pure black background and neutral gray surfaces, with monochrome controls. The initial theme follows your device preference and your selection is remembered locally.
+
+### Mobile camera access
+
+**Enable camera** requests the camera directly from your tap. It stays available while saved data is loading and does not wait for IndexedDB, OpenCV, audio, or ZIP initialization. The preview opens before scanning starts. A processing-engine failure pauses capture while keeping an already granted camera preview available.
+
+Open the HTTPS app directly in **Safari on iPhone** or **Chrome on Android**. Some chat, social, GitHub, and other embedded browsers do not expose a camera API or disallow camera permission prompts. If detected, the app displays an **Open scanner in Safari or Chrome** link. The app cannot override its host app's camera restrictions. If you previously denied permission, allow Camera for this site in your browser's site settings and tap Enable camera again.
+
+The preview is visible during startup, explicitly muted, and marked for inline playback before its stream is attached. Startup listens for metadata/playing events before calling `play()` and also bounds a pending playback promise, avoiding a silent indefinite Safari wait. Preferred resolution constraints fall back to simpler camera requests when unsupported; permission denials are never retried as resolution errors. Device enumeration, capabilities, and settings APIs are optional and cannot tear down a working preview.
 
 The scanner does not automatically capture a stationary card on first start, resume, reload, or recovery. To intentionally capture an existing card, use **Menu → Capture current card** while scanning. **Stop camera** is also in the menu. Pause or stop never cancels already captured images; they finish processing and storage. Keep the app in the foreground. Going into the background, camera interruption, rotation, or severe analysis delay pauses the scanner.
 

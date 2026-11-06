@@ -5,7 +5,10 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 ## Setup and permissions
 
 - [ ] Open a trusted HTTPS root URL. First load and cache the complete production build online.
-- [ ] Deny camera permission; confirm an actionable message. Grant permission in browser settings, retry, and verify rear camera selection.
+- [ ] Tap **Enable camera** and confirm the native camera permission prompt appears immediately. Allow it, verify the live rear-camera preview, then tap **Start scanning**. No image should be captured before scanning starts and physical movement occurs.
+- [ ] Deny camera permission; confirm an actionable message. Allow Camera in browser site settings, tap Enable camera again, and verify rear camera selection.
+- [ ] Open inside an embedded/in-app browser that blocks camera access. Verify an actionable message and the direct Safari/Chrome link. Repeat in the full mobile browser.
+- [ ] With storage loading slowly or unavailable, Enable camera must still request permission and show the preview. Capturing remains disabled until persistent storage is ready.
 - [ ] Check preview framing: all corners visible with a margin, approximately centered, no hands or slinger edges forming a competing card-like rectangle.
 - [ ] Verify portrait/landscape phone orientations; rotating during capture must pause safely.
 - [ ] Test available camera selection, zoom, torch, and locks. Unsupported controls should be absent or report an error without losing images.
@@ -49,6 +52,7 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 - [ ] Background the app, lock the screen, switch apps, or interrupt camera access. Return to an explicit pause, with saved images and original captures intact.
 - [ ] Simulate near-full storage in a disposable profile. Failed storage must not increment count, and raw originals must remain available in session for saving. Do not close the page until saved.
 - [ ] Force worker startup failure in developer tools; verify compatibility fallback or actionable initialization error. Feed slowly in fallback.
+- [ ] An OpenCV initialization failure must not close an already granted camera preview. Optional camera capability/device-enumeration failures must not stop the stream.
 - [ ] Force a ZIP generation error; saved images remain available for another export.
 - [ ] Clear a test batch through the explicit confirmation. New batch starts at image 0001 and the next batch archive number.
 

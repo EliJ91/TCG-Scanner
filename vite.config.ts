@@ -40,5 +40,5 @@ self.addEventListener('fetch', event => {
     },
   }],
   worker: { format: 'iife' },
-  test: { environment: 'node', include: ['tests/**/*.test.ts'], testTimeout: 30000 },
+  test: { environment: 'node', include: ['tests/**/*.test.{ts,tsx}'], testTimeout: 30000 },
 } as Parameters<typeof defineConfig>[0]);
