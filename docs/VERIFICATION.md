@@ -3,7 +3,7 @@
 Automated validation:
 
 - TypeScript strict checks and Vite production build pass.
-- 60 tests exercise mobile camera requests and preview startup, scanner initialization, motion, batch reservations, recovery, ZIP ordering/names, and the real OpenCV WASM boundary/validation pipeline, including mild perspective and landscape-to-portrait correction.
+- 61 tests exercise mobile camera requests and preview startup, scanner initialization, motion, batch reservations, recovery, ZIP ordering/names, and the real OpenCV WASM boundary/validation pipeline, including mild perspective and landscape-to-portrait correction.
 - `npm audit` reports zero vulnerabilities in the installed dependency graph.
 - `npm run verify:build` verifies all 20 production precache assets, offline navigation/OpenCV/worker responses with network unavailable, bundled fonts, and exclusion of the development camera fixture. Both root (`/`) and GitHub Pages (`/TCG-Scanner/`) builds pass; PWA start paths, icons, worker paths, and cache isolation are checked for the actual build prefix.
 
@@ -33,6 +33,7 @@ Mobile camera startup regression coverage:
 - The actual React app keeps Enable camera usable with pending or failed IndexedDB initialization. Permission/preview startup does not initialize OpenCV or audio. Optional enumeration failures and OpenCV startup errors leave the granted preview available.
 - The camera configures muted inline playback before attaching the stream, registers frame listeners before playback, handles a pending `play()` promise with a deadline, cleans up late permission grants after cancellation, and uses actual portrait video dimensions.
 - Unsupported/permission-blocked embedded browsers receive a direct-browser recovery link; a subsequent successful retry clears that message.
+- Temporary page hiding while a native mobile permission dialog dismisses does not cancel the granted preview. An actually backgrounded page still stops camera use safely.
 - In the browser fixture, Enable camera opened a visible, playing, muted inline preview at 1000 × 900 before OpenCV/scanning started, with the count still zero. Starting scanning and sliding two synthetic cards then completed a two-card batch successfully, with no browser errors.
 
 These camera regressions use controlled browser-API mocks and a DOM environment. They do not substitute for the real iOS Safari/Android Chrome permission and camera checks in `MOBILE_TESTING.md`.

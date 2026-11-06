@@ -81,4 +81,15 @@ describe('camera permission is independent from scanner initialization', () => {
     await act(async () => button('Enable camera').click());
     expect(button('Start scanning').disabled).toBe(false); expect(container.querySelector('.camera-browser-link')).toBeNull();
   });
+  it('does not cancel a camera permission grant while the native mobile dialog is dismissing', async () => {
+    let hidden = false, allow!: (info: { width: number; height: number }) => void;
+    vi.spyOn(document, 'hidden', 'get').mockImplementation(() => hidden);
+    mocks.start.mockImplementationOnce(() => new Promise(resolve => { allow = resolve; }));
+    await act(async () => root.render(<App />)); await act(async () => button('Enable camera').click());
+    await act(async () => { hidden = true; document.dispatchEvent(new Event('visibilitychange')); allow({ width: 720, height: 1280 }); });
+    expect(mocks.stop).not.toHaveBeenCalled(); expect(button('Requesting camera…').disabled).toBe(true);
+    await act(async () => { hidden = false; document.dispatchEvent(new Event('visibilitychange')); });
+    expect(button('Start scanning').disabled).toBe(false); expect(mocks.stop).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('Camera ready');
+  });
 });

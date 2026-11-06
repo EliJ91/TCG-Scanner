@@ -10,6 +10,15 @@ import { defaultBatchName, defaults, message, ordered, type Attempt, type Batch,
 
 interface Job { attempt: Attempt; result: Processed }
 export type Session = 'idle' | 'starting' | 'scanning' | 'paused' | 'complete';
+function waitForPermissionDialogToClose() {
+  if (!document.hidden) return Promise.resolve();
+  return new Promise<void>(resolve => {
+    const finish = () => { clearTimeout(timer); document.removeEventListener('visibilitychange', visible); resolve(); };
+    const visible = () => { if (!document.hidden) finish(); };
+    const timer = setTimeout(finish, 2000);
+    document.addEventListener('visibilitychange', visible);
+  });
+}
 export function useScanner() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [batch, setBatch] = useState<Batch>(); const batchRef = useRef<Batch | undefined>(undefined);
@@ -226,7 +235,9 @@ export function useScanner() {
       }
     }, 15000);
     // start() reaches getUserMedia synchronously, inside the button's user gesture.
-    const opening = camera.current.start(settingsRef.current.resolution, deviceId).then(info => {
+    const opening = camera.current.start(settingsRef.current.resolution, deviceId).then(async info => {
+      // Safari may report hidden for one more turn while dismissing its native permission sheet.
+      await waitForPermissionDialogToClose();
       if (!mounted.current || cameraEpoch.current !== epoch || document.hidden) {
         if (cameraEpoch.current === epoch) camera.current?.stop();
         throw new CameraAccessError('cancelled', 'Camera startup interrupted.');
