@@ -28,49 +28,85 @@
     if (a > b) p = [p[1], p[2], p[3], p[0]];
     return { points: p, quality: Math.max(0, 1 - Math.abs(ratio - 63 / 88) * 3 - cosine * 0.65) };
   }
+  // Estimate the surrounding surface from corner patches, including a lighting gradient.
+  // Color distance preserves subtle silver/blue edges that almost disappear in grayscale.
+  function foregroundMask(cv, image) {
+    const w = image.cols, h = image.rows, data = image.data, patch = Math.max(4, Math.round(Math.min(w, h) * .025));
+    const corners = [[0,0],[w-patch,0],[w-patch,h-patch],[0,h-patch]];
+    const samples = corners.map(([left, top]) => {
+      const values = [[],[],[]];
+      for (let y=top;y<top+patch;y++) for (let x=left;x<left+patch;x++) for (let c=0;c<3;c++) values[c].push(data[(y*w+x)*4+c]);
+      return values.map(v => { v.sort((a,b)=>a-b); return v[Math.floor(v.length/2)]; });
+    });
+    const deviations=[];
+    for (let k=0;k<4;k++) {
+      const [left,top]=corners[k];
+      for(let y=top;y<top+patch;y+=2) for(let x=left;x<left+patch;x+=2) {
+        let d=0; for(let c=0;c<3;c++) d=Math.max(d,Math.abs(data[(y*w+x)*4+c]-samples[k][c])); deviations.push(d);
+      }
+    }
+    deviations.sort((a,b)=>a-b);
+    const threshold=Math.max(2.5, deviations[Math.floor(deviations.length*.8)]*2.8);
+    const mask=new cv.Mat(h,w,cv.CV_8UC1), pixels=mask.data;
+    for(let y=0;y<h;y++) {
+      const fy=y/(h-1), left=samples[0].map((v,c)=>v*(1-fy)+samples[3][c]*fy), right=samples[1].map((v,c)=>v*(1-fy)+samples[2][c]*fy);
+      let r=left[0],g=left[1],b=left[2];
+      const dr=(right[0]-r)/(w-1),dg=(right[1]-g)/(w-1),db=(right[2]-b)/(w-1),negative=-threshold;
+      for(let x=0,k=y*w,p=k*4;x<w;x++,k++,p+=4,r+=dr,g+=dg,b+=db) {
+        const red=data[p]-r,green=data[p+1]-g,blue=data[p+2]-b;
+        pixels[k]=(red>threshold||red<negative||green>threshold||green<negative||blue>threshold||blue<negative)?255:0;
+      }
+    }
+    return mask;
+  }
   function findCard(cv, src) {
     const scale = Math.min(1, 900 / Math.max(src.cols, src.rows));
-    const small = new cv.Mat(), gray = new cv.Mat(), blur = new cv.Mat(), edges = new cv.Mat();
+    const small = new cv.Mat(), gray = new cv.Mat(), blur = new cv.Mat(), edges = new cv.Mat(), contrast = new cv.Mat();
     const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
-    let best = null;
+    const bridge = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(7, 7));
+    let foreground, clahe, best = null;
+    function candidates(mask) {
+      const contours = new cv.MatVector(), hierarchy = new cv.Mat();
+      try {
+        cv.findContours(mask, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+        for (let i=0;i<contours.size();i++) {
+          const contour=contours.get(i), approx=new cv.Mat();
+          try {
+            const fraction=Math.abs(cv.contourArea(contour))/(small.cols*small.rows);
+            if(fraction<.10||fraction>.94) continue;
+            const perimeter=cv.arcLength(contour,true);
+            for(const epsilon of [.02,.035,.012]) {
+              cv.approxPolyDP(contour,approx,perimeter*epsilon,true);
+              if(approx.rows!==4||!cv.isContourConvex(approx)) continue;
+              const points=Array.from({length:4},(_,j)=>({x:approx.data32S[j*2],y:approx.data32S[j*2+1]}));
+              const g=geometry(points,small.cols,small.rows);if(!g)continue;
+              const cx=points.reduce((s,p)=>s+p.x,0)/4/small.cols, cy=points.reduce((s,p)=>s+p.y,0)/4/small.rows;
+              const center=Math.hypot(cx-.5,cy-.5);if(center>.27)continue;
+              // External card contours outrank similarly proportioned internal artwork.
+              const score=fraction*1.5+g.quality*.35-center*.4;
+              if(!best||score>best.score)best={score,confidence:g.quality,corners:g.points.map(p=>({x:p.x/scale,y:p.y/scale}))};
+            }
+          } finally {contour.delete();approx.delete();}
+        }
+      } finally {contours.delete();hierarchy.delete();}
+    }
+    function edgePass(image,low,high) {
+      cv.Canny(image,edges,low,high);cv.morphologyEx(edges,edges,cv.MORPH_CLOSE,kernel);candidates(edges);
+    }
     try {
-      cv.resize(src, small, new cv.Size(Math.round(src.cols * scale), Math.round(src.rows * scale)), 0, 0, cv.INTER_AREA);
-      cv.cvtColor(small, gray, cv.COLOR_RGBA2GRAY);
-      cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0);
-      for (const [low, high] of [[20, 65], [55, 150], [8, 28]]) {
-        cv.Canny(blur, edges, low, high);
-        cv.morphologyEx(edges, edges, cv.MORPH_CLOSE, kernel);
-        const contours = new cv.MatVector(), hierarchy = new cv.Mat();
-        try {
-          cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
-          for (let i = 0; i < contours.size(); i++) {
-            const contour = contours.get(i), approx = new cv.Mat();
-            try {
-              const area = Math.abs(cv.contourArea(contour));
-              const fraction = area / (small.cols * small.rows);
-              if (fraction < 0.10 || fraction > 0.94) continue;
-              const perimeter = cv.arcLength(contour, true);
-              for (const epsilon of [0.02, 0.035, 0.012]) {
-                cv.approxPolyDP(contour, approx, perimeter * epsilon, true);
-                if (approx.rows !== 4 || !cv.isContourConvex(approx)) continue;
-                const points = Array.from({ length: 4 }, (_, j) => ({ x: approx.data32S[j * 2], y: approx.data32S[j * 2 + 1] }));
-                const g = geometry(points, small.cols, small.rows);
-                if (!g) continue;
-                const cx = points.reduce((s, v) => s + v.x, 0) / 4 / small.cols;
-                const cy = points.reduce((s, v) => s + v.y, 0) / 4 / small.rows;
-                const center = Math.hypot(cx - 0.5, cy - 0.5);
-                if (center > 0.27) continue;
-                // Favor the exterior over artwork rectangles with similar proportions.
-                const score = fraction * 1.5 + g.quality * 0.35 - center * 0.4;
-                if (!best || score > best.score) best = { score, confidence: g.quality, corners: g.points.map(p => ({ x: p.x / scale, y: p.y / scale })) };
-              }
-            } finally { contour.delete(); approx.delete(); }
-          }
-        } finally { contours.delete(); hierarchy.delete(); }
-      }
-      if (!best || best.confidence < 0.55) throw new Error('Card boundaries are uncertain. Keep all four edges in view, reduce glare, and improve side lighting.');
+      cv.resize(src,small,new cv.Size(Math.round(src.cols*scale),Math.round(src.rows*scale)),0,0,cv.INTER_AREA);
+      cv.cvtColor(small,gray,cv.COLOR_RGBA2GRAY);cv.GaussianBlur(gray,blur,new cv.Size(5,5),0);
+      edgePass(blur,20,65);edgePass(blur,5,18);
+      // Local contrast recovers faint borders under uneven light, without changing the output pixels.
+      clahe=new cv.CLAHE(3,new cv.Size(8,8));clahe.apply(gray,contrast);
+      cv.GaussianBlur(contrast,contrast,new cv.Size(3,3),0);edgePass(contrast,8,28);
+      cv.equalizeHist(gray,contrast);cv.GaussianBlur(contrast,contrast,new cv.Size(3,3),0);edgePass(contrast,10,35);
+      foreground=foregroundMask(cv,small);
+      cv.morphologyEx(foreground,foreground,cv.MORPH_OPEN,kernel);
+      cv.morphologyEx(foreground,foreground,cv.MORPH_CLOSE,bridge);candidates(foreground);
+      if(!best||best.confidence<.55)throw new Error('Card boundaries were not found in this saved photo. Retry the crop or save the original in Recent cards.');
       return best;
-    } finally { small.delete(); gray.delete(); blur.delete(); edges.delete(); kernel.delete(); }
+    } finally {small.delete();gray.delete();blur.delete();edges.delete();contrast.delete();foreground?.delete();clahe?.delete();kernel.delete();bridge.delete();}
   }
   function sharpness(cv, src) {
     const small = new cv.Mat(), gray = new cv.Mat(), lap = new cv.Mat(), mean = new cv.Mat(), std = new cv.Mat();

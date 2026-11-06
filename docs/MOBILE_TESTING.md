@@ -1,6 +1,6 @@
 # Real card-slinger acceptance checklist
 
-Record phone model, OS, browser version, camera resolution, lighting, stability threshold, motion threshold, blur threshold, queue capacity, and ambient temperature. Run separately on Android Chrome and iPhone Safari. Clear only expendable test batches after checking exports.
+Record phone model, OS, browser version, camera resolution, lighting, stability threshold, motion threshold, blur threshold, maximum queued photos, and ambient temperature. Run separately on Android Chrome and iPhone Safari. Clear only expendable test batches after checking exports.
 
 ## Setup and permissions
 
@@ -21,8 +21,8 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 
 ## Detection and image quality
 
-- [ ] Start Auto over a stationary first card: capture only after a full 1.2-second quiet interval. Continued placement/hand movement must restart that interval. Leave it stationary afterward: no duplicate.
-- [ ] In Manual, wait over a stationary card: zero automatic photos. Each Take photo tap requests one photo, subject to queue/batch capacity.
+- [ ] Start Auto over a stationary first card: capture only after a full 0.22-second quiet interval. Continued placement/hand movement must restart that interval. Leave it stationary afterward: no duplicate.
+- [ ] In Manual, wait over a stationary card: zero automatic photos. Each Take photo tap requests one photo, subject only to raw storage and remaining batch capacity.
 - [ ] Switch Auto/Manual while active. Keep the same preview and batch, with no extra stationary duplicate.
 - [ ] Slide in a card and hold still: one scan, one ding, all four borders preserved, portrait crop, no background beyond edge rounding, no artwork clipped.
 - [ ] Leave it stationary for 30 seconds: no duplicate scans.
@@ -37,10 +37,10 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 ## Strict batch and asynchronous pipeline
 
 - [ ] Select 50 and feed 50 valid cards. Verify exactly 50 stored images and 50 success dings.
-- [ ] Confirm the final image is stored before its ding, followed by the distinct completion alarm. Additional movements must not capture anything.
+- [ ] Each ding must follow original-photo storage, before cropping completes. After the final original, show the remaining processing count. Play the completion alarm only after all target crops are valid and stored.
 - [ ] Force the final image to fail. Batch remains incomplete; no completion alarm until the valid replacement fills its slot.
-- [ ] Fill the processing queue. The scanner should indicate backpressure and hold a settled card until a slot opens.
-- [ ] Feed another card before a held card is captured: verify a reported/audible overrun without an automatic pause. Check saved order and retake missed cards.
+- [ ] Feed one new card per second while processing takes longer than one second per image. Every settled card must be persisted and ding immediately, with a growing processing count. Cropping must not gate capture. Check physical count against saved originals and final images.
+- [ ] Force a boundary failure during the feed. Keep saving subsequent photos. Confirm the failed original appears in review, can be downloaded or recropped later, and does not trigger completion or a blocking boundary alert.
 - [ ] Pause with images in processing. They should finish and save; no fresh captures until Resume.
 - [ ] Resume over the same stationary card: no duplicate. Explicit capture is available if needed.
 - [ ] Open the gallery while scanning: camera and detector should continue. Editing remains disabled until capture is paused and the queue is empty.
@@ -51,16 +51,19 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 - [ ] Download a partial batch, then a completed batch. Unzip and check exact file count, valid JPEG decoding, portrait dimensions, sequential filenames without gaps, and physical order.
 - [ ] Confirm rotated/deleted images are reflected in the next ZIP. Download never clears saved data.
 - [ ] In the download dialog, confirm default `Batch#XXX`, edit to a custom batch name, and verify the archive name and persisted name on the next export. Names inside remain `Pokemon_0001.jpg` onward.
-- [ ] On iOS inspect the downloaded ZIP in Files, and test Share / Save when available.
+- [ ] On iOS inspect the downloaded ZIP in Files. The app should offer downloads with no Share / Save feature.
 - [ ] Reload after saved scans; verify recovery and no automatic stationary recapture.
-- [ ] Reload during processing; verify retained raw attempts can be retried, with no counted duplicate.
+- [ ] Reload with a processing backlog; queued originals must resume cropping automatically without taking new photos, losing order, or duplicating scans.
 - [ ] Background/lock the app or interrupt camera access. Keep saved images/originals intact; on return reconnect the camera and preserve the active scan intent without requiring Resume. Respect a browser permission denial.
 - [ ] Simulate near-full storage in a disposable profile. Failed storage must not increment count, and raw originals must remain available in session for saving. Do not close the page until saved.
 - [ ] While storage is unavailable, keep the session active but apply capture backpressure. Once storage recovers, retry retained snapshots automatically without taking duplicate photos.
-- [ ] Force worker startup failure in developer tools; verify compatibility fallback or actionable initialization error. Feed slowly in fallback.
+- [ ] Force worker startup failure. In compatibility mode, keep saving originals at the usual feed rate; defer heavy processing until capture is paused or the batch capture limit is reached. Repeat with a worker failing during a feed.
 - [ ] An OpenCV initialization failure must not close an already granted camera preview. Optional camera capability/device-enumeration failures must not stop the stream.
 - [ ] Force a ZIP generation error; saved images remain available for another export.
 - [ ] Clear a test batch through the explicit confirmation. New batch starts at image 0001 and the next batch archive number.
+
+- [ ] Save camera selection, resolution, zoom, flashlight and supported locks; reopen and verify restoration. Remove the saved camera and confirm rear-camera fallback.
+- [ ] Pause and use Reset settings. Restore defaults, keep the batch name and every saved photo, and verify the reset survives reload.
 
 ## Performance and offline
 

@@ -41,6 +41,51 @@ describe('real OpenCV boundary detection and validation', () => {
       expect(out.height).toBeGreaterThan(out.width);expect(out.width/out.height).toBeCloseTo(63/88,2);expect(out.sharpness).toBeGreaterThan(10);
     } finally {src.delete();out?.mat.delete();}
   });
+  it.each([244,248])('keeps the complete faint silver border (%i) on near-white instead of cropping artwork', border => {
+    const {src,points}=synthetic(border);
+    try {
+      // A card-shaped interior panel is deliberately much stronger than the actual exterior.
+      cv.rectangle(src,new cv.Point(255,180),new cv.Point(645,720),new cv.Scalar(170,180,175,255),2);
+      if(border===248) {
+        const pixels=src.data;
+        // Same brightness as the surface but a slight silver/blue color difference.
+        for(let y=143;y<=757;y++)for(let x=230;x<=670;x++) {
+          const p=(y*900+x)*4;
+          if(pixels[p]===248&&pixels[p+1]===248) {pixels[p]=244;pixels[p+1]=248;pixels[p+2]=250;}
+        }
+      }
+      const found=vision.findCard(cv,src);
+      for(const point of points)expect(Math.min(...found.corners.map((p:{x:number;y:number})=>Math.hypot(point.x-p.x,point.y-p.y)))).toBeLessThan(15);
+      expect(Math.max(...found.corners.map((p:{x:number;y:number})=>p.x))-Math.min(...found.corners.map((p:{x:number;y:number})=>p.x))).toBeGreaterThan(425);
+    } finally {src.delete();}
+  });
+  it('finds a low-contrast silver outline with a lighting gradient and camera noise', () => {
+    const {src,points}=synthetic(240,.07);
+    try {
+      const pixels=src.data;
+      for(let y=0;y<900;y++)for(let x=0;x<900;x++)for(let c=0;c<3;c++) {
+        const p=(y*900+x)*4+c;pixels[p]=Math.max(0,Math.min(255,pixels[p]-Math.round(x*18/900)+((x*13+y*7)%3)-1));
+      }
+      const found=vision.findCard(cv,src);
+      for(const point of points)expect(Math.min(...found.corners.map((p:{x:number;y:number})=>Math.hypot(point.x-p.x,point.y-p.y)))).toBeLessThan(16);
+    } finally {src.delete();}
+  });
+  it('does not invent a card outline from a noisy white surface', () => {
+    const src=new cv.Mat(900,900,cv.CV_8UC4,new cv.Scalar(248,248,248,255));
+    try {
+      const pixels=src.data;
+      for(let y=0;y<900;y++)for(let x=0;x<900;x++)for(let c=0;c<3;c++)pixels[(y*900+x)*4+c]=247-Math.round(x*14/900)+((x*13+y*7)%5);
+      expect(()=>vision.findCard(cv,src)).toThrow(/boundaries/);
+    } finally {src.delete();}
+  });
+  it('recovers an exterior outline when a highlight interrupts one silver edge', () => {
+    const {src,points}=synthetic(240);
+    try {
+      cv.rectangle(src,new cv.Point(218,365),new cv.Point(250,425),new cv.Scalar(248,248,248,255),-1);
+      const found=vision.findCard(cv,src);
+      for(const point of points)expect(Math.min(...found.corners.map((p:{x:number;y:number})=>Math.hypot(point.x-p.x,point.y-p.y)))).toBeLessThan(16);
+    } finally {src.delete();}
+  });
   it('rejects missing corners', () => {
     const src=new cv.Mat(900,900,cv.CV_8UC4,new cv.Scalar(248,248,248,255));
     try {expect(()=>vision.findCard(cv,src)).toThrow(/boundaries/);} finally {src.delete();}

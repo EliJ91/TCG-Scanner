@@ -1,56 +1,28 @@
 # Verification record
 
-Automated validation:
+## Current background capture update
 
-- TypeScript strict checks and Vite production build pass.
-- 79 tests exercise automatic camera preview, mobile startup, Manual capture, mode persistence, quiet placement timing, zoom framing, distinct/muted error audio, continuous error/camera/storage recovery, motion, batch reservations, concurrent naming, ZIP ordering/names, and the real OpenCV WASM boundary/validation pipeline, including mild perspective and landscape-to-portrait correction.
-- `npm audit` reports zero vulnerabilities in the installed dependency graph.
-- `npm run verify:build` verifies all 20 production precache assets, offline navigation/OpenCV/worker responses with network unavailable, bundled fonts, and exclusion of the development camera fixture. Both root (`/`) and GitHub Pages (`/TCG-Scanner/`) builds pass; PWA start paths, icons, worker paths, and cache isolation are checked for the actual build prefix.
+- 101 automated tests pass, along with strict TypeScript checks, production builds and offline asset verification.
+- A durable pipeline test supplies ten new motion cycles at simulated one-second intervals while the first crop is deliberately unfinished. All ten originals are stored and dinged; only one processing read runs at a time. The queue reaches the exact batch limit, then drains in capture order.
+- React integration tests keep Take photo enabled for five successive snapshots while the first boundary result is pending. Processing rejections retain their originals, report review status and keep capture active.
+- Failure tests cover original staging failure, processed-image storage failure with other images already queued, encoding failure behind a slow crop, worker loss, delayed compatibility processing and processing startup retry.
+- Database recovery tests resume queued originals without starting capture. A schema-1 upgrade test preserves existing raw images, batch name, settings and order, while new queue reads return metadata without JPEG blobs.
+- Real OpenCV/WASM tests detect faint silver borders, slight silver/blue color contrast on near-white, a lighting gradient with noise, and a highlight interrupting an edge. Exterior corners must stay close to known source corners despite a stronger internal rectangle. A noisy white surface must still be rejected. Perspective, rotation, missing corners, blur and dark/yellow/white borders remain covered.
+- Preference tests restore camera selection, resolution, zoom, flashlight and locks from the browser cache before async loading. Reset restores defaults without deleting the batch or saved photos. A stale camera ID falls back to the rear camera.
+- ZIP ordering/name/recovery tests remain green. The app's Web Share code and Share / Save interface are removed; ZIP download remains.
+- Production verification checks all 20 precache assets, offline navigation/OpenCV/worker responses, scope isolation and exclusion of synthetic-camera/feed/delay controls. Both root and GitHub Pages deployment prefixes are checked.
 
-Browser integration was exercised in a separate local development origin with an explicitly enabled synthetic canvas camera:
+Live browser automation was unavailable for this update because browser use is disabled in Work settings. No new real-device or browser-throughput claim is made. Use `MOBILE_TESTING.md` to measure one-card-per-second feeds on actual iOS/Android hardware, including silver/holographic cards, downloads, heat and offline installation.
 
-- Auto displayed a quiet countdown over the stationary initial card, then captured once after the full 1.2-second interval. Leaving it stationary did not produce a duplicate.
-- Two animated card slides produced exactly two accepted, cropped portrait JPEGs through the real camera snapshot, OpenCV Web Worker, and IndexedDB pipeline.
-- The configured two-card batch reached completion and disabled additional captures.
-- The gallery displayed both images in order. The first image was rotated and saved.
-- The export dialog defaulted to `Batch#001`. A custom name produced `Acceptance test.zip` with `Pokemon_0001.jpg` and `Pokemon_0002.jpg`, both valid 378 × 528 JPEGs; ZIP CRC validation passed.
-- Reload recovered both images and the saved custom batch name, with no new automatic capture.
-- Dark mode rendered on a phone-sized viewport and remained selected after a reload. Settings and gallery controls rendered, with no page overflow at the tested phone width.
+## Earlier browser verification
 
-This is a software and synthetic-browser verification record. Physical card-slinger performance, mobile camera optics, device audio output, glare behavior, thermal behavior, iOS/Android downloads, and production offline installation still require the hardware checklist in `MOBILE_TESTING.md`. The synthetic processing duration and session pace are not phone throughput claims.
+The records below predate the new durable queue and 220 ms capture delay:
 
-Minimal scanner layout verification:
+- A synthetic canvas camera exercised actual snapshots, the OpenCV worker, IndexedDB, gallery and ZIP output. Two-card batches stopped exactly at their limit; ordered JPEG entries decoded at 378 x 528 and passed ZIP CRC checks. Rotation, naming and reload recovery worked.
+- Earlier Auto/Manual testing confirmed no timed Manual capture, continuation after a blank frame, matching zoom framing and persistence of mode, zoom and batch names. These behaviors have additional current automated coverage.
+- The minimal screen was centered with no horizontal overflow at 320 x 568, 375 x 667, 390 x 844, 430 x 932, 844 x 390 and 1440 x 900. Dark mode used a pure black page with neutral gray surfaces.
+- Simple settings and a closed Advanced settings section fit phone-sized viewports with Done visible. Current settings add Reset settings and remove the obsolete two-photo capacity control.
+- Camera startup checks cover direct permission requests, muted inline playback, metadata listeners, bounded playback waits, portrait dimensions, cancellation of late grants, optional API failures and embedded-browser recovery links.
+- The service worker activated fully cached updates without forcing an active scan to reload. A later refresh displayed the new interface.
 
-- Default screen contains the camera, editable batch-name pill, Menu button, zoom slider, capture status/count, Auto/Manual selector, and primary capture control. Batch quantity, settings, diagnostics, downloads, and recent cards appear only after opening the menu.
-- With no expanded error message, at 320 × 568, 375 × 667, 390 × 844, 430 × 932, 844 × 390, and 1440 × 900, the scanner is centered within 0.01 px, has no horizontal overflow, and keeps the main action inside the viewport. Long actionable error messages can make the page scroll.
-- Dark mode computes to `rgb(0, 0, 0)` on the page, with neutral gray panels and monochrome controls. Light mode and the persisted theme preference also work.
-- The synthetic two-card batch still completes exactly at its limit. A second card was captured while Recent cards was open, without interrupting the video. Thumbnails were absent before opening the gallery and removed when it closed. The export dialog retained its editable `Batch#001` default.
-- An existing production tab initially retained the previous interface through its offline cache. The service worker now activates fully cached updates immediately, without reloading an active scanning session, so a later refresh can show the new interface while other tabs stay open.
-
-Mobile camera startup regression coverage:
-
-- The real camera requester calls `getUserMedia` immediately, prefers the rear camera without microphone access, retries incompatible constraints, and never retries a permission denial as a resolution failure.
-- The actual React app requests the preview on entry with pending or failed IndexedDB initialization, retaining Enable camera as the tap fallback. Permission/preview startup does not initialize OpenCV or audio. Optional enumeration failures and OpenCV startup errors leave the granted preview available.
-- The camera configures muted inline playback before attaching the stream, registers frame listeners before playback, handles a pending `play()` promise with a deadline, cleans up late permission grants after cancellation, and uses actual portrait video dimensions.
-- Unsupported/permission-blocked embedded browsers receive a direct-browser recovery link; a subsequent successful retry clears that message.
-- Temporary page hiding while a native mobile permission dialog dismisses does not cancel the granted preview. An actually backgrounded page still stops camera use safely.
-- In the browser fixture, the visible, playing, muted inline preview opened automatically at 1000 × 900 before OpenCV/scanning started, with the count still zero.
-
-Zoom, capture controls, and continuous recovery verification:
-
-- Manual mode did not take timed photos. A blank-frame photo was rejected without incrementing the count or pausing; Take photo stayed available. Restoring a valid frame still waited for the next tap, which saved a valid crop through the real OpenCV worker and IndexedDB pipeline.
-- The preview zoom slider changed from 1.0× to 1.5× and applied the matching video scale. Accepted outputs remained native-size 378 × 528 JPEGs. Changing zoom in an active, partially scanned Auto batch did not trigger a stationary duplicate.
-- Switching Manual → Auto kept the preview and batch intact. The next slide displayed Card moving, waited for stillness, and completed the two-card batch at exactly two accepted scans. The failed original remained available for review.
-- The batch-name/pencil edited a draft before the first photo and renamed an existing completed batch. The ZIP dialog showed the same name. Reload preserved both accepted scans, the custom name, Manual selection, and 1.5× zoom; the preview reopened without taking another photo.
-- Controlled failure tests confirm that processing rejection frees its slot and leaves scanning active, storage backpressure retries the same original without another snapshot, lost/frozen camera frames reconnect, and foreground return preserves active scan intent without a Resume tap.
-- Audio tests confirm separate high sine success tones, a descending three-note completion alarm, and low sawtooth error tones, with mute/zero-volume and rapid-error throttling.
-
-These camera regressions use controlled browser-API mocks and a DOM environment. They do not substitute for the real iOS Safari/Android Chrome permission and camera checks in `MOBILE_TESTING.md`.
-
-Everyday settings verification:
-
-- Settings opens with Dark mode, Wait before each photo, Sounds, and Volume. Advanced settings stays closed until opened and returns closed after reopening the dialog.
-- The photo delay changes in seconds and survives a reload. Muting hides the volume and sound-preview controls; unmuting restores them. Advanced photo-size choices preserve their existing numerical settings.
-- Plain labels replace technical terms: Ignore small movements, Blur filter, Saved photo size, Camera detail, Photos in progress, and Alternate photo method. Descriptions explain when to adjust them. Scan details and the scanning guide use matching language.
-- At 320 × 568, 375 × 667, 390 × 844, 430 × 932, and 844 × 390, the settings dialog stays within the viewport with no horizontal overflow, and Done remains visible. Smaller screens scroll inside the dialog.
-- The 79 scanner tests, TypeScript checks, production build, and offline asset verification still pass.
+These remain software and synthetic verification records. They do not replace the physical card-slinger acceptance checklist.

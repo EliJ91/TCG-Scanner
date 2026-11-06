@@ -55,6 +55,9 @@ input:disabled, select:disabled { opacity: .5; }
 .session-state.needs-attention i { background: var(--danger); }
 .scan-count { flex-shrink: 0; font-variant-numeric: tabular-nums; color: var(--text); }
 .scan-count > span { color: var(--muted); }
+.scan-count small { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; text-align: right; }
+.processing-note { padding: 0 22px 22px; font-size: 12px; line-height: 1.7; color: var(--muted); }
+.original-placeholder { display: grid; place-items: center; flex-shrink: 0; width: 48px; height: 66px; border-radius: 4px; background: var(--line); color: var(--muted); }
 .button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 11px 16px; border: 1px solid transparent; border-radius: 9px; font-size: 12px; font-weight: 600; line-height: 1.4; }
 .button.primary, .button.dark { background: var(--accent); color: var(--accent-text); }
 .button.primary:hover:not(:disabled), .button.dark:hover:not(:disabled) { opacity: .85; }

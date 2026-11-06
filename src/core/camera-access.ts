@@ -22,14 +22,14 @@ export async function requestCameraStream(width: number, deviceId?: string): Pro
   const requests: MediaStreamConstraints[] = [
     { audio: false, video: { ...preference, width: { ideal: width }, height: { ideal: Math.round(width * 3 / 4) }, frameRate: { ideal: 30 } } },
     { audio: false, video: preference },
-    ...(!deviceId ? [{ audio: false, video: true }] : []),
+    deviceId ? { audio: false, video: { facingMode: { ideal: 'environment' } } } : { audio: false, video: true },
   ];
   for (let i = 0; i < requests.length; i++) {
     try { return await devices.getUserMedia(requests[i]); }
     catch (error) {
       const name = cameraErrorName(error);
       // A resolution/facing-mode incompatibility must not prevent the permission request.
-      if (i < requests.length - 1 && ['OverconstrainedError', 'ConstraintNotSatisfiedError', 'TypeError'].includes(name)) continue;
+      if (i < requests.length - 1 && (['OverconstrainedError', 'ConstraintNotSatisfiedError', 'TypeError'].includes(name) || !!deviceId && ['NotFoundError','DevicesNotFoundError'].includes(name))) continue;
       if (name === 'NotAllowedError' || name === 'PermissionDeniedError') throw new CameraAccessError('denied', embedded()
         ? 'Camera access is blocked in this in-app view. Open the scanner in Safari or Chrome, then tap Enable camera and choose Allow.'
         : 'Camera permission is blocked. Allow Camera for this site in your browser’s site settings, then tap Enable camera again.', embedded());

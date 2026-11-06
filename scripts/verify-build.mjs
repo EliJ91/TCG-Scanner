@@ -63,5 +63,5 @@ assert.equal(new URL(manifest.start_url, manifestUrl).pathname, base, 'PWA start
 assert.equal(new URL(manifest.scope, manifestUrl).pathname, base, 'PWA scope respects deployment path');
 for (const icon of manifest.icons) assert.ok(cache.has(new URL(icon.src, manifestUrl).pathname), `PWA icon is cached: ${icon.src}`);
 const bundleNames = [...cache.keys()].filter(p => p.startsWith(base + 'assets/') && p.endsWith('.js'));
-for (const name of bundleNames) assert.doesNotMatch(await cache.get(name).clone().text(), /test-card-slide|synthetic-camera|test-camera/, 'Production excludes synthetic-camera fixture');
+for (const name of bundleNames) assert.doesNotMatch(await cache.get(name).clone().text(), /test-card-slide|synthetic-camera|test-camera|test-processing-delay/, 'Production excludes synthetic-camera fixture');
 console.log(`Verified ${cache.size} production assets at ${base}, offline navigation/worker/OpenCV, app cache isolation, PWA paths, local fonts, and fixture exclusion.`);

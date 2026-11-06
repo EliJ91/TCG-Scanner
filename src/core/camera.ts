@@ -50,8 +50,8 @@ export class Camera {
       const track = acquired.getVideoTracks()[0];
       if (!track) throw new CameraAccessError('unavailable', 'The browser did not provide a camera video track.');
       try { this.capabilities = (track.getCapabilities?.() ?? {}) as CameraCapabilities; } catch { this.capabilities = {}; }
-      track.addEventListener('ended', () => this.lost('Camera disconnected. Reconnect it and resume scanning.'));
-      track.addEventListener('mute', () => this.lost('Camera feed interrupted. Check the camera and resume when ready.'));
+      track.addEventListener('ended', () => this.lost('Camera disconnected. Reconnecting automatically.'));
+      track.addEventListener('mute', () => this.lost('Camera feed interrupted. Reconnecting automatically.'));
       const IC = (window as unknown as { ImageCapture?: new (track: MediaStreamTrack) => FrameGrabber }).ImageCapture;
       if (IC) { try { this.grabber = new IC(track); } catch { /* Video canvas remains available. */ } }
       let settings: MediaTrackSettings = {};

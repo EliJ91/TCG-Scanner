@@ -57,6 +57,12 @@ describe('direct mobile camera permission requests', () => {
     await requestCameraStream(2560, 'rear-telephoto');
     expect(getUserMedia).toHaveBeenNthCalledWith(2, { audio: false, video: { deviceId: { exact: 'rear-telephoto' } } });
   });
+  it('opens the rear camera if a remembered camera is no longer available', async () => {
+    const {stream}=streamFixture();
+    getUserMedia.mockRejectedValueOnce(new DOMException('missing','NotFoundError')).mockRejectedValueOnce(new DOMException('missing','NotFoundError')).mockResolvedValueOnce(stream);
+    expect(await requestCameraStream(2560,'old-camera-id')).toBe(stream);
+    expect(getUserMedia).toHaveBeenLastCalledWith({audio:false,video:{facingMode:{ideal:'environment'}}});
+  });
   it('does not retry a denied permission as though it were a resolution failure', async () => {
     getUserMedia.mockRejectedValue(new DOMException('denied', 'NotAllowedError'));
     await expect(requestCameraStream(2560)).rejects.toMatchObject({ reason: 'denied', message: expect.stringContaining('site settings') });
