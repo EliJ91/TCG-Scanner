@@ -61,22 +61,24 @@ Deleting a stored scan reduces the count and pauses the scanner, including a pre
 
 ## Settings
 
+**Menu → Settings** starts with just Dark mode, Wait before each photo, and Sounds/Volume. Descriptions explain when to change a control. Camera and photo tuning stay inside a closed **Advanced settings** section, with plain names such as Blur filter, Saved photo size, and Photos in progress. Existing saved preferences and defaults are preserved.
+
 | Control | Default | Notes |
 | --- | --- | --- |
 | Capture mode | Auto | Manual takes one snapshot per tap |
-| Auto capture delay | 1200 ms | Adjustable 300–3000 ms of continuous stillness across the entire visible image |
-| Motion threshold | 2.5% | Fraction of changed luma pixels after exposure-shift compensation |
+| Wait before each photo | 1.2 seconds | Adjustable 0.3–3 seconds of continuous stillness across the entire visible image |
+| Ignore small movements | A little (2.5%) | Advanced; fraction of changed luma pixels after exposure-shift compensation |
 | Zoom | 1× | Preview slider, 1–3× center crop; capture and motion use identical framing |
-| JPEG quality | 95% | Raw staging JPEGs use 100%; export uses saved correction |
-| Output width | 1260 px maximum | Never upscales; portrait height follows 63:88 |
-| Minimum sharpness | 45 | Laplacian variance measured at normalized 360 px card width |
-| Camera preference | 2560 px wide | Rear-facing, closest available resolution |
-| Queue capacity | 2 | Includes capture, processing, and durable storage |
-| ImageCapture | Off | Optional `grabFrame()`, with video-canvas fallback |
+| Photo quality | 95% | Advanced; raw staging JPEGs use 100%; export uses saved correction |
+| Saved photo size | Standard (1260 px maximum) | Advanced; never upscales; portrait height follows 63:88 |
+| Blur filter | Normal (45) | Advanced; Laplacian variance measured at normalized 360 px card width |
+| Camera detail | High (2560 px wide) | Advanced; rear-facing, closest available resolution |
+| Photos in progress | Two at a time | Advanced; includes capture, processing, and durable storage |
+| Alternate photo method | Off | Advanced; optional `ImageCapture.grabFrame()`, with video-canvas fallback |
 
 The zoom slider works on all supported browsers using the original camera pixels, without enlarging saved pixels. Higher zoom reduces the available source area; keep every card edge visible. Torch, focus, exposure, and white balance controls depend on the device. Camera selection appears after permission when available. Resolution changes require stopping the camera; queue capacity changes require a new batch.
 
-Enable debug mode in Settings to add **Diagnostics** to the menu. It exposes motion and noise scores, stability, cycle number, capture state, queue length, analysis timing, processing duration, focus score, confidence, and **last accepted** boundaries. The preview guide is framing assistance, not a required crop calibration. Detection always examines the actual captured image.
+Enable **Show scan details** in Settings → Advanced settings to add **Scan details** to the menu. It exposes motion and noise scores, stability, cycle number, capture state, queue length, analysis timing, processing duration, focus score, confidence, and **last accepted** boundaries. The preview guide is framing assistance, not a required crop calibration. Detection always examines the actual captured image.
 
 ## How it works
 

@@ -16,6 +16,7 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 - [ ] Test the 1–3× zoom slider in both modes. Saved framing must match the preview and preserve native pixel quality. Adjusting zoom must not trigger an extra Auto photo.
 - [ ] Tap the visible batch name/pencil, save a new name before the first photo, rename during scanning, and reload. The scanner and ZIP dialog must show the same persisted name.
 - [ ] Toggle light/dark through Menu → Settings; reload to confirm persistence. Dark mode must use pure black and neutral gray surfaces. Check contrast and controls in both modes.
+- [ ] Settings should initially show only Dark mode, Wait before each photo, Sounds, and Volume. Open Advanced settings to find photo/camera controls. Confirm the descriptions are clear and Done is always reachable on a small screen.
 - [ ] At 320, 375, 390, and 430 px widths, verify the scanner is horizontally centered and its Start/Pause control fits on screen. No sidebar, bottom navigation, batch panel, or recent-card thumbnails should be visible until opened from Menu.
 
 ## Detection and image quality
@@ -63,7 +64,7 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 
 ## Performance and offline
 
-- [ ] Enable diagnostics. Record median and slowest processing times, motion-analysis time, queue depth, and measured cards/min across a full batch.
+- [ ] Enable Show scan details in Settings → Advanced settings. Record median and slowest processing times, motion-analysis time, queue depth, and measured cards/min across a full batch.
 - [ ] Run for 10–15 minutes. Check heat, battery use, frame gaps, memory, and responsiveness. Lower resolution/output size or feed speed if the device cannot keep up.
 - [ ] After production service worker is active, close/reopen the site in airplane mode and scan/export. OpenCV, fonts, gallery, and ZIP should work without network.
 - [ ] Install on Android and through iOS Add to Home Screen. Repeat camera/sound/offline tests in installed mode.

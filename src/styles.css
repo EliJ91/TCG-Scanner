@@ -196,4 +196,20 @@ input[type='range'] { width: 100%; margin: 16px 0 7px; }
 .edit-name-link { display: flex; width: 100%; gap: 8px; align-items: center; padding: 0 0 20px; margin-bottom: 22px; border-bottom: 1px solid var(--line); color: var(--text); font-size: 13px; text-align: left; }
 .edit-name-link > span { color: var(--muted); margin-left: auto; max-width: 50%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .name-error { color: var(--danger); font-size: 12px; line-height: 1.7; margin-top: 12px; }
-.error-sound-test { margin-top: 10px; }
+.simple-settings > .toggle-setting:first-of-type { margin-top: 0; }
+.simple-settings .setting > div, .simple-settings .toggle-setting, .simple-settings .select-setting { font-size: 14px; }
+.simple-settings .setting-hint, .simple-settings .toggle-setting small, .simple-settings .select-setting small { font-size: 12px; line-height: 1.7; }
+.sound-previews { display: flex; gap: 8px; margin: 0 0 24px; }
+.sound-previews .button { flex: 1; min-width: 0; padding-left: 10px; padding-right: 10px; }
+.advanced-settings { margin-top: 24px; border-top: 1px solid var(--line); }
+.advanced-settings > summary { display: flex; align-items: center; gap: 12px; padding-top: 20px; list-style: none; cursor: pointer; font-size: 14px; font-weight: 600; }
+.advanced-settings > summary::-webkit-details-marker { display: none; }
+.advanced-settings > summary > span { flex: 1; min-width: 0; }
+.advanced-settings > summary small { display: block; margin-top: 6px; font-size: 12px; line-height: 1.6; font-weight: 400; color: var(--muted); }
+.advanced-settings > summary > svg { flex-shrink: 0; color: var(--muted); transition: transform .15s; }
+.advanced-settings[open] > summary > svg { transform: rotate(90deg); }
+.advanced-settings > summary:focus-visible { outline: 2px solid var(--text); outline-offset: 5px; border-radius: 4px; }
+.advanced-settings > div { padding-top: 20px; }
+.settings-pause-note { margin-top: 16px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.settings-pause-note .button { width: 100%; margin-top: 10px; }
+.install-scanner { margin-top: 14px; }

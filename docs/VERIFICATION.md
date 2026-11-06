@@ -46,3 +46,11 @@ Zoom, capture controls, and continuous recovery verification:
 - Audio tests confirm separate high sine success tones, a descending three-note completion alarm, and low sawtooth error tones, with mute/zero-volume and rapid-error throttling.
 
 These camera regressions use controlled browser-API mocks and a DOM environment. They do not substitute for the real iOS Safari/Android Chrome permission and camera checks in `MOBILE_TESTING.md`.
+
+Everyday settings verification:
+
+- Settings opens with Dark mode, Wait before each photo, Sounds, and Volume. Advanced settings stays closed until opened and returns closed after reopening the dialog.
+- The photo delay changes in seconds and survives a reload. Muting hides the volume and sound-preview controls; unmuting restores them. Advanced photo-size choices preserve their existing numerical settings.
+- Plain labels replace technical terms: Ignore small movements, Blur filter, Saved photo size, Camera detail, Photos in progress, and Alternate photo method. Descriptions explain when to adjust them. Scan details and the scanning guide use matching language.
+- At 320 × 568, 375 × 667, 390 × 844, 430 × 932, and 844 × 390, the settings dialog stays within the viewport with no horizontal overflow, and Done remains visible. Smaller screens scroll inside the dialog.
+- The 79 scanner tests, TypeScript checks, production build, and offline asset verification still pass.
