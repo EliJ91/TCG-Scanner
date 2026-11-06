@@ -21,12 +21,12 @@ export default defineConfig({
       for (const name of entries) { hash.update(name); hash.update(await readFile(path.join('dist', name))); }
       const prefix = `cardslinger-${createHash('sha256').update(buildBase).digest('hex').slice(0, 8)}-`;
       const version = `${prefix}${hash.digest('hex').slice(0, 16)}`;
-      await writeFile('dist/sw.js', `// Generated from this exact production build. Waits for old tabs to close before activation.
+      await writeFile('dist/sw.js', `// Generated from this exact production build. Activates cached updates without reloading active scans.
 const BASE = ${JSON.stringify(buildBase)};
 const PREFIX = ${JSON.stringify(prefix)};
 const CACHE = ${JSON.stringify(version)};
 const FILES = ${JSON.stringify(entries.map(e => buildBase + e))};
-self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES))));
+self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)).then(() => self.skipWaiting())));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith(PREFIX) && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);

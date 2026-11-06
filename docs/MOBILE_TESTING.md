@@ -58,6 +58,6 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 - [ ] Run for 10–15 minutes. Check heat, battery use, frame gaps, memory, and responsiveness. Lower resolution/output size or feed speed if the device cannot keep up.
 - [ ] After production service worker is active, close/reopen the site in airplane mode and scan/export. OpenCV, fonts, gallery, and ZIP should work without network.
 - [ ] Install on Android and through iOS Add to Home Screen. Repeat camera/sound/offline tests in installed mode.
-- [ ] Publish an update while scanning. It must not force a reload. Close all app tabs and reopen to activate the update.
+- [ ] Publish an update while scanning. It must not force a reload or interrupt capture. Once the new assets are cached, pause and refresh to see the updated interface without closing every app tab.
 
 For each run record: physical card count, accepted count, failures, false positives, duplicates, missed movements, crop errors, average processing time, elapsed active scanning time, and export verification. Accept the setup only after 50-card runs with zero missed/duplicate/count/order errors. Accuracy takes priority over a faster feed rate.

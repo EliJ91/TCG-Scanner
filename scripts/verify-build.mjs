@@ -10,9 +10,10 @@ const handlers = new Map(), cache = new Map();
 let base = '/', prefix = '';
 const deletedCaches = [];
 let onlineFetches = 0;
+let skippedWaiting = 0;
 const context = {
   URL, Promise,
-  self: { location: { origin: 'https://scanner.test' }, clients: { claim: async () => {} }, addEventListener: (name, handler) => handlers.set(name, handler) },
+  self: { location: { origin: 'https://scanner.test' }, clients: { claim: async () => {} }, skipWaiting: async () => { skippedWaiting++; }, addEventListener: (name, handler) => handlers.set(name, handler) },
   caches: {
     open: async () => ({
       addAll: async files => {
@@ -38,6 +39,7 @@ prefix = vm.runInContext('PREFIX', context);
 let installation;
 handlers.get('install')({ waitUntil: promise => { installation = promise; } });
 await installation;
+assert.equal(skippedWaiting, 1, 'Fully cached updates activate without requiring all app tabs to close');
 for (const required of ['index.html','vendor/opencv.js','vision.js','processor.worker.js','manifest.webmanifest','icons/icon-192.png']) assert.ok(cache.has(base + required), `Offline asset: ${required}`);
 assert.ok([...cache.keys()].some(p => p.endsWith('.woff2')), 'Fonts are cached locally');
 for (const [path, mode] of [[base, 'navigate'], [base + 'vendor/opencv.js','cors'], [base + 'processor.worker.js','same-origin']]) {
