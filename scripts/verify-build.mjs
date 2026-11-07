@@ -3,16 +3,16 @@ import { resolve } from 'node:path';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 
-// Exercise the generated production service worker with a real build asset cache
-// and a disconnected network. No browser-profile data is touched.
+// Exercise online updates and offline launches with a real build asset cache.
 const root = resolve('dist');
 const handlers = new Map(), cache = new Map();
 let base = '/', prefix = '';
 const deletedCaches = [];
-let onlineFetches = 0;
+const networkRequests = [];
+let networkResponse;
 let skippedWaiting = 0;
 const context = {
-  URL, Promise, Request,
+  URL, Promise, Request, Response,
   self: { location: { origin: 'https://scanner.test' }, clients: { claim: async () => {} }, skipWaiting: async () => { skippedWaiting++; }, addEventListener: (name, handler) => handlers.set(name, handler) },
   caches: {
     open: async () => ({
@@ -33,7 +33,11 @@ const context = {
     keys: async () => [`${prefix}old-version`, 'another-app-cache'],
     delete: async name => { deletedCaches.push(name); return true; },
   },
-  fetch: async () => { onlineFetches++; throw new Error('Network disconnected'); },
+  fetch: async (request, options) => {
+    networkRequests.push({ request, options });
+    if (networkResponse) return networkResponse.clone();
+    throw new Error('Network disconnected');
+  },
 };
 vm.createContext(context);
 vm.runInContext(await readFile(resolve(root, 'sw.js'), 'utf8'), context);
@@ -48,12 +52,22 @@ for (const removed of ['vendor/opencv.js', 'vision.js', 'processor.worker.js']) 
 assert.ok([...cache.keys()].some(p => p.endsWith('.woff2')), 'Fonts are cached locally');
 const appScript = [...cache.keys()].find(file => file.startsWith(base + 'assets/') && file.endsWith('.js'));
 assert.ok(appScript, 'App script is cached');
-for (const [path, mode] of [[base, 'navigate'], [appScript, 'same-origin']]) {
+function fetchThroughWorker(path, mode) {
   let response;
   handlers.get('fetch')({ request: { url: 'https://scanner.test' + path, method:'GET', mode }, respondWith: promise => { response = promise; } });
-  assert.ok((await response).ok, `Offline response for ${path}`);
+  return response;
 }
-assert.equal(onlineFetches, 0, 'Core assets require no network after caching');
+assert.ok((await fetchThroughWorker(appScript, 'same-origin')).ok, 'App assets are available offline');
+assert.equal(networkRequests.length, 0, 'Cached app assets require no network');
+const offlineHtml = await cache.get(base + 'index.html').clone().text();
+assert.equal(await (await fetchThroughWorker(base, 'navigate')).text(), offlineHtml, 'Offline launch uses the installed app');
+
+networkResponse = new Response('<html>Latest scanner</html>');
+assert.equal(await (await fetchThroughWorker(base, 'navigate')).text(), await networkResponse.clone().text(), 'Online launch prefers the current deployment over cached HTML');
+assert.equal(networkRequests.at(-1).options.cache, 'no-cache', 'Online launch revalidates HTTP-cached HTML');
+
+networkResponse = new Response('Service unavailable', { status: 503 });
+assert.equal(await (await fetchThroughWorker(base, 'navigate')).text(), offlineHtml, 'An unavailable deployment falls back to the installed app');
 let activation;
 handlers.get('activate')({ waitUntil: promise => { activation = promise; } });
 await activation;
@@ -61,8 +75,7 @@ assert.deepEqual(deletedCaches, [`${prefix}old-version`], 'Updates preserve othe
 if (base !== '/') {
   handlers.get('fetch')({ request: { url:'https://scanner.test/other-app/', method:'GET', mode:'navigate' }, respondWith: () => assert.fail('Worker must not intercept another app') });
 }
-const html = await cache.get(base + 'index.html').clone().text();
-for (const match of html.matchAll(/(?:src|href)="([^"]+)"/g)) assert.ok(match[1].startsWith(base), `HTML asset uses deployment base: ${match[1]}`);
+for (const match of offlineHtml.matchAll(/(?:src|href)="([^"]+)"/g)) assert.ok(cache.has(match[1]), `HTML asset is cached at the deployment base: ${match[1]}`);
 const manifest = JSON.parse(await cache.get(base + 'manifest.webmanifest').clone().text());
 const manifestUrl = new URL(base + 'manifest.webmanifest', 'https://scanner.test');
 assert.equal(new URL(manifest.start_url, manifestUrl).pathname, base, 'PWA starts in the correct app scope');
@@ -70,4 +83,4 @@ assert.equal(new URL(manifest.scope, manifestUrl).pathname, base, 'PWA scope res
 for (const icon of manifest.icons) assert.ok(cache.has(new URL(icon.src, manifestUrl).pathname), `PWA icon is cached: ${icon.src}`);
 const bundleNames = [...cache.keys()].filter(p => p.startsWith(base + 'assets/') && p.endsWith('.js'));
 for (const name of bundleNames) assert.doesNotMatch(await cache.get(name).clone().text(), /test-card-slide|synthetic-camera|test-camera|test-processing-delay/, 'Production excludes synthetic-camera fixture');
-console.log(`Verified ${cache.size} production assets at ${base}, offline navigation, app cache isolation, PWA paths, local fonts, and fixture exclusion.`);
+console.log(`Verified ${cache.size} production assets at ${base}, online and offline navigation, app cache isolation, PWA paths, local fonts, and fixture exclusion.`);

@@ -17,7 +17,7 @@ export default defineConfig({
       const entries = (await readdir('dist', { recursive: true, withFileTypes: true }))
         .filter(e => e.isFile() && e.name !== 'sw.js')
         .map(e => path.relative('dist', path.join(e.parentPath, e.name)).replaceAll('\\', '/')).sort();
-      const hash = createHash('sha256').update('scanner-precache-reload-v2');
+      const hash = createHash('sha256').update('scanner-network-first-navigation-v3');
       for (const name of entries) { hash.update(name); hash.update(await readFile(path.join('dist', name))); }
       const prefix = `cardslinger-${createHash('sha256').update(buildBase).digest('hex').slice(0, 8)}-`;
       const version = `${prefix}${hash.digest('hex').slice(0, 16)}`;
@@ -28,11 +28,18 @@ const CACHE = ${JSON.stringify(version)};
 const FILES = ${JSON.stringify(entries.map(e => buildBase + e))};
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES.map(file => new Request(new URL(file, self.location.origin), { cache: 'reload' })))).then(() => self.skipWaiting())));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith(PREFIX) && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())));
+async function loadPage(request) {
+  let response;
+  try { response = await fetch(request, { cache: 'no-cache' }); } catch { /* Use the installed copy offline. */ }
+  if (response?.ok) return response;
+  const cache = await caches.open(CACHE);
+  return (await cache.match(BASE + 'index.html')) ?? response ?? Response.error();
+}
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== self.location.origin || !url.pathname.startsWith(BASE)) return;
   if (event.request.mode === 'navigate') {
-    event.respondWith(caches.open(CACHE).then(cache => cache.match(BASE + 'index.html').then(hit => hit || fetch(event.request))));
+    event.respondWith(loadPage(event.request));
   } else if (FILES.includes(url.pathname)) {
     event.respondWith(caches.open(CACHE).then(cache => cache.match(url.pathname).then(hit => hit || fetch(event.request))));
   }
