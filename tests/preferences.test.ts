@@ -11,7 +11,9 @@ describe('browser-cached camera preferences',()=>{
   });
   it('migrates the old slow-capture setting once and preserves new explicit delay choices',()=>{
     expect(normalizeSettings({stabilityMs:1200,zoom:2}).stabilityMs).toBe(220);
-    expect(normalizeSettings({...defaults,stabilityMs:1400}).stabilityMs).toBe(1400);
+    expect(normalizeSettings({...defaults,stabilityMs:1400}).stabilityMs).toBe(1000);
+    expect(normalizeSettings({...defaults,stabilityMs:1}).stabilityMs).toBe(10);
+    expect(normalizeSettings({...defaults,stabilityMs:10}).stabilityMs).toBe(10);
   });
   it('uses persisted IndexedDB preferences if the synchronous cache is absent or damaged',()=>{
     expect(cachedSettings({...defaults,cameraId:'rear',zoom:2}).zoom).toBe(2);

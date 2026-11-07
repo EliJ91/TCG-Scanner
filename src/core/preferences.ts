@@ -6,7 +6,9 @@ export function normalizeSettings(saved?: Partial<Settings>): Settings {
   if (saved?.captureVersion !== defaults.captureVersion) next.stabilityMs = defaults.stabilityMs;
   next.captureVersion = defaults.captureVersion;
   next.zoom = Number.isFinite(next.zoom) ? Math.max(1, Math.min(3, next.zoom)) : defaults.zoom;
-  next.stabilityMs = Number.isFinite(next.stabilityMs) ? Math.max(100, Math.min(3000, next.stabilityMs)) : defaults.stabilityMs;
+  next.stabilityMs = Number.isFinite(next.stabilityMs) ? Math.max(10, Math.min(1000, Math.round(next.stabilityMs))) : defaults.stabilityMs;
+  next.focusLocked = saved?.focusLocked ?? saved?.lockCamera ?? defaults.focusLocked;
+  next.focusDistance = typeof next.focusDistance === 'number' && Number.isFinite(next.focusDistance) ? next.focusDistance : null;
   next.cameraId = typeof next.cameraId === 'string' ? next.cameraId : '';
   return next;
 }

@@ -1,6 +1,13 @@
 # Verification record
 
-## Current background capture update
+## Direct photo capture update
+
+- The browser fixture saved ten 1000 × 900 JPEGs during a one-card-per-second feed and stopped at the batch target.
+- The delay slider reached 10 ms and 1 second in a phone-size viewport. A timed UI test confirms that movement can cancel the countdown at its deadline.
+- Camera mocks verify focus adjustment, focus lock, autofocus restoration, and preference storage. Physical focus still needs the device checks in `MOBILE_TESTING.md`.
+- Storage tests cover direct JPEG saves, failed-write retries, and recovery of earlier originals. The build check excludes the former processing runtime from offline assets.
+
+## Previous background capture update
 
 - 101 automated tests pass, along with strict TypeScript checks, production builds and offline asset verification.
 - A durable pipeline test supplies ten new motion cycles at simulated one-second intervals while the first crop is deliberately unfinished. All ten originals are stored and dinged; only one processing read runs at a time. The queue reaches the exact batch limit, then drains in capture order.

@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import { attemptInfo, defaultBatchName, type Attempt, type AttemptInfo, type Batch, type Scan, type Settings } from './types';
+import { attemptInfo, defaultBatchName, ordered, originalScan, type Attempt, type AttemptInfo, type Batch, type Scan, type Settings } from './types';
 interface ScannerDB extends DBSchema {
   batches: { key: string; value: Batch };
   scans: { key: string; value: Scan; indexes: { 'by-batch': string } };
@@ -28,12 +28,32 @@ terminated() { connection = undefined; } }).catch(error => { connection = undefi
 export const storage = {
   async load() {
     const d = await db();
-    const id = await d.get('preferences', 'active');
-    const batch = typeof id === 'string' ? await d.get('batches', id) : undefined;
-    return { batch, scans: batch ? await d.getAllFromIndex('scans', 'by-batch', batch.id) : [],
-      attempts: batch ? await d.getAllFromIndex('captureInfo', 'by-batch', batch.id) : [],
-      settings: await d.get('preferences', 'settings') as Settings | undefined,
-      nextBatchNumber: Number(await d.get('preferences', 'number') ?? 0) + 1 };
+    const tx = d.transaction(['batches', 'scans', 'attempts', 'captureInfo', 'preferences'], 'readwrite');
+    const prefs = tx.objectStore('preferences');
+    const id = await prefs.get('active');
+    const batch = typeof id === 'string' ? await tx.objectStore('batches').get(id) : undefined;
+    const scans = batch ? await tx.objectStore('scans').index('by-batch').getAll(batch.id) : [];
+    const attempts = batch ? await tx.objectStore('captureInfo').index('by-batch').getAll(batch.id) : [];
+    const retained: AttemptInfo[] = [];
+    // Keep originals queued by earlier versions without decoding or changing their JPEGs.
+    for (const info of ordered(attempts)) {
+      if (batch && !info.reason && scans.length < batch.target) {
+        const original = await tx.objectStore('attempts').get(info.id);
+        if (original) {
+          const scan = originalScan(original);
+          await tx.objectStore('scans').put(scan);
+          await tx.objectStore('attempts').delete(info.id);
+          await tx.objectStore('captureInfo').delete(info.id);
+          scans.push(scan);
+          continue;
+        }
+      }
+      retained.push(info);
+    }
+    const settings = await prefs.get('settings') as Settings | undefined;
+    const nextBatchNumber = Number(await prefs.get('number') ?? 0) + 1;
+    await tx.done;
+    return { batch, scans, attempts: retained, settings, nextBatchNumber };
   },
   async create(target: number, name?: string): Promise<Batch> {
     const d = await db();
@@ -56,25 +76,19 @@ export const storage = {
     await tx.done;
   },
   async settings(settings: Settings) { await (await db()).put('preferences', settings, 'settings'); },
-  async stage(attempt: Attempt, batch: Batch) {
-    const d = await db(); const tx = d.transaction(['attempts', 'captureInfo', 'batches'], 'readwrite');
-    const current = await tx.objectStore('batches').get(batch.id);
-    await tx.objectStore('attempts').put(attempt);
-    await tx.objectStore('captureInfo').put(attemptInfo(attempt));
-    await tx.objectStore('batches').put({ ...batch, name: current?.name ?? batch.name, nextOrdinal: Math.max(current?.nextOrdinal ?? 0, batch.nextOrdinal) }); await tx.done;
-  },
   async accept(scan: Scan) {
     const d = await db(); const tx = d.transaction(['scans', 'attempts', 'captureInfo'], 'readwrite');
-    await tx.objectStore('scans').put(scan); await tx.objectStore('attempts').delete(scan.id); await tx.objectStore('captureInfo').delete(scan.id); await tx.done;
+    await Promise.all([
+      tx.objectStore('scans').put(scan),
+      tx.objectStore('attempts').delete(scan.id),
+      tx.objectStore('captureInfo').delete(scan.id),
+      tx.done,
+    ]);
   },
   async getAttempt(id: string) {
     const d = await db(); const tx = d.transaction(['attempts','captureInfo']);
     const [raw, info] = await Promise.all([tx.objectStore('attempts').get(id),tx.objectStore('captureInfo').get(id)]);
     await tx.done; return raw ? { ...raw, ...info } : undefined;
-  },
-  async markAttempt(id: string, reason: string) {
-    const d = await db(); const tx = d.transaction('captureInfo','readwrite'); const info = await tx.store.get(id);
-    if (info) await tx.store.put({ ...info, reason }); await tx.done;
   },
   async deleteScan(id: string) { await (await db()).delete('scans', id); },
   async deleteAttempt(id: string) {

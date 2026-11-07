@@ -36,16 +36,9 @@ input:disabled, select:disabled { opacity: .5; }
 .menu-trigger:hover { background: #303030; }
 .menu-trigger:focus-visible { outline-color: #fff; }
 .menu-attention { position: absolute; top: 1px; right: 1px; width: 8px; height: 8px; background: #f29a87; border: 2px solid #161616; border-radius: 50%; }
-.alignment-guide { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); aspect-ratio: 63 / 88; max-width: 80%; pointer-events: none; z-index: 1; }
-.alignment-guide i { position: absolute; width: 22px; height: 22px; border: 0 solid #a3a3a3; }
-.alignment-guide i:nth-child(1) { inset: 0 auto auto 0; border-top-width: 1px; border-left-width: 1px; border-top-left-radius: 4px; }
-.alignment-guide i:nth-child(2) { inset: 0 0 auto auto; border-top-width: 1px; border-right-width: 1px; border-top-right-radius: 4px; }
-.alignment-guide i:nth-child(3) { inset: auto auto 0 0; border-bottom-width: 1px; border-left-width: 1px; border-bottom-left-radius: 4px; }
-.alignment-guide i:nth-child(4) { inset: auto 0 0 auto; border-bottom-width: 1px; border-right-width: 1px; border-bottom-right-radius: 4px; }
 .camera-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 15px; align-items: center; justify-content: center; color: #999; pointer-events: none; }
 .camera-placeholder svg { color: #b5b5b5; }
 .camera-placeholder p { font-size: 13px; }
-.boundary-svg { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; stroke: #fff; stroke-width: 3; pointer-events: none; z-index: 2; }
 .scanner-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 10px 2px; font-size: 12px; }
 .session-state { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--muted); }
 .session-state i { flex: 0 0 5px; height: 5px; background: #888; border-radius: 50%; }
@@ -55,8 +48,6 @@ input:disabled, select:disabled { opacity: .5; }
 .session-state.needs-attention i { background: var(--danger); }
 .scan-count { flex-shrink: 0; font-variant-numeric: tabular-nums; color: var(--text); }
 .scan-count > span { color: var(--muted); }
-.scan-count small { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; text-align: right; }
-.processing-note { padding: 0 22px 22px; font-size: 12px; line-height: 1.7; color: var(--muted); }
 .original-placeholder { display: grid; place-items: center; flex-shrink: 0; width: 48px; height: 66px; border-radius: 4px; background: var(--line); color: var(--muted); }
 .button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 11px 16px; border: 1px solid transparent; border-radius: 9px; font-size: 12px; font-weight: 600; line-height: 1.4; }
 .button.primary, .button.dark { background: var(--accent); color: var(--accent-text); }
@@ -192,6 +183,23 @@ input[type='range'] { width: 100%; margin: 16px 0 7px; }
 .zoom-control { position: absolute; left: 14px; right: 14px; bottom: 14px; z-index: 3; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 5px 12px; border-radius: 12px; border: 1px solid #ffffff26; background: #161616e8; color: #ddd; font-size: 11px; }
 .zoom-control input { width: 100%; min-width: 0; height: 32px; margin: 0; accent-color: #fff; color-scheme: dark; }
 .zoom-control output { flex-shrink: 0; min-width: 30px; font-variant-numeric: tabular-nums; text-align: right; }
+.preview-shell { position: relative; }
+.focus-control { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); z-index: 3; display: flex; flex-direction: column; align-items: center; width: 44px; border: 1px solid #ffffff26; border-radius: 14px; background: #161616d9; color: #fff; }
+.focus-lock { display: grid; place-items: center; width: 100%; min-height: 42px; border-radius: 13px; }
+.focus-lock[aria-pressed='true'] { background: #ffffff20; }
+.focus-control input { writing-mode: vertical-lr; direction: rtl; width: 38px; height: clamp(44px, 22dvh, 140px); margin: 4px 0 8px; accent-color: #fff; color-scheme: dark; }
+.focus-control :focus-visible { outline-color: #fff; outline-offset: -3px; }
+.auto-countdown { position: absolute; z-index: 3; bottom: 66px; left: 16px; right: 16px; height: 3px; border-radius: 4px; background: #0007; overflow: hidden; pointer-events: none; }
+.auto-countdown > div { width: 100%; height: 100%; background: #5fda8a; transform-origin: left; animation: shutter-fill linear both; }
+.auto-countdown.is-snapped { animation: shutter-fade 170ms ease-out both; }
+.auto-countdown.is-snapped > div { animation: none; }
+@keyframes shutter-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes shutter-fade { from { opacity: 1; } to { opacity: 0; } }
+@media (max-height: 480px) and (orientation: landscape) {
+  .focus-control { right: -54px; }
+  .focus-control input { height: 44px; }
+  .focus-lock { min-height: 33px; }
+}
 .capture-mode-row { display: flex; justify-content: center; padding: 0 0 10px; }
 .capture-modes { display: flex; width: 100%; padding: 3px; gap: 3px; background: var(--soft); border: 1px solid var(--line); border-radius: 11px; }
 .capture-modes button { flex: 1; min-width: 0; min-height: 38px; padding: 8px 12px; border-radius: 8px; font-size: 12px; color: var(--muted); }

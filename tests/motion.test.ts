@@ -9,8 +9,8 @@ describe('motion state machine', () => {
   it('can arm a first auto photo after a full quiet placement interval without requiring a slide', () => {
     const d = new MotionDetector(1200); d.reset(true);
     for (let t = 0; t < 1200; t += 100) expect(d.update(pattern(1), t).capture).toBe(false);
-    expect(d.update(pattern(1), 1200).capture).toBe(true);
-    expect(d.update(pattern(1), 1300).capture).toBe(false);
+    expect(d.update(pattern(1), 1200).capture).toBe(false);
+    expect(d.update(pattern(1), 1300).capture).toBe(true);
     d.consume(); expect(d.update(pattern(1), 1400).capture).toBe(false);
   });
   it('restarts the quiet countdown whenever placement movement continues', () => {

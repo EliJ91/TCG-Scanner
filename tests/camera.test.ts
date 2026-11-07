@@ -7,7 +7,9 @@ function streamFixture() {
   const track = Object.assign(new EventTarget(), {
     stop: vi.fn(() => { active = false; }),
     getCapabilities: vi.fn(() => ({})),
-    getSettings: vi.fn(() => ({ width: 1920, height: 1080 })),
+    getSettings: vi.fn<() => MediaTrackSettings & { focusDistance?: number }>(() => ({ width: 1920, height: 1080 })),
+    getConstraints: vi.fn(() => ({ width: { ideal: 1920 } })),
+    applyConstraints: vi.fn(async (_constraints: MediaTrackConstraints) => {}),
   });
   const stream = { get active() { return active; }, getTracks: () => [track], getVideoTracks: () => [track] } as unknown as MediaStream;
   return { stream, track };
@@ -100,6 +102,24 @@ describe('direct mobile camera permission requests', () => {
 });
 
 describe('mobile video preview startup', () => {
+  it('locks the current focus distance and preserves it when another camera control changes', async () => {
+    const {stream, track} = streamFixture();
+    getUserMedia.mockResolvedValue(stream);
+    track.getCapabilities.mockReturnValue({ focusMode: ['manual', 'continuous'], focusDistance: { min: 0, max: 10, step: 0.5 } });
+    track.getSettings.mockReturnValue({ focusDistance: 2.5 });
+    const camera = new Camera(new Preview() as unknown as HTMLVideoElement, vi.fn());
+    await camera.start(1920);
+    await expect(camera.focus(true)).resolves.toBe(2.5);
+    await expect(camera.focus(true, 30)).resolves.toBe(10);
+    await camera.control({ torch: true });
+    expect(track.applyConstraints).toHaveBeenLastCalledWith({
+      width: { ideal: 1920 }, advanced: [{ torch: true }], focusMode: { exact: 'manual' }, focusDistance: { exact: 10 },
+    });
+    await camera.focus(false);
+    expect(track.applyConstraints).toHaveBeenLastCalledWith({
+      width: { ideal: 1920 }, advanced: [{ torch: true }], focusMode: { exact: 'continuous' },
+    });
+  });
   it('uses the same centered zoom crop for the saved full-resolution snapshot', async () => {
     const fixture=streamFixture();getUserMedia.mockResolvedValue(fixture.stream);
     const drawImage=vi.fn();const canvas={width:0,height:0,getContext:()=>({drawImage}),toBlob:(done:(blob:Blob)=>void)=>done(new Blob(['jpeg']))};

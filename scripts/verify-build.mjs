@@ -18,7 +18,7 @@ const context = {
     open: async () => ({
       addAll: async files => {
         for (const request of files) {
-          assert.equal(request.cache, 'reload', 'Updated workers must bypass stale HTTP-cached cropper/runtime files');
+          assert.equal(request.cache, 'reload', 'Updates must bypass stale HTTP-cached assets');
           const url = new URL(request.url); assert.equal(url.origin, 'https://scanner.test');
           const file = url.pathname;
           assert.ok(file.startsWith(base), `Cache URL stays inside app scope: ${file}`);
@@ -43,9 +43,12 @@ let installation;
 handlers.get('install')({ waitUntil: promise => { installation = promise; } });
 await installation;
 assert.equal(skippedWaiting, 1, 'Fully cached updates activate without requiring all app tabs to close');
-for (const required of ['index.html','vendor/opencv.js','vision.js','processor.worker.js','manifest.webmanifest','icons/icon-192.png']) assert.ok(cache.has(base + required), `Offline asset: ${required}`);
+for (const required of ['index.html','manifest.webmanifest','icons/icon-192.png']) assert.ok(cache.has(base + required), `Offline asset: ${required}`);
+for (const removed of ['vendor/opencv.js', 'vision.js', 'processor.worker.js']) assert.ok(!cache.has(base + removed), `Obsolete image processing asset: ${removed}`);
 assert.ok([...cache.keys()].some(p => p.endsWith('.woff2')), 'Fonts are cached locally');
-for (const [path, mode] of [[base, 'navigate'], [base + 'vendor/opencv.js','cors'], [base + 'processor.worker.js','same-origin']]) {
+const appScript = [...cache.keys()].find(file => file.startsWith(base + 'assets/') && file.endsWith('.js'));
+assert.ok(appScript, 'App script is cached');
+for (const [path, mode] of [[base, 'navigate'], [appScript, 'same-origin']]) {
   let response;
   handlers.get('fetch')({ request: { url: 'https://scanner.test' + path, method:'GET', mode }, respondWith: promise => { response = promise; } });
   assert.ok((await response).ok, `Offline response for ${path}`);
@@ -67,4 +70,4 @@ assert.equal(new URL(manifest.scope, manifestUrl).pathname, base, 'PWA scope res
 for (const icon of manifest.icons) assert.ok(cache.has(new URL(icon.src, manifestUrl).pathname), `PWA icon is cached: ${icon.src}`);
 const bundleNames = [...cache.keys()].filter(p => p.startsWith(base + 'assets/') && p.endsWith('.js'));
 for (const name of bundleNames) assert.doesNotMatch(await cache.get(name).clone().text(), /test-card-slide|synthetic-camera|test-camera|test-processing-delay/, 'Production excludes synthetic-camera fixture');
-console.log(`Verified ${cache.size} production assets at ${base}, offline navigation/worker/OpenCV, app cache isolation, PWA paths, local fonts, and fixture exclusion.`);
+console.log(`Verified ${cache.size} production assets at ${base}, offline navigation, app cache isolation, PWA paths, local fonts, and fixture exclusion.`);

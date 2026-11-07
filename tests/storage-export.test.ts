@@ -3,18 +3,17 @@ import JSZip from 'jszip';
 import { describe, it, expect } from 'vitest';
 import { storage } from '../src/core/storage';
 import { createZip } from '../src/core/export';
-import { archiveFilename, defaultBatchName, defaults, filename, type Scan } from '../src/core/types';
+import { archiveFilename, defaultBatchName, filename, type Scan } from '../src/core/types';
 const scan = (batchId: string, ordinal: number): Scan => ({
   id: crypto.randomUUID(), batchId, ordinal, capturedAt: Date.now(), blob: new Blob([`image-${ordinal}`]), thumbnail: new Blob(),
-  width: 900, height: 1257, processingMs: 10, sharpness: 100, confidence: 0.9, corners: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}], rotated: false,
+  width: 900, height: 1257, rotated: false,
 });
 describe('storage, recovery, filenames, ZIP', () => {
   it('keeps a renamed batch and its next ordinal during concurrent scan metadata writes', async () => {
-    const b = await storage.create(5, 'Before scanning'), a = scan(b.id, 3);
+    const b = await storage.create(5, 'Before scanning');
     await Promise.all([
       storage.renameBatch(b.id, 'Renamed while scanning'),
       storage.saveBatch({ ...b, nextOrdinal: 4 }),
-      storage.stage({ id: a.id, batchId: b.id, ordinal: 3, capturedAt: a.capturedAt, raw: a.blob, reason: '', settings: defaults }, { ...b, nextOrdinal: 4 }),
     ]);
     await storage.saveBatch(b);
     const restored = await storage.load();
@@ -35,10 +34,9 @@ describe('storage, recovery, filenames, ZIP', () => {
     expect([0,1,9,99].map(filename)).toEqual(['Pokemon_0001.jpg','Pokemon_0002.jpg','Pokemon_0010.jpg','Pokemon_0100.jpg']);
     expect(filename(9999)).toBe('Pokemon_10000.jpg');
   });
-  it('persists raw captures, accepts atomically, and recovers the unfinished batch', async () => {
+  it('persists a photo directly and recovers the unfinished batch', async () => {
     const b = await storage.create(3), a = scan(b.id, 2);
-    await storage.stage({ id: a.id, batchId: b.id, ordinal: a.ordinal, capturedAt: a.capturedAt, raw: a.blob, reason: '', settings: defaults }, { ...b, nextOrdinal: 3 });
-    expect((await storage.load()).attempts).toHaveLength(1);
+    await storage.saveBatch({ ...b, nextOrdinal: 3 });
     await storage.accept(a);
     const recovered = await storage.load();
     expect(recovered.scans).toHaveLength(1); expect(recovered.attempts).toHaveLength(0); expect(recovered.batch?.nextOrdinal).toBe(3);

@@ -18,11 +18,11 @@ export async function rotateScan(scan: Scan): Promise<Scan> {
   const url = URL.createObjectURL(scan.blob), image = new Image();
   try {
     image.src = url; await image.decode();
-    const c = document.createElement('canvas'); c.width = scan.width; c.height = scan.height;
+    const c = document.createElement('canvas'); c.width = image.naturalWidth; c.height = image.naturalHeight;
     const ctx = c.getContext('2d')!; ctx.translate(c.width, c.height); ctx.rotate(Math.PI); ctx.drawImage(image, 0, 0);
     const thumb = document.createElement('canvas'); thumb.width = 180; thumb.height = Math.round(180 * c.height / c.width);
     thumb.getContext('2d')!.drawImage(c, 0, 0, thumb.width, thumb.height);
     const encode = (canvas: HTMLCanvasElement) => new Promise<Blob>((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error('Rotation could not be saved.')), 'image/jpeg', 0.98));
-    return { ...scan, blob: await encode(c), thumbnail: await encode(thumb), rotated: !scan.rotated };
+    return { ...scan, width: c.width, height: c.height, blob: await encode(c), thumbnail: await encode(thumb), rotated: !scan.rotated };
   } finally { URL.revokeObjectURL(url); }
 }

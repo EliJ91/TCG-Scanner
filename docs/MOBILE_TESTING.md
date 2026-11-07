@@ -1,6 +1,6 @@
 # Real card-slinger acceptance checklist
 
-Record phone model, OS, browser version, camera resolution, lighting, stability threshold, motion threshold, blur threshold, maximum queued photos, and ambient temperature. Run separately on Android Chrome and iPhone Safari. Clear only expendable test batches after checking exports.
+Record phone model, OS, browser version, camera resolution, lighting, stability threshold, motion threshold, and ambient temperature. Run separately on Android Chrome and iPhone Safari. Clear only expendable test batches after checking exports.
 
 ## Setup and permissions
 
@@ -19,58 +19,58 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 - [ ] Settings should initially show only Dark mode, Wait before each photo, Sounds, and Volume. Open Advanced settings to find photo/camera controls. Confirm the descriptions are clear and Done is always reachable on a small screen.
 - [ ] At 320, 375, 390, and 430 px widths, verify the scanner is horizontally centered and its Start/Pause control fits on screen. No sidebar, bottom navigation, batch panel, or recent-card thumbnails should be visible until opened from Menu.
 
-## Detection and image quality
+## Motion and framing
 
-- [ ] Start Auto over a stationary first card: capture only after a full 0.22-second quiet interval. Continued placement/hand movement must restart that interval. Leave it stationary afterward: no duplicate.
+- [ ] Test the green bar at 10 ms and 1 second. Movement should clear it. Hold the frame still and check for exactly one photo.
 - [ ] In Manual, wait over a stationary card: zero automatic photos. Each Take photo tap requests one photo, subject only to raw storage and remaining batch capacity.
 - [ ] Switch Auto/Manual while active. Keep the same preview and batch, with no extra stationary duplicate.
-- [ ] Slide in a card and hold still: one scan, one ding, all four borders preserved, portrait crop, no background beyond edge rounding, no artwork clipped.
+- [ ] Slide in a card and hold still. Check for one ding and one JPEG with the same framing as the preview.
 - [ ] Leave it stationary for 30 seconds: no duplicate scans.
 - [ ] Slide another card directly over the last with no empty interval: exactly one new scan.
 - [ ] Repeat with two or more identical-artwork cards. Count physical cards against saved images.
 - [ ] Test yellow, white, silver, and dark borders; textured and holographic cards; slight rotation; mild perspective. Inspect corners at full resolution.
 - [ ] Move a lamp or trigger autofocus. Small noise/global exposure changes should not add scans. Strong local shadows may require a higher motion threshold.
 - [ ] Test slow slides, short fast slides, vibration, rapid successive feeds, and a hand crossing the view. Increase stability delay or decrease feed speed if needed.
-- [ ] Test missing corners, partial cards, blur, defocus, and glare. Failures must not count; originals stay retained, the error buzz plays, and scanning stays active. Reposition/retake successfully without a Resume tap.
-- [ ] Test retry on a retained source with adjusted settings, discard and physical recapture, Save original, 180° correction, and deletion.
+- [ ] Capture a blank frame or partial card in Manual and confirm the JPEG is included in the batch.
+- [ ] Add a retained original to an open batch. Test Save original, manual rotation, and deletion.
 
-## Strict batch and asynchronous pipeline
+## Batch limits
 
 - [ ] Select 50 and feed 50 valid cards. Verify exactly 50 stored images and 50 success dings.
-- [ ] Each ding must follow original-photo storage, before cropping completes. After the final original, show the remaining processing count. Play the completion alarm only after all target crops are valid and stored.
+- [ ] Check that the ding follows a successful write and the completion alarm follows the final saved photo.
 - [ ] Force the final image to fail. Batch remains incomplete; no completion alarm until the valid replacement fills its slot.
-- [ ] Feed one new card per second while processing takes longer than one second per image. Every settled card must be persisted and ding immediately, with a growing processing count. Cropping must not gate capture. Check physical count against saved originals and final images.
-- [ ] Force a boundary failure during the feed. Keep saving subsequent photos. Confirm the failed original appears in review, can be downloaded or recropped later, and does not trigger completion or a blocking boundary alert.
-- [ ] Pause with images in processing. They should finish and save; no fresh captures until Resume.
+- [ ] Feed one card per second and compare the physical count with the saved photos.
+
+- [ ] Pause while saving. Confirm that the save finishes and new capture waits for Resume.
 - [ ] Resume over the same stationary card: no duplicate. Explicit capture is available if needed.
-- [ ] Open the gallery while scanning: camera and detector should continue. Editing remains disabled until capture is paused and the queue is empty.
+- [ ] Open the gallery while scanning: camera and detector should continue. Editing remains disabled until capture is paused and the current save finishes.
 - [ ] Delete an image from a complete batch. Count falls by one, scanner stays paused, explicit Resume can refill the batch.
 
 ## Persistence, export, and recovery
 
-- [ ] Download a partial batch, then a completed batch. Unzip and check exact file count, valid JPEG decoding, portrait dimensions, sequential filenames without gaps, and physical order.
+- [ ] Download a partial batch, then a completed batch. Unzip and check exact file count, valid JPEG decoding, camera frame dimensions, sequential filenames without gaps, and physical order.
 - [ ] Confirm rotated/deleted images are reflected in the next ZIP. Download never clears saved data.
 - [ ] In the download dialog, confirm default `Batch#XXX`, edit to a custom batch name, and verify the archive name and persisted name on the next export. Names inside remain `Pokemon_0001.jpg` onward.
 - [ ] On iOS inspect the downloaded ZIP in Files. The app should offer downloads with no Share / Save feature.
 - [ ] Reload after saved scans; verify recovery and no automatic stationary recapture.
-- [ ] Reload with a processing backlog; queued originals must resume cropping automatically without taking new photos, losing order, or duplicating scans.
+- [ ] Upgrade an earlier batch with queued originals and check that the original JPEGs are recovered without duplicates.
 - [ ] Background/lock the app or interrupt camera access. Keep saved images/originals intact; on return reconnect the camera and preserve the active scan intent without requiring Resume. Respect a browser permission denial.
 - [ ] Simulate near-full storage in a disposable profile. Failed storage must not increment count, and raw originals must remain available in session for saving. Do not close the page until saved.
 - [ ] While storage is unavailable, keep the session active but apply capture backpressure. Once storage recovers, retry retained snapshots automatically without taking duplicate photos.
-- [ ] Force worker startup failure. In compatibility mode, keep saving originals at the usual feed rate; defer heavy processing until capture is paused or the batch capture limit is reached. Repeat with a worker failing during a feed.
-- [ ] An OpenCV initialization failure must not close an already granted camera preview. Optional camera capability/device-enumeration failures must not stop the stream.
+
+- [ ] Check that optional camera capability and device enumeration failures leave the preview active.
 - [ ] Force a ZIP generation error; saved images remain available for another export.
 - [ ] Clear a test batch through the explicit confirmation. New batch starts at image 0001 and the next batch archive number.
 
-- [ ] Save camera selection, resolution, zoom, flashlight and supported locks; reopen and verify restoration. Remove the saved camera and confirm rear-camera fallback.
+- [ ] On a camera with manual focus support, adjust the side slider and lock focus. Reload and check that the setting is restored. Unlock and verify autofocus resumes.
 - [ ] Pause and use Reset settings. Restore defaults, keep the batch name and every saved photo, and verify the reset survives reload.
 
 ## Performance and offline
 
-- [ ] Enable Show scan details in Settings → Advanced settings. Record median and slowest processing times, motion-analysis time, queue depth, and measured cards/min across a full batch.
-- [ ] Run for 10–15 minutes. Check heat, battery use, frame gaps, memory, and responsiveness. Lower resolution/output size or feed speed if the device cannot keep up.
-- [ ] After production service worker is active, close/reopen the site in airplane mode and scan/export. OpenCV, fonts, gallery, and ZIP should work without network.
+- [ ] Enable Show scan details in Settings. Record motion analysis time and measured capture pace.
+- [ ] Run for 10–15 minutes. Check heat, battery use, frame gaps, memory, and responsiveness. Lower camera resolution or feed speed if the device cannot keep up.
+- [ ] After production service worker is active, close/reopen the site in airplane mode and scan/export. Fonts, gallery, and ZIP should work without network.
 - [ ] Install on Android and through iOS Add to Home Screen. Repeat camera/sound/offline tests in installed mode.
 - [ ] Publish an update while scanning. It must not force a reload or interrupt capture. Once the new assets are cached, pause and refresh to see the updated interface without closing every app tab.
 
-For each run record: physical card count, accepted count, failures, false positives, duplicates, missed movements, crop errors, average processing time, elapsed active scanning time, and export verification. Accept the setup only after 50-card runs with zero missed/duplicate/count/order errors. Accuracy takes priority over a faster feed rate.
+For each run record: physical card count, accepted count, failures, false positives, duplicates, missed movements, elapsed active scanning time, and export verification. Accept the setup only after 50-card runs with zero missed/duplicate/count/order errors. Accuracy takes priority over a faster feed rate.

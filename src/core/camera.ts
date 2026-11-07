@@ -1,8 +1,11 @@
 import { CameraAccessError, cameraErrorName, requestCameraStream } from './camera-access';
 import { zoomRect } from './zoom';
+import type { Snapshot } from './types';
 
+export interface FocusRange { min: number; max: number; step?: number }
 export interface CameraCapabilities {
   torch?: boolean; zoom?: { min: number; max: number; step: number };
+  focusDistance?: FocusRange;
   focusMode?: string[]; exposureMode?: string[]; whiteBalanceMode?: string[];
 }
 interface FrameGrabber { grabFrame(): Promise<ImageBitmap> }
@@ -14,6 +17,9 @@ export class Camera {
   private generation = 0;
   private cancelPreview?: () => void;
   private canvas = document.createElement('canvas');
+  private adjustments: Record<string, unknown> = {};
+  private controlQueue = Promise.resolve();
+  private baseConstraints: MediaTrackConstraints = {};
   private zoom = 1;
   setZoom(value: number) { this.zoom = Math.max(1, Math.min(3, Number.isFinite(value) ? value : 1)); }
   constructor(public video: HTMLVideoElement, private lost: (reason: string) => void) {}
@@ -50,6 +56,11 @@ export class Camera {
       const track = acquired.getVideoTracks()[0];
       if (!track) throw new CameraAccessError('unavailable', 'The browser did not provide a camera video track.');
       try { this.capabilities = (track.getCapabilities?.() ?? {}) as CameraCapabilities; } catch { this.capabilities = {}; }
+      const range = this.capabilities.focusDistance;
+      if (range && (!Number.isFinite(range.min) || !Number.isFinite(range.max) || range.max <= range.min)) {
+        delete this.capabilities.focusDistance;
+      }
+      try { this.baseConstraints = track.getConstraints?.() ?? {}; } catch { this.baseConstraints = {}; }
       track.addEventListener('ended', () => this.lost('Camera disconnected. Reconnecting automatically.'));
       track.addEventListener('mute', () => this.lost('Camera feed interrupted. Reconnecting automatically.'));
       const IC = (window as unknown as { ImageCapture?: new (track: MediaStreamTrack) => FrameGrabber }).ImageCapture;
@@ -77,29 +88,77 @@ export class Camera {
     return { ready, check: () => check(), cleanup: () => cleanup() };
   }
   /** Canvas draw is synchronous: copies the exact stabilized frame before async encoding. */
-  async capture(useImageCapture = false): Promise<Blob> {
+  async capture(useImageCapture = false, quality = 1): Promise<Snapshot> {
     if (!this.stream?.active || this.video.readyState < 2) throw new Error('Camera is not delivering frames. Waiting for reconnection.');
     let bitmap: ImageBitmap | undefined;
     if (useImageCapture && this.grabber) { try { bitmap = await this.grabber.grabFrame(); } catch { /* Compatible fallback below. */ } }
     const source = bitmap ?? this.video;
     const crop = zoomRect(bitmap?.width ?? this.video.videoWidth, bitmap?.height ?? this.video.videoHeight, this.zoom);
     this.canvas.width = crop.width; this.canvas.height = crop.height;
-    this.canvas.getContext('2d')!.drawImage(source, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height); bitmap?.close();
-    return new Promise((resolve, reject) => this.canvas.toBlob(b => b ? resolve(b) : reject(new Error('Camera frame encoding failed. Try again.')), 'image/jpeg', 1));
+    try {
+      this.canvas.getContext('2d')!.drawImage(source, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
+    } finally { bitmap?.close(); }
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      this.canvas.toBlob(value => value ? resolve(value) : reject(new Error('Camera frame encoding failed. Try again.')), 'image/jpeg', quality);
+    });
+    return { blob, width: crop.width, height: crop.height };
   }
   async control(values: Record<string, unknown>) {
-    const track = this.stream?.getVideoTracks()[0]; if (!track) throw new Error('Start the camera first.');
-    await track.applyConstraints({ advanced: [values as MediaTrackConstraintSet] });
+    const track = this.stream?.getVideoTracks()[0];
+    if (!track) throw new Error('Start the camera first.');
+    const generation = this.generation;
+    const operation = this.controlQueue.then(async () => {
+      if (generation !== this.generation) throw new Error('The camera changed.');
+      const next = { ...this.adjustments, ...values };
+      for (const key of Object.keys(next)) if (next[key] === undefined) delete next[key];
+      const { focusMode, focusDistance, ...other } = next;
+      const constraints = {
+        ...this.baseConstraints,
+        advanced: [...(this.baseConstraints.advanced ?? []), other as MediaTrackConstraintSet],
+        ...(typeof focusMode === 'string' ? { focusMode: { exact: focusMode } } : {}),
+        ...(typeof focusDistance === 'number' ? { focusDistance: { exact: focusDistance } } : {}),
+      };
+      await track.applyConstraints(constraints);
+      if (generation === this.generation) this.adjustments = next;
+    });
+    this.controlQueue = operation.catch(() => {});
+    await operation;
+  }
+  get focusDistance() {
+    try {
+      const settings = this.stream?.getVideoTracks()[0]?.getSettings() as (MediaTrackSettings & { focusDistance?: number }) | undefined;
+      const position = settings?.focusDistance;
+      return position !== undefined && Number.isFinite(position) ? position : undefined;
+    } catch { return undefined; }
+  }
+  async focus(locked: boolean, distance?: number): Promise<number | undefined> {
+    const modes = this.capabilities.focusMode ?? [];
+    const range = this.capabilities.focusDistance;
+    if (!locked) {
+      const auto = modes.includes('continuous') ? 'continuous' : modes.find(mode => mode === 'single-shot');
+      if (!auto) throw new Error('This camera does not expose autofocus controls.');
+      await this.control({ focusMode: auto, focusDistance: undefined });
+      return this.focusDistance;
+    }
+    if (!range && !modes.includes('manual')) throw new Error('This camera does not expose manual focus.');
+    let position = distance ?? this.focusDistance;
+    if (range && position !== undefined && Number.isFinite(position)) {
+      const step = range.step ?? 0;
+      if (Number.isFinite(step) && step > 0) position = range.min + Math.round((position - range.min) / step) * step;
+      position = Math.max(range.min, Math.min(range.max, position));
+    } else position = undefined;
+    await this.control({ focusMode: modes.includes('manual') ? 'manual' : undefined, focusDistance: position });
+    return position ?? this.focusDistance;
   }
   async lock(locked: boolean) {
     const values: Record<string, unknown> = {};
-    for (const key of ['focusMode', 'exposureMode', 'whiteBalanceMode'] as const) {
+    for (const key of ['exposureMode', 'whiteBalanceMode'] as const) {
       const modes = this.capabilities[key];
       if (locked && modes?.includes('manual')) values[key] = 'manual';
       else if (!locked && modes?.includes('continuous')) values[key] = 'continuous';
     }
-    if (!Object.keys(values).length) throw new Error('This camera does not expose focus, exposure, or white balance locks.');
+    if (!Object.keys(values).length) throw new Error('This camera does not expose brightness or color locks.');
     await this.control(values);
   }
-  stop() { this.generation++; this.cancelPreview?.(); this.cancelPreview = undefined; this.disposeSynthetic?.(); this.disposeSynthetic = undefined; this.stream?.getTracks().forEach(track => track.stop()); this.stream = undefined; this.capabilities = {}; this.video.srcObject = null; this.grabber = undefined; }
+  stop() { this.generation++; this.cancelPreview?.(); this.cancelPreview = undefined; this.disposeSynthetic?.(); this.disposeSynthetic = undefined; this.stream?.getTracks().forEach(track => track.stop()); this.stream = undefined; this.capabilities = {}; this.video.srcObject = null; this.grabber = undefined; this.adjustments = {}; this.controlQueue = Promise.resolve(); this.baseConstraints = {}; }
 }

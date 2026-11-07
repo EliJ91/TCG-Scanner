@@ -20,6 +20,8 @@ export class MotionDetector {
   private initialArmed = false;
   constructor(public stabilityMs = 220, public sensitivity = 0.055) {}
 
+  get deadline() { return this.state === 'stabilizing' && this.stableStart !== null ? this.stableStart + this.stabilityMs : null; }
+
   reset(allowInitialCapture = false) {
     this.previous = undefined; this.baseline = undefined; this.state = 'waiting';
     this.motionStart = null; this.lastMotion = null; this.stableStart = null; this.peak = 0; this.lastTime = null;
@@ -30,10 +32,10 @@ export class MotionDetector {
   consume() { this.state = 'waiting'; this.motionStart = null; this.lastMotion = null; this.stableStart = null; this.peak = 0; this.baseline = undefined; this.initialArmed = false; }
 
   update(gray: Uint8Array, now: number): MotionReading {
-    let score = 0, shift = 0, capture = false;
+    let score = 0, shift = 0;
     if (!this.previous || this.previous.length !== gray.length || (this.lastTime !== null && now - this.lastTime > 650)) {
       this.reset(this.initialArmed); this.previous = gray.slice(); this.lastTime = now;
-      if (this.initialArmed) { this.state = 'stabilizing'; this.stableStart = now; }
+      if (this.initialArmed) this.state = 'stabilizing';
       return this.reading(0, 0, false, now);
     }
     const n = gray.length;
@@ -63,20 +65,29 @@ export class MotionDetector {
     } else if (low) {
       if (this.stableStart === null) this.stableStart = now;
       this.state = 'stabilizing';
-      if (now - this.stableStart >= this.stabilityMs) {
-        // Reject a one-frame flash or brief camera noise spike returning to baseline.
-        let displacement = 0;
-        if (this.baseline) {
-          const meanShift = this.mean(gray) - this.baselineMean;
-          for (let i = 0; i < n; i++) if (Math.abs(gray[i] - this.baseline[i] - meanShift) > threshold) displacement++;
-        }
-        const duration = (this.lastMotion ?? now) - (this.motionStart ?? now);
-        if (this.initialArmed || duration >= 65 || (displacement / n >= this.sensitivity && this.peak > this.sensitivity * 1.5)) {
-          this.state = 'ready'; capture = true; this.initialArmed = false;
-        } else { this.consume(); }
-      }
     } else { this.stableStart = null; this.state = 'moving'; }
     this.previous.set(gray);
+    return this.advance(now, score, shift);
+  }
+
+  /** A confirmed still frame can reach the deadline between camera frames. */
+  advance(now: number, score = 0, shift = 0): MotionReading {
+    if (this.lastTime !== null && now - this.lastTime > 650) this.reset(this.initialArmed);
+    let capture = false;
+    const frame = this.previous, deadline = this.deadline;
+    if (frame && deadline !== null && now >= deadline) {
+      // Reject a brief flash or noise spike that returned to the pre-motion image.
+      let displacement = 0;
+      if (this.baseline) {
+        const meanShift = this.mean(frame) - this.baselineMean;
+        const threshold = Math.max(11, this.noise * 3.5);
+        for (let i = 0; i < frame.length; i++) if (Math.abs(frame[i] - this.baseline[i] - meanShift) > threshold) displacement++;
+      }
+      const duration = (this.lastMotion ?? now) - (this.motionStart ?? now);
+      if (this.initialArmed || duration >= 65 || (displacement / frame.length >= this.sensitivity && this.peak > this.sensitivity * 1.5)) {
+        this.state = 'ready'; capture = true; this.initialArmed = false;
+      } else this.consume();
+    }
     return this.reading(score, shift, capture, now);
   }
   private mean(data: Uint8Array) { let sum = 0; for (const v of data) sum += v; return sum / data.length; }
