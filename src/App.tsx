@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Aperture, ArrowDownToLine, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Focus, Gauge, Images, Layers3, Lock, LockOpen, Menu, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X } from 'lucide-react';
 import { useScanner } from './useScanner';
 import { useTheme } from './useTheme';
@@ -49,6 +49,7 @@ export default function App() {
   const busy = s.session === 'starting' || s.session === 'scanning';
   const editingDisabled = busy || s.pending > 0 || working;
   const count = s.scans.length, quantity = s.batch?.target ?? target;
+  const batchReserved = count + s.pending >= quantity;
   const progress = Math.min(100, count / quantity * 100);
   const rate = s.measuredScans > 1 && s.elapsedMs > 0 ? (s.measuredScans / (s.elapsedMs / 60000)).toFixed(1) : '—';
   const latest = s.scans.at(-1), active = s.scans.find(scan => scan.id === selected);
@@ -106,7 +107,6 @@ export default function App() {
   const canToggleFocus = focusModes.includes('manual') && (focusModes.includes('continuous') || focusModes.includes('single-shot'));
   const focusPosition = focusRange ? Math.min(focusRange.max, Math.max(focusRange.min, s.focusPosition ?? focusRange.min)) : undefined;
   const showCountdown = autoMode && s.session === 'scanning' && s.cameraPhase === 'ready' && s.countdown !== null && !s.storageIssue;
-  const countdownDuration = useMemo(() => typeof s.countdown === 'number' ? `${Math.max(0, s.countdown - performance.now())}ms` : undefined, [s.countdown]);
   const waitLabel = s.settings.stabilityMs === 1000 ? '1 s' : `${s.settings.stabilityMs} ms`;
   let scannerStatus = 'Camera ready';
   if (s.session === 'complete') scannerStatus = 'Batch complete';
@@ -114,13 +114,17 @@ export default function App() {
   else if (s.cameraPhase === 'off') scannerStatus = 'Camera off';
   else if (s.storageIssue) scannerStatus = 'Waiting for storage';
   else if (!s.loaded) scannerStatus = 'Loading saved photos';
-  else if (s.capturing) scannerStatus = 'Saving photo';
+  else if (s.capturing) scannerStatus = 'Taking photo';
+  else if (s.pending && batchReserved) scannerStatus = 'Saving final photos';
+  else if (s.queueFull) scannerStatus = 'Saving queued photos';
   else if (s.session === 'starting') scannerStatus = 'Preparing camera';
   else if (s.session === 'paused') scannerStatus = 'Scanning paused';
   else if (s.session === 'scanning') {
     if (!autoMode) scannerStatus = 'Manual · tap to take a photo';
     else if (showCountdown && s.countdown !== 'snapped') scannerStatus = 'Hold still';
-    else scannerStatus = s.reading?.state === 'moving' ? 'Card moving' : 'Waiting for card movement';
+    else if (s.reading?.needsRemoval) scannerStatus = 'Remove the card';
+    else if (s.reading?.state === 'moving') scannerStatus = 'Card moving';
+    else scannerStatus = s.reading?.presence === 'uncertain' ? 'Center one card' : 'Place a card';
   }
   const ratio = s.cameraSize.width && s.cameraSize.height ? s.cameraSize.width / s.cameraSize.height : .75;
   const editName = () => { setNameDraft(s.batchName); setNameError(''); setShowName(true); };
@@ -142,11 +146,9 @@ export default function App() {
               <Menu size={22} />{failedCount > 0 && <span className="menu-attention" aria-label={`${failedCount} scan${failedCount === 1 ? '' : 's'} need review`} />}
             </button>
             {!s.cameraSize.width && <div className="camera-placeholder"><ScanLine size={35} strokeWidth={1.25} /><p>{s.cameraPhase === 'requesting' ? 'Choose Allow to use your camera' : 'Enable your camera to begin'}</p></div>}
-            {showCountdown && (
-              <div className={`auto-countdown${s.countdown === 'snapped' ? ' is-snapped' : ''}`} aria-hidden="true">
-                <div key={s.countdown} style={{ animationDuration: countdownDuration }} />
-              </div>
-            )}
+            <div className={`auto-countdown${s.countdown === 'snapped' ? ' is-snapped' : ''}`} hidden={!showCountdown} aria-hidden="true">
+              <div ref={s.countdownFill} />
+            </div>
             <label className="zoom-control"><span>Zoom</span><input aria-label="Camera zoom" type="range" min="1" max="3" step="0.1" value={s.settings.zoom} disabled={s.cameraPhase !== 'ready'} onPointerDown={() => s.zoomGesture(true)} onPointerUp={() => s.zoomGesture(false)} onPointerCancel={() => s.zoomGesture(false)} onBlur={() => s.zoomGesture(false)} onChange={event => s.setZoom(+event.target.value)} /><output>{s.settings.zoom.toFixed(1)}×</output></label>
           </div>
           {s.cameraPhase === 'ready' && (focusRange || canToggleFocus) && (
@@ -180,7 +182,7 @@ export default function App() {
           <span className="scan-count" aria-label={`${count} saved photos out of ${quantity}`}>{count}<span> / {quantity}</span></span>
         </div>
         <div className="capture-mode-row"><div className="capture-modes" role="group" aria-label="Capture mode"><button aria-pressed={autoMode} onClick={() => s.setCaptureMode('auto')}>Auto</button><button aria-pressed={!autoMode} onClick={() => s.setCaptureMode('manual')}>Manual</button></div></div>
-        {s.cameraPhase !== 'ready' ? <button className="button primary scan-action" disabled={s.cameraPhase === 'requesting'} onClick={() => void s.connectCamera()}><Camera size={19} />{s.cameraPhase === 'requesting' ? 'Requesting camera…' : 'Enable camera'}</button> : !autoMode && s.session !== 'complete' ? <button className="button primary scan-action" disabled={!s.loaded || s.session === 'starting' || !!s.storageIssue || s.capturing || s.pending + count >= quantity} onClick={() => void s.takePhoto(target)}><Camera size={19} />{s.session === 'starting' ? 'Preparing…' : 'Take photo'}</button> : s.session === 'scanning' ? <button className="button primary scan-action" onClick={s.pause}><Pause size={18} fill="currentColor" />Pause scanning</button> : <button className="button primary scan-action" disabled={!s.loaded || s.session === 'starting' || s.session === 'complete' || s.pending + count >= quantity} onClick={() => void s.start(target)}>
+        {s.cameraPhase !== 'ready' ? <button className="button primary scan-action" disabled={s.cameraPhase === 'requesting'} onClick={() => void s.connectCamera()}><Camera size={19} />{s.cameraPhase === 'requesting' ? 'Requesting camera…' : 'Enable camera'}</button> : !autoMode && s.session !== 'complete' ? <button className="button primary scan-action" disabled={!s.loaded || s.session === 'starting' || !!s.storageIssue || s.capturing || s.queueFull || batchReserved} onClick={() => void s.takePhoto(target)}><Camera size={19} />{s.session === 'starting' ? 'Preparing…' : 'Take photo'}</button> : s.session === 'scanning' ? <button className="button primary scan-action" onClick={s.pause}><Pause size={18} fill="currentColor" />Pause scanning</button> : <button className="button primary scan-action" disabled={!s.loaded || s.session === 'starting' || s.session === 'complete' || batchReserved} onClick={() => void s.start(target)}>
           {s.session === 'complete' ? <CheckCheck size={19} /> : <Play size={18} fill="currentColor" />}
           {s.session === 'complete' ? 'Batch complete' : !s.loaded ? (s.storageIssue ? 'Storage unavailable' : 'Loading saved scans…') : s.session === 'starting' ? 'Preparing…' : s.batch ? 'Resume scanning' : 'Start scanning'}
         </button>}
@@ -202,7 +204,7 @@ export default function App() {
         {s.cameraSize.width > 0 && <>
           <div className="menu-divider" />
           {!autoMode && s.session === 'scanning' && <button onClick={() => openFromMenu(s.pause)}><Pause size={18} /><span>Pause scanning</span><ChevronRight size={17} /></button>}
-          <button disabled={s.session !== 'scanning' || s.pending + count >= quantity || s.capturing} onClick={() => openFromMenu(s.explicitCapture)}><Aperture size={20} /><span>Capture current card</span><ChevronRight size={17} /></button>
+          <button disabled={s.session !== 'scanning' || !!s.storageIssue || batchReserved || s.queueFull || s.capturing} onClick={() => openFromMenu(s.explicitCapture)}><Aperture size={20} /><span>Capture current card</span><ChevronRight size={17} /></button>
           <button onClick={() => openFromMenu(s.stop)}><Square size={18} /><span>Stop camera</span><ChevronRight size={17} /></button>
         </>}
       </nav>
@@ -255,7 +257,7 @@ export default function App() {
         <p className="setting-hint">You can leave these as they are unless you’re having trouble.</p>
         {busy && <div className="settings-pause-note"><p>Pause scanning to change the greyed-out controls.</p><button className="button outline" onClick={s.pause}><Pause size={16} />Pause scanning</button></div>}
         <h3><Focus size={16} /> Photos</h3>
-        <Setting label="Ignore small movements" value={s.settings.sensitivity < .05 ? 'A little' : s.settings.sensitivity < .12 ? 'Some' : 'More'} hint="Turn this up if shaking triggers extra photos. Turn it down if new cards are missed."><input aria-label="Ignore small movements" disabled={busy} type="range" min="0.02" max="0.2" step="0.005" value={s.settings.sensitivity} onChange={e => s.setSettings({ ...s.settings, sensitivity: +e.target.value })} /></Setting>
+        <Setting label="Ignore small movements" value={s.settings.sensitivity < .05 ? 'A little' : s.settings.sensitivity < .12 ? 'Some' : 'More'} hint="Turn this up if small vibrations keep restarting the countdown."><input aria-label="Ignore small movements" disabled={busy} type="range" min="0.02" max="0.2" step="0.005" value={s.settings.sensitivity} onChange={e => s.setSettings({ ...s.settings, sensitivity: +e.target.value })} /></Setting>
         <Setting label="Photo quality" value={`${Math.round(s.settings.quality * 100)}%`} hint="Higher quality makes larger download files."><input aria-label="Photo quality" disabled={busy} type="range" min="0.8" max="1" step="0.01" value={s.settings.quality} onChange={e => s.setSettings({ ...s.settings, quality: +e.target.value })} /></Setting>
         <h3><Camera size={16} /> Camera</h3>
         {s.devices.length > 1 && <label className="select-setting">Choose a camera<select disabled={busy || s.pending > 0} value={s.settings.cameraId} onChange={e => void s.switchCamera(e.target.value)}><option value="">Automatic rear camera</option>{s.devices.map((d, i) => <option key={d.deviceId} value={d.deviceId}>{d.label || `Camera ${i + 1}`}</option>)}</select></label>}
@@ -263,7 +265,7 @@ export default function App() {
         <p className="setting-hint">Use the zoom slider below the preview to frame your photo. On supported cameras, use the side slider to focus and the lock to hold focus.</p>
         <label className="select-setting">Camera detail<select disabled={busy || s.cameraSize.width > 0} value={s.settings.resolution} onChange={e => s.setSettings({ ...s.settings, resolution: +e.target.value })}>{[[1920,'Standard'],[2560,'High'],[3840,'Highest']].map(([n,label]) => <option key={n} value={n}>{label}</option>)}</select><small>Use Menu → Stop camera before changing this. Your phone chooses the closest size it supports.</small></label>
         {(s.capabilities.exposureMode?.includes('manual') || s.capabilities.whiteBalanceMode?.includes('manual')) && <Toggle label="Lock brightness and color" checked={s.settings.lockCamera} disabled={busy} hint="Turn on once the picture is clear to hold the brightness or color settings your phone supports." onChange={v => void s.lock(v)} />}
-        <Toggle label="Alternate photo method" hint="Try this if taking photos doesn’t work on your phone." checked={s.settings.useImageCapture} disabled={busy} onChange={v => s.setSettings({ ...s.settings, useImageCapture: v })} />
+        <Toggle label="Alternate manual photo method" hint="Try this if the Take photo button fails on your phone." checked={s.settings.useImageCapture} disabled={busy} onChange={v => s.setSettings({ ...s.settings, useImageCapture: v })} />
         <h3><Gauge size={16} /> Troubleshooting</h3>
 
         <Toggle label="Show scan details" checked={s.settings.debug} hint="Adds Scan details to the menu to help check problems with scanning." onChange={v => s.setSettings({ ...s.settings, debug: v })} />
@@ -273,9 +275,9 @@ export default function App() {
     {showHelp && <Dialog title="How to scan" close={() => setShowHelp(false)}><div className="guide-content"><p className="dialog-intro">Use Auto for hands-free photos, or Manual to take each photo yourself.</p>{[
       ['Position your phone', 'Keep your phone steady above one card. Allow camera access when asked. Keep all four card edges visible, with a little space around them. Avoid glare from lights.'],
       ['Choose your batch', 'Open Menu → Batch to choose how many cards to scan. Tap the name at the top of the camera view to change it. Use the zoom slider to bring the card closer.'],
-      ['Take your photos', 'In Auto, place the first card and tap Start scanning. After each ding, drop in the next card. In Manual, tap Take photo each time. The green bar fills while the card is still. Each ding confirms a photo was saved.'],
+      ['Take your photos', 'In Auto, place a card and tap Start scanning. The green bar fills while the card is still. After it fills, remove the card before placing the next one. Each ding confirms a photo was saved. In Manual, tap Take photo.'],
       ['Check and download', 'When the batch is full, scanning stops and an alarm plays. Open Menu → Recent cards to check your photos. Choose Download ZIP to save them together in one file.'],
-    ].map(([title, text], i) => <div className="guide-step" key={title}><span>{String(i + 1).padStart(2,'0')}</span><div><h3>{title}</h3><p>{text}</p></div></div>)}<div className="guide-callout"><ShieldCheck size={18} /><p>Scans stay in this browser’s local storage. Download your batch before clearing browser data. Resuming a batch that already has captures waits for new movement in Auto; Manual always waits for your tap.</p></div></div><div className="dialog-footer"><button className="button primary" onClick={() => setShowHelp(false)}>Ready to scan <ArrowRight size={16} /></button></div></Dialog>}
+    ].map(([title, text], i) => <div className="guide-step" key={title}><span>{String(i + 1).padStart(2,'0')}</span><div><h3>{title}</h3><p>{text}</p></div></div>)}<div className="guide-callout"><ShieldCheck size={18} /><p>Scans stay in this browser’s local storage. Download your batch before clearing browser data. When reopening a saved batch in Auto, clear the camera view before placing a card.</p></div></div><div className="dialog-footer"><button className="button primary" onClick={() => setShowHelp(false)}>Ready to scan <ArrowRight size={16} /></button></div></Dialog>}
     {confirmClear && <Dialog title="Start a fresh batch?" close={() => setConfirmClear(false)}><div className="confirm-content"><p>This deletes this batch’s {count} saved images and {s.attempts.length} retained captures from this device. Download your ZIP first if you want to keep them.</p>{exportButton()}<p className="setting-hint">A download does not automatically clear your batch.</p></div><div className="dialog-footer"><button className="button outline" onClick={() => setConfirmClear(false)}>Keep batch</button><button className="button danger" disabled={editingDisabled} onClick={() => void safe(async () => { await s.clear(); setLastExport(undefined); setConfirmClear(false); setShowBatch(false); setShowGallery(false); setShowMenu(false); })}><Trash2 size={15} /> Delete & start new</button></div></Dialog>}
     {exportOpen && <Dialog title="Download your batch" close={() => { if (exporting === null) setExportOpen(false); }}><div className="confirm-content">{lastExport ? <div className="export-success" role="status"><strong>{lastExport} is ready</strong><p>Check your browser’s downloads. Photos stay saved here.</p></div> : <p>Give this batch a name before saving your archive.</p>}<label className="select-setting batch-name-field" htmlFor="export-batch-name">Batch name<input id="export-batch-name" autoFocus type="text" maxLength={100} value={exportName} disabled={exporting !== null} placeholder={defaultBatchName(s.batch?.number ?? 1)} onChange={e => setExportName(e.target.value)} /></label><p className="archive-preview">{archiveFilename(exportName, s.batch?.number ?? 1)}</p><p className="setting-hint">{count} saved photos · sequential Pokémon filenames inside the ZIP. The batch name is remembered for your next download.</p>{exporting !== null && <div className="progress-track" role="progressbar" aria-label="ZIP export progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={exporting}><div style={{width:`${exporting}%`}} /></div>}</div><div className="dialog-footer"><button className="button outline" disabled={exporting !== null} onClick={() => setExportOpen(false)}>Cancel</button><button className="button dark" disabled={exporting !== null || s.pending > 0 || busy} onClick={() => void exportBatch()}><ArrowDownToLine size={16}/>{exporting !== null ? `Creating ZIP · ${exporting}%` : `Download ZIP · ${count} images`}</button></div></Dialog>}
     {active && <Dialog title={filename(s.scans.findIndex(a => a.id === active.id))} close={() => setSelected(undefined)} wide><div className="review-image"><BlobImage blob={active.blob} alt="Full-resolution scanned card" /></div><div className="review-meta"><span>{active.width && active.height ? `${active.width} × ${active.height} · JPEG` : 'JPEG'}</span></div><div className="dialog-footer review-actions"><button className="icon-button" aria-label="Previous card" disabled={s.scans[0].id === active.id} onClick={() => setSelected(s.scans[s.scans.findIndex(a => a.id === active.id) - 1]?.id)}><ArrowLeft size={20} /></button><button className="button outline" disabled={editingDisabled} onClick={() => void safe(async () => s.updateScan(await rotateScan(active)))}><RotateCw size={16} /> Rotate 180°</button><button className="button danger-outline" disabled={editingDisabled} onClick={() => setDeleteId(active.id)}><Trash2 size={16} /> Delete</button><button className="icon-button" aria-label="Next card" disabled={latest?.id === active.id} onClick={() => setSelected(s.scans[s.scans.findIndex(a => a.id === active.id) + 1]?.id)}><ArrowRight size={20} /></button></div></Dialog>}

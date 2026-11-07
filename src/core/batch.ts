@@ -1,7 +1,7 @@
 export interface Ticket { id: number; ordinal: number }
 interface Slot<T> { ticket: Ticket; result?: { value: T } | { error: unknown; value?: T }; done?: Promise<void>; finish?: () => void }
 
-/** Reservations include capture, processing AND durable storage. Only commit increments count. */
+/** Reservations cover capture and queued writes. Only a durable commit increments count. */
 export class BatchController<T> {
   private slots: Slot<T>[] = [];
   private serial = 0;

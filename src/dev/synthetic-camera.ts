@@ -17,9 +17,12 @@ export function syntheticCamera() {
   const draw = (now: number) => {
     if (!active) return;
     ctx.fillStyle='#f8f8f8';ctx.fillRect(0,0,1000,900);
-    if(invalid){animation=requestAnimationFrame(draw);return;}
-    card(185,index);
-    if(began>=0){const p=Math.min(1,(now-began)/400);card(-545+730*p,index+1);if(p===1){index++;began=-1;}}
+    if (began >= 0) {
+      // Show the bare surface before sliding in the replacement.
+      const p = Math.min(1, (now - began - 120) / 250);
+      if (p >= 0) card(-545 + 730 * p, index + 1);
+      if (p === 1) { index++; began = -1; }
+    } else if (!invalid) card(185, index);
     animation=requestAnimationFrame(draw);
   };
   const slide = () => {invalid=false;if(began<0)began=performance.now();};

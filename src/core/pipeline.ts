@@ -8,28 +8,34 @@ interface Events {
   storageIssue(reason: string): void;
 }
 
-/** Saves each camera JPEG directly. A failed write retains the same JPEG for retry. */
+const saveQueueLimit = 8;
+
+/** Captures JPEGs into a bounded queue. IndexedDB writes run in capture order. */
 export class CapturePipeline {
   private controller: BatchController<Scan>;
-  private unsaved?: Scan;
+  private unsaved = new Map<string, Scan>();
   private saveError = '';
   private disposed = false;
 
   constructor(private batch: Batch, count: number, private events: Events) {
-    this.controller = new BatchController<Scan>(batch.target, count, batch.nextOrdinal, 1,
+    this.controller = new BatchController<Scan>(batch.target, count, batch.nextOrdinal, saveQueueLimit,
       async scan => {
+        if (this.unsaved.size && !this.unsaved.has(scan.id)) throw new Error(this.saveError);
         await storage.accept(scan);
-        this.unsaved = undefined;
+        const recovered = this.unsaved.delete(scan.id) && !this.unsaved.size;
         if (!this.disposed) {
-          this.events.storageIssue('');
+          if (recovered) this.events.storageIssue('');
           this.events.saved(scan);
         }
       },
       (error, _ticket, scan) => {
         if (!scan) return;
-        this.unsaved = scan;
-        this.saveError = `Storage unavailable: ${message(error)}. Keep this page open to retry saving the photo.`;
-        if (!this.disposed) this.events.storageIssue(this.saveError);
+        const firstFailure = !this.unsaved.size;
+        this.unsaved.set(scan.id, scan);
+        if (firstFailure) {
+          this.saveError = `Storage unavailable: ${message(error)}. Keep this page open while the scanner retries saving.`;
+          if (!this.disposed) this.events.storageIssue(this.saveError);
+        }
       },
       () => { if (!this.disposed) this.events.changed(); });
   }
@@ -39,14 +45,10 @@ export class CapturePipeline {
   get nextOrdinal() { return this.controller.nextOrdinal; }
   get complete() { return this.controller.complete; }
   get running() { return this.controller.running; }
-  get atBatchLimit() { return this.controller.atBatchLimit; }
-  get hasCapacity() { return !this.unsaved && this.controller.hasCapacity; }
-  get retained(): AttemptInfo | undefined {
-    const scan = this.unsaved;
-    if (scan) {
-      const { id, batchId, ordinal, capturedAt } = scan;
-      return { id, batchId, ordinal, capturedAt, reason: this.saveError };
-    }
+  get queueFull() { return this.pending >= saveQueueLimit; }
+  get hasCapacity() { return !this.unsaved.size && this.controller.hasCapacity; }
+  get retained(): AttemptInfo[] {
+    return [...this.unsaved.values()].map(({ id, batchId, ordinal, capturedAt }) => ({ id, batchId, ordinal, capturedAt, reason: this.saveError }));
   }
 
   start() { this.controller.start(); }
@@ -61,22 +63,23 @@ export class CapturePipeline {
     const capturedAt = Date.now();
     try {
       const image = await snapshot();
-      await this.controller.settle(ticket, {
+      void this.controller.settle(ticket, {
         value: { ...image, id: crypto.randomUUID(), batchId: this.batch.id, ordinal: ticket.ordinal, capturedAt, rotated: false },
       });
     } catch (error) {
-      await this.controller.settle(ticket, { error });
+      void this.controller.settle(ticket, { error });
       throw error;
     }
   }
 
   async original(id: string) {
-    if (this.unsaved?.id === id) return this.unsaved.blob;
+    const unsaved = this.unsaved.get(id);
+    if (unsaved) return unsaved.blob;
     return (await storage.getAttempt(id))?.raw;
   }
 
   async keepOriginal(info: AttemptInfo) {
-    if (this.running || this.unsaved || this.pending || this.complete) return;
+    if (this.running || this.unsaved.size || this.pending || this.complete) return;
     const ticket = this.controller.reserve(info.ordinal, true);
     if (!ticket) return;
     try {
@@ -92,16 +95,19 @@ export class CapturePipeline {
   async discard(info: AttemptInfo) {
     if (this.pending || this.running) return;
     await storage.deleteAttempt(info.id);
-    if (this.unsaved?.id === info.id) {
-      this.unsaved = undefined;
-      this.events.storageIssue('');
+    if (this.unsaved.delete(info.id)) {
+      if (!this.unsaved.size) this.events.storageIssue('');
       this.events.changed();
     }
   }
 
   async retryStorage() {
-    if (!this.unsaved || this.pending || this.disposed) return;
-    const ticket = this.controller.reserve(this.unsaved.ordinal, true);
-    if (ticket) await this.controller.settle(ticket, { value: this.unsaved });
+    while (this.unsaved.size && !this.pending && !this.disposed) {
+      const scan = this.unsaved.values().next().value!;
+      const ticket = this.controller.reserve(scan.ordinal, true);
+      if (!ticket) return;
+      await this.controller.settle(ticket, { value: scan });
+      if (this.unsaved.has(scan.id)) return;
+    }
   }
 }

@@ -26,9 +26,9 @@ Fonts and app assets are bundled locally. Use `npm ci` for a reproducible instal
 
 ## Use the scanner
 
-1. Mount the phone securely above the slinger. Use diffuse light from the sides. All four edges must be visible with background around the card. Fill roughly 20–80% of the camera area with one card.
+1. Mount the phone securely above a plain surface. Use diffuse light from the sides. Center one card with background visible around it. Fill roughly 20–80% of the camera area with the card.
 2. The camera preview opens as soon as the app opens. Choose **Allow** if the browser asks; if it requires a tap, use **Enable camera**. Set the quantity in **Menu → Batch**. Tap the batch name/pencil in the camera's upper-left corner to rename it at any time, including before the first photo.
-3. Choose **Auto** or **Manual**. In Auto, place the first card and tap **Start scanning**. The green bar fills during the stillness delay. Set **Wait before each photo** from **10 ms to 1 second** in Settings. In Manual, tap **Take photo**.
+3. Choose **Auto** or **Manual**. In Auto, place the first card and tap **Start scanning**. The green bar fills during the stillness delay. Remove the card after the photo and briefly show the bare surface before placing the next card. Set **Wait before each photo** from **10 ms to 1 second** in Settings. In Manual, tap **Take photo**.
 4. Use zoom to frame the photo. On a supported camera, drag the right-side slider to focus manually. Tap the lock to hold focus or restore autofocus.
 5. Each capture saves the framed JPEG directly. The ding confirms storage, and the alarm plays after the batch target is saved.
 6. Open **Menu → Recent cards**, rotate any upside-down cards, and **Download ZIP** from the menu or gallery. Edit the batch name in the download dialog; it defaults to `Batch#001`, `Batch#002`, etc., and your edit is remembered for later exports. The archive is named after this batch (for example `Batch#001.zip` or `Trade night.zip`). Images inside keep sequential filenames: `Pokemon_0001.jpg`, `Pokemon_0002.jpg`, etc. No gaps are introduced by failed or deleted scans. ZIP order follows physical capture order.
@@ -45,15 +45,15 @@ Open the HTTPS app directly in **Safari on iPhone** or **Chrome on Android**. So
 
 The preview is visible during startup, explicitly muted, and marked for inline playback before its stream is attached. Startup listens for metadata/playing events before calling `play()` and also bounds a pending playback promise, avoiding a silent indefinite Safari wait. Preferred resolution constraints fall back to simpler camera requests when unsupported; permission denials are never retried as resolution errors. Device enumeration, capabilities, and settings APIs are optional and cannot tear down a working preview.
 
-Auto deliberately captures the first stationary card after the quiet interval when a new batch starts. After a capture, it requires fresh movement followed by stillness to avoid repeating the same card. Resuming a partially scanned batch does not recapture its last stationary card. Manual never fires on a timer. Mode switches do not restart the camera. Use **Pause scanning** or **Menu → Stop camera** to pause explicitly; pending snapshots still finish. Background browsers may suspend camera hardware, so the app reconnects on return while preserving scan intent. It never bypasses a denied permission.
+Auto checks low-resolution preview frames for printed detail against the surrounding surface. Once a card is visible and still, Auto copies the confirmed preview frame. After a photo, Auto waits for two camera frames showing the bare surface before it can capture another placement. Clear the view when reopening a saved batch. Manual fires on tap. Mode switches keep the camera running. Use **Pause scanning** or **Menu → Stop camera** to pause capture while pending saves finish. The app reconnects on return if the browser suspended the camera.
 
 Batch size is immutable once a batch exists. Download and explicitly clear the batch to start a different one. **Clearing deletes the active batch**; downloads never clear it automatically. Only one active batch is presented in the UI.
 
 ## Errors, retries, and storage
 
-Each framed JPEG is stored directly in IndexedDB. Previously queued originals are added to the active batch up to its target. Additional originals can be downloaded or added to the batch from **Recent cards**.
+Each framed JPEG is queued for IndexedDB while capture continues. Up to eight unsaved photos can queue, subject to the batch target. Previously queued originals are added to the active batch up to its target. Additional originals can be downloaded or added to the batch from **Recent cards**.
 
-If storage fails, the session stays active and retains the original. It applies storage backpressure instead of taking unlimited unsavable photos, and retries the same retained snapshot every three seconds, including while capture is paused. The camera remains visible. Save originals before closing, and free storage if needed. Missing camera access similarly waits/reconnects. Browser eviction/private browsing can limit persistence. If an older scanner tab blocks a database upgrade, close the older tab to let recovery finish. Export regularly and check your downloaded archive.
+If storage fails, the session stays active and holds the unsaved JPEGs in memory. It waits for storage to recover and retries the retained photos in capture order every three seconds, including while capture is paused. Keep the page open until they save or download the originals. The camera remains visible. Browser eviction and private browsing can limit persistence. If an older scanner tab blocks a database upgrade, close the older tab to let recovery finish.
 
 Deleting a stored scan reduces the count and pauses the scanner, including a previously completed batch. It never starts scanning automatically. Resume explicitly to fill the open slot. Pause capture and finish saving before editing photos.
 
@@ -70,7 +70,7 @@ Deleting a stored scan reduces the count and pauses the scanner, including a pre
 | Photo quality | 100% | JPEG encoding quality for new photos |
 
 | Camera detail | High (2560 px wide) | Advanced; rear-facing, closest available resolution |
-| Alternate photo method | Off | Advanced; optional `ImageCapture.grabFrame()`, with video-canvas fallback |
+| Alternate manual photo method | Off | Advanced; optional `ImageCapture.grabFrame()` for manual shots, with video-canvas fallback |
 
 Zoom controls framing. Camera selection appears after permission, and resolution changes require stopping the camera. The focus slider and lock use camera capabilities exposed by the browser. [MediaStream Image Capture specification](https://w3c.github.io/mediacapture-image/)
 
@@ -83,9 +83,10 @@ The modules have separate responsibilities:
 | File | Responsibility |
 | --- | --- |
 | `src/core/camera.ts` | Persistent rear-camera stream, controls, snapshot capture |
-| `src/core/motion.ts` | 160×120 luma analysis, global brightness compensation, adaptive noise, debounce, hysteresis, timed stability |
+| `src/core/card-presence.ts` | Lightweight card presence check on the 160×120 preview |
+| `src/core/motion.ts` | Exposure-compensated motion, timed stillness, and removal before rearming |
 | `src/core/batch.ts` | Strict slot reservations, bounded queue, ordered commits, storage failures, exact target |
-| `src/core/pipeline.ts` | Direct JPEG saves, batch limits, and storage retries |
+| `src/core/pipeline.ts` | Background JPEG writes, batch limits, and storage retries |
 | `src/core/preferences.ts` | Synchronous browser preference cache and capture-default migration |
 
 | `src/core/storage.ts` | IndexedDB transactions and original photo recovery |

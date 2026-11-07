@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { CameraAccessError } from '../src/core/camera-access';
 import { defaults } from '../src/core/types';
+import { emptyFrame, printedCard } from './card-frame';
 
 const mocks = vi.hoisted(() => ({
   load: vi.fn(), settings: vi.fn(), saveBatch: vi.fn(), create: vi.fn(), rename: vi.fn(),
@@ -36,6 +37,28 @@ function button(label: string) {
 }
 async function renderApp() { await act(async () => root.render(<App />)); }
 async function click(label: string) { await act(async () => button(label).click()); }
+async function startAutoPreview(stabilityMs: number, initial: Uint8Array) {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
+  let frame!: FrameRequestCallback;
+  vi.stubGlobal('requestAnimationFrame', vi.fn(callback => { frame = callback; return 1; }));
+  const pixels = new Uint8ClampedArray(initial.length * 4);
+  function scene(values: Uint8Array) {
+    for (let i = 0; i < values.length; i++) pixels[i * 4] = pixels[i * 4 + 1] = pixels[i * 4 + 2] = values[i];
+  }
+  scene(initial);
+  vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue({ drawImage: vi.fn(), getImageData: () => ({ data: pixels }) } as unknown as CanvasRenderingContext2D);
+  localStorage.setItem('cardslinger-settings', JSON.stringify({ ...defaults, stabilityMs }));
+  await renderApp();
+  const video = container.querySelector('video')!;
+  Object.defineProperties(video, { videoWidth: { value: 1280 }, videoHeight: { value: 720 }, readyState: { value: 4 } });
+  await click('Start scanning');
+  const tick = (ms = 0, values?: Uint8Array) => act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+    if (values) { scene(values); video.currentTime += 0.033; }
+    frame(performance.now());
+  });
+  return { tick, scene, video };
+}
 async function input(selector: string, value: string) {
   await act(async () => {
     const element = container.querySelector(selector) as HTMLInputElement;
@@ -113,39 +136,54 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.focus).toHaveBeenLastCalledWith(false, undefined);
   });
   it('starts a 10 ms countdown on confirmed stillness and cancels it when a fresh frame shows movement', async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
-    let frame!: FrameRequestCallback;
-    vi.stubGlobal('requestAnimationFrame', vi.fn(callback => { frame = callback; return 1; }));
-    const pixels = new Uint8ClampedArray(160 * 120 * 4).fill(100);
-    vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue({ drawImage: vi.fn(), getImageData: () => ({ data: pixels }) } as unknown as CanvasRenderingContext2D);
-    localStorage.setItem('cardslinger-settings', JSON.stringify({ ...defaults, stabilityMs: 10 }));
-    await renderApp();
-    const video = container.querySelector('video')!;
-    Object.defineProperties(video, { videoWidth: { value: 1280 }, videoHeight: { value: 720 }, readyState: { value: 4 } });
-    await click('Start scanning');
-    await act(async () => frame(performance.now()));
-    expect(container.querySelector('.auto-countdown')).toBeNull();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(33);
-      video.currentTime = .033;
-      frame(performance.now());
-    });
-    expect(container.querySelector('.auto-countdown')).not.toBeNull();
-    await act(async () => { await vi.advanceTimersByTimeAsync(9); });
+    const { tick, scene, video } = await startAutoPreview(10, printedCard());
+    await tick();
+    expect(container.querySelector('.auto-countdown:not([hidden])')).toBeNull();
+    await tick(33, printedCard());
+    expect(container.querySelector('.auto-countdown:not([hidden])')).not.toBeNull();
+    await tick(9);
     expect(mocks.capture).not.toHaveBeenCalled();
-    for (let i = 0; i < pixels.length; i += 4) pixels[i] = pixels[i + 1] = pixels[i + 2] = i % 8 ? 40 : 200;
+    scene(printedCard(1));
     video.currentTime = .043;
     await act(async () => { await vi.advanceTimersByTimeAsync(1); });
     expect(mocks.capture).not.toHaveBeenCalled();
-    expect(container.querySelector('.auto-countdown')).toBeNull();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(23);
-      video.currentTime = .066;
-      frame(performance.now());
-      await vi.advanceTimersByTimeAsync(10);
-    });
+    expect(container.querySelector('.auto-countdown:not([hidden])')).toBeNull();
+    await tick(23, printedCard(1));
+    await tick(10);
     expect(mocks.capture).toHaveBeenCalledTimes(1);
     expect(container.querySelector('.auto-countdown.is-snapped')).not.toBeNull();
+  });
+  it('fills the bar, skips the bare surface, and takes the next card before the first save completes', async () => {
+    let release!: () => void;
+    mocks.accept.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve; }));
+    const empty = emptyFrame(), card = printedCard();
+    const { tick } = await startAutoPreview(200, empty);
+    await tick();
+    await tick(400, empty);
+    expect(mocks.capture).not.toHaveBeenCalled();
+    await tick(33, card);
+    await tick(33, card);
+    const progress = () => container.querySelector<HTMLDivElement>('.auto-countdown > div')!.style.getPropertyValue('--countdown-progress');
+    expect(progress()).toBe('0');
+    await tick(100);
+    expect(progress()).toBe('0.5');
+    await tick(100);
+    expect(mocks.capture).toHaveBeenCalledTimes(1);
+    await tick(33, printedCard(1));
+    await tick(250, printedCard(1));
+    expect(mocks.capture).toHaveBeenCalledTimes(1);
+    await tick(33, empty);
+    await tick(33, empty);
+    await tick(250, empty);
+    expect(mocks.capture).toHaveBeenCalledTimes(1);
+    await tick(33, card);
+    await tick(33, card);
+    await tick(200);
+    expect(mocks.capture).toHaveBeenCalledTimes(2);
+    expect(mocks.accept).toHaveBeenCalledTimes(1);
+    await act(async () => release());
+    expect(mocks.accept).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('.scan-count')?.textContent).toBe('2 / 50');
   });
   it('saves each manual photo immediately with its original bytes and dimensions', async () => {
     await renderApp();

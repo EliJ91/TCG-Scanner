@@ -21,12 +21,13 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 
 ## Motion and framing
 
-- [ ] Test the green bar at 10 ms and 1 second. Movement should clear it. Hold the frame still and check for exactly one photo.
+- [ ] Test the green bar at 10 ms and 1 second. At 1 second, check that the fill progresses from left to right. Movement should clear it. Hold the card still and check for exactly one photo.
 - [ ] In Manual, wait over a stationary card: zero automatic photos. Each Take photo tap requests one photo, subject only to raw storage and remaining batch capacity.
 - [ ] Switch Auto/Manual while active. Keep the same preview and batch, with no extra stationary duplicate.
 - [ ] Slide in a card and hold still. Check for one ding and one JPEG with the same framing as the preview.
 - [ ] Leave it stationary for 30 seconds: no duplicate scans.
-- [ ] Slide another card directly over the last with no empty interval: exactly one new scan.
+- [ ] Slide another card directly over the last with no empty interval: no new scan.
+- [ ] Remove the card and leave the bare surface visible for at least two camera frames. Check that no photo is taken until a card is placed and held still again.
 - [ ] Repeat with two or more identical-artwork cards. Count physical cards against saved images.
 - [ ] Test yellow, white, silver, and dark borders; textured and holographic cards; slight rotation; mild perspective. Inspect corners at full resolution.
 - [ ] Move a lamp or trigger autofocus. Small noise/global exposure changes should not add scans. Strong local shadows may require a higher motion threshold.
@@ -40,6 +41,7 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 - [ ] Check that the ding follows a successful write and the completion alarm follows the final saved photo.
 - [ ] Force the final image to fail. Batch remains incomplete; no completion alarm until the valid replacement fills its slot.
 - [ ] Feed one card per second and compare the physical count with the saved photos.
+- [ ] Slow a storage write and replace the card while it is pending. Confirm capture continues and queued JPEGs save in order.
 
 - [ ] Pause while saving. Confirm that the save finishes and new capture waits for Resume.
 - [ ] Resume over the same stationary card: no duplicate. Explicit capture is available if needed.

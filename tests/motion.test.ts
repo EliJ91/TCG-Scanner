@@ -1,72 +1,92 @@
 import { describe, it, expect } from 'vitest';
+import { CardPresenceDetector, previewWidth } from '../src/core/card-presence';
 import { MotionDetector } from '../src/core/motion';
-const frame = (value = 100) => new Uint8Array(1200).fill(value);
-const pattern = (seed: number) => Uint8Array.from({ length: 1200 }, (_, i) => 30 + (i * 37 + seed * 57) % 180);
-function settle(d: MotionDetector, f: Uint8Array, start: number) {
-  return [0,70,140,210,280].map(t => d.update(f, start + t));
+import { emptyFrame, printedCard } from './card-frame';
+
+const presence = new CardPresenceDetector();
+function sample(d: MotionDetector, frame: Uint8Array, now: number) {
+  return d.update(frame, now, presence.detect(frame));
 }
-describe('motion state machine', () => {
-  it('can arm a first auto photo after a full quiet placement interval without requiring a slide', () => {
-    const d = new MotionDetector(1200); d.reset(true);
-    for (let t = 0; t < 1200; t += 100) expect(d.update(pattern(1), t).capture).toBe(false);
-    expect(d.update(pattern(1), 1200).capture).toBe(false);
-    expect(d.update(pattern(1), 1300).capture).toBe(true);
-    d.consume(); expect(d.update(pattern(1), 1400).capture).toBe(false);
+
+describe('card-gated motion', () => {
+  it.each([248, 45])('distinguishes a silver-bordered card from a plain surface at brightness %i', level => {
+    expect(presence.detect(emptyFrame(level))).toBe('empty');
+    expect(presence.detect(printedCard(0, level))).toBe('card');
   });
-  it('restarts the quiet countdown whenever placement movement continues', () => {
-    const d = new MotionDetector(1200); d.reset(true); d.update(pattern(1), 0);
-    d.update(pattern(1), 400); d.update(pattern(2), 800); d.update(pattern(3), 1000);
-    for (const t of [1100,1400,1700,2000]) expect(d.update(pattern(3), t).capture).toBe(false);
-    expect(d.update(pattern(3), 2300).capture).toBe(true);
-  });
-  it('requires motion then stabilization', () => {
-    const d = new MotionDetector(200); d.update(frame(), 0);
-    expect(d.update(pattern(1), 70).state).toBe('moving');
-    const readings = settle(d, pattern(1), 140);
-    expect(readings.filter(r => r.capture)).toHaveLength(1);
-  });
-  it('does not capture a stationary card on start', () => {
+
+  it('does not mistake a smooth obstruction or an exposure shift for a card', () => {
+    const obstructed = emptyFrame();
+    for (let y = 18; y < 102; y++) obstructed.fill(120 + Math.round(y / 4), y * previewWidth + 40, y * previewWidth + 120);
+    expect(presence.detect(obstructed)).toBe('uncertain');
     const d = new MotionDetector();
-    expect(Array.from({ length: 40 }, (_, i) => d.update(pattern(1), i * 70)).some(r => r.capture)).toBe(false);
-  });
-  it('does not capture twice after a movement cycle', () => {
-    const d = new MotionDetector(200); d.update(frame(), 0); d.update(pattern(1), 70);
-    settle(d, pattern(1), 140); d.consume();
-    expect(settle(d, pattern(1), 500).some(r => r.capture)).toBe(false);
-  });
-  it('captures two identical cards when each physically slides in', () => {
-    const d = new MotionDetector(200); const card = pattern(1);
-    d.update(frame(), 0); d.update(pattern(2), 70); d.update(card, 140);
-    expect(settle(d, card, 210).filter(r => r.capture)).toHaveLength(1); d.consume();
-    d.update(pattern(3), 560); d.update(pattern(2), 630); d.update(card, 700);
-    expect(settle(d, card, 770).filter(r => r.capture)).toHaveLength(1);
-  });
-  it('does not capture during rapid consecutive movement', () => {
-    const d = new MotionDetector(220); d.update(pattern(0), 0);
-    for (let i = 1; i <= 10; i++) expect(d.update(pattern(i), i * 70).capture).toBe(false);
-    expect(settle(d, pattern(10), 770).filter(r => r.capture)).toHaveLength(1);
-  });
-  it('ignores global brightness changes', () => {
-    const d = new MotionDetector(200);
-    expect(Array.from({ length: 20 }, (_, i) => d.update(frame(i % 2 ? 140 : 100), i * 70)).some(r => r.capture)).toBe(false);
-  });
-  it('rejects a short flash that returns to baseline', () => {
-    const d = new MotionDetector(); d.update(pattern(1), 0); d.update(pattern(2), 70); d.update(pattern(1), 105);
-    expect(settle(d, pattern(1), 140).some(r => r.capture)).toBe(false);
-  });
-  it('resets the baseline on pause/resume', () => {
-    const d = new MotionDetector(); d.update(frame(), 0); d.update(pattern(1), 70); d.reset();
-    expect(settle(d, pattern(1), 1000).some(r => r.capture)).toBe(false);
-  });
-  it('drops interrupted stability after a long frame gap', () => {
-    const d = new MotionDetector(); d.update(frame(), 0); d.update(pattern(1), 70);
-    d.update(pattern(1), 140); expect(d.update(pattern(1), 2000).capture).toBe(false);
-  });
-  it('ignores small camera noise', () => {
-    const d = new MotionDetector(); const a = pattern(1);
-    for (let i = 0; i < 40; i++) {
-      const b = a.map((v, j) => v + ((j + i) % 5) - 2);
-      expect(d.update(b, i * 70).capture).toBe(false);
+    for (let t = 0; t <= 900; t += 30) {
+      const frame = t % 60 ? obstructed : emptyFrame(150 + t % 80);
+      expect(sample(d, frame, t).state).toBe('waiting');
+      expect(d.deadline).toBeNull();
     }
+  });
+
+  it('starts at zero on confirmed stillness and reaches full at the configured time', () => {
+    const d = new MotionDetector(200), card = printedCard();
+    expect(sample(d, card, 0).state).toBe('waiting');
+    expect(sample(d, card, 33)).toMatchObject({ state: 'stabilizing', stability: 0 });
+    expect(d.advance(133)).toMatchObject({ state: 'stabilizing', stability: 0.5 });
+    expect(d.advance(233)).toMatchObject({ state: 'ready', stability: 1 });
+  });
+
+  it('restarts the countdown when a new frame moves', () => {
+    const d = new MotionDetector(200), first = printedCard(0), moved = printedCard(1);
+    sample(d, first, 0); sample(d, first, 33);
+    expect(sample(d, moved, 232).state).toBe('moving');
+    expect(d.deadline).toBeNull();
+    expect(sample(d, moved, 260).stability).toBe(0);
+    expect(d.advance(459).state).toBe('stabilizing');
+    expect(d.advance(460).state).toBe('ready');
+  });
+
+  it('does not photograph removal, duplicate a card, or rearm on a single empty frame', () => {
+    const d = new MotionDetector(10), card = printedCard(), empty = emptyFrame();
+    sample(d, card, 0); sample(d, card, 33); expect(d.advance(43).state).toBe('ready');
+    d.consume();
+    for (const [i, frame] of [card, printedCard(1), empty, card, card].entries()) {
+      expect(sample(d, frame, 66 + i * 33)).toMatchObject({ state: 'waiting', needsRemoval: true });
+    }
+    expect(sample(d, empty, 240).needsRemoval).toBe(true);
+    expect(sample(d, empty, 273)).toMatchObject({ state: 'waiting', needsRemoval: false });
+    expect(d.advance(600).state).toBe('waiting');
+    sample(d, card, 633); sample(d, card, 666);
+    expect(d.advance(676).state).toBe('ready');
+  });
+
+  it('cancels a countdown when the card disappears', () => {
+    const d = new MotionDetector(200), card = printedCard();
+    sample(d, card, 0); sample(d, card, 33);
+    expect(sample(d, emptyFrame(), 232).state).toBe('waiting');
+    expect(d.advance(233).state).toBe('waiting');
+  });
+
+  it('preserves the removal requirement on reset and across camera stalls', () => {
+    const d = new MotionDetector(10), card = printedCard();
+    d.consume(); d.reset();
+    expect(sample(d, card, 0).needsRemoval).toBe(true);
+    expect(sample(d, card, 1000).needsRemoval).toBe(true);
+    expect(sample(d, card, 1033).state).toBe('waiting');
+  });
+
+  it('drops interrupted stability without firing from a frozen video frame', () => {
+    const d = new MotionDetector(1000), card = printedCard();
+    sample(d, card, 0); sample(d, card, 33);
+    expect(d.advance(1033).state).toBe('waiting');
+    expect(sample(d, card, 2000).state).toBe('waiting');
+  });
+
+  it('keeps a still countdown through small sensor noise and uniform exposure changes', () => {
+    const d = new MotionDetector(100), card = printedCard(0, 220);
+    sample(d, card, 0);
+    for (const now of [33, 66, 99, 132]) {
+      const adjusted = card.map((v, index) => v - now % 25 + index % 3);
+      expect(sample(d, adjusted, now).state).toBe('stabilizing');
+    }
+    expect(d.advance(133).state).toBe('ready');
   });
 });
