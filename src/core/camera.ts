@@ -114,12 +114,10 @@ export class Camera {
       if (generation !== this.generation) throw new Error('The camera changed.');
       const next = { ...this.adjustments, ...values };
       for (const key of Object.keys(next)) if (next[key] === undefined) delete next[key];
-      const { focusMode, focusDistance, ...other } = next;
+      // Chromium requires stream constraints and ImageCapture controls in separate sets.
       const constraints = {
         ...this.baseConstraints,
-        advanced: [...(this.baseConstraints.advanced ?? []), other as MediaTrackConstraintSet],
-        ...(typeof focusMode === 'string' ? { focusMode: { exact: focusMode } } : {}),
-        ...(typeof focusDistance === 'number' ? { focusDistance: { exact: focusDistance } } : {}),
+        advanced: [...(this.baseConstraints.advanced ?? []), next as MediaTrackConstraintSet],
       };
       await track.applyConstraints(constraints);
       if (generation === this.generation) this.adjustments = next;

@@ -102,22 +102,29 @@ describe('direct mobile camera permission requests', () => {
 });
 
 describe('mobile video preview startup', () => {
-  it('locks the current focus distance and preserves it when another camera control changes', async () => {
+  it('locks focus without mixing stream and photo controls in a constraint set', async () => {
     const {stream, track} = streamFixture();
     getUserMedia.mockResolvedValue(stream);
     track.getCapabilities.mockReturnValue({ focusMode: ['manual', 'continuous'], focusDistance: { min: 0, max: 10, step: 0.5 } });
     track.getSettings.mockReturnValue({ focusDistance: 2.5 });
+    track.applyConstraints.mockImplementation(async ({ advanced = [], ...basic }) => {
+      const mixed = [basic, ...advanced].some(set => 'width' in set && ('focusMode' in set || 'focusDistance' in set || 'torch' in set));
+      if (mixed) throw new DOMException('Mixing ImageCapture and non-ImageCapture constraints is not currently supported', 'OverconstrainedError');
+    });
     const camera = new Camera(new Preview() as unknown as HTMLVideoElement, vi.fn());
     await camera.start(1920);
     await expect(camera.focus(true)).resolves.toBe(2.5);
+    expect(track.applyConstraints).toHaveBeenLastCalledWith({
+      width: { ideal: 1920 }, advanced: [{ focusMode: 'manual', focusDistance: 2.5 }],
+    });
     await expect(camera.focus(true, 30)).resolves.toBe(10);
     await camera.control({ torch: true });
     expect(track.applyConstraints).toHaveBeenLastCalledWith({
-      width: { ideal: 1920 }, advanced: [{ torch: true }], focusMode: { exact: 'manual' }, focusDistance: { exact: 10 },
+      width: { ideal: 1920 }, advanced: [{ focusMode: 'manual', focusDistance: 10, torch: true }],
     });
     await camera.focus(false);
     expect(track.applyConstraints).toHaveBeenLastCalledWith({
-      width: { ideal: 1920 }, advanced: [{ torch: true }], focusMode: { exact: 'continuous' },
+      width: { ideal: 1920 }, advanced: [{ focusMode: 'continuous', torch: true }],
     });
   });
   it('uses the same centered zoom crop for the saved full-resolution snapshot', async () => {
