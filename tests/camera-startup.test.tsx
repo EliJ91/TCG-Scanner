@@ -315,7 +315,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await click('Settings');
     expect(container.querySelector('.advanced-settings')?.textContent).not.toMatch(/Troubleshooting|Lock brightness and color/);
     const quality = container.querySelector<HTMLSelectElement>('select[aria-label="Photo quality"]')!;
-    expect(Array.from(quality.options, option => option.text)).toEqual(['Small', 'Balanced', 'Best']);
+    expect(Array.from(quality.options, option => option.text)).toEqual(['Lowest', 'Balanced', 'Best']);
     expect(quality.value).toBe('0.9');
     await act(async () => { quality.value = '0.8'; quality.dispatchEvent(new Event('change', { bubbles: true })); });
     expect(mocks.settings.mock.calls.at(-1)?.[0].quality).toBe(0.8);

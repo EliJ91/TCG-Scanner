@@ -6,7 +6,7 @@ import { createZip, downloadArchive, rotateScan } from './core/export';
 import { archiveFilename, defaultBatchName, filename, maxBatchTarget, message, validBatchTarget, type Batch, type Scan } from './core/types';
 
 const photoQualities = [
-  { value: 0.8, label: 'Small' },
+  { value: 0.8, label: 'Lowest' },
   { value: 0.9, label: 'Balanced' },
   { value: 1, label: 'Best' },
 ];

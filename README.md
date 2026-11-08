@@ -70,7 +70,7 @@ Deleting a stored scan reduces the count and pauses the scanner, including a pre
 | Wait before each photo | 100 ms | Adjustable from 10 ms to 1 second |
 | Ignore small movements | 2.5% | The Less to More slider adjusts which movements restart the countdown |
 | Zoom | 1× | Preview slider, 1–3× center crop; capture and motion use identical framing |
-| Photo quality | Best | Choose Small, Balanced, or Best |
+| Photo quality | Best | Choose Lowest, Balanced, or Best |
 
 | Camera resolution | High (2560 px wide) | Requests a camera frame width. The phone chooses the closest supported size |
 | Alternate manual photo method | Off | Advanced; optional `ImageCapture.grabFrame()` for manual shots, with video-canvas fallback |
