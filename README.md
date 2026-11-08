@@ -38,6 +38,8 @@ The centered scanner includes an editable batch name, zoom slider, capture mode,
 
 Toggle dark/light mode under **Menu → Settings → Dark mode**. Dark mode uses a pure black background and neutral gray surfaces, with monochrome controls. The initial theme follows your device preference and your selection is remembered locally.
 
+Turn on **Newest first in gallery** in Settings to see your latest scans at the top of Recent cards.
+
 ### Mobile camera access
 
 The preview opens independently of saved-data loading. **Enable camera** remains available when browser policy requires a tap. Capture starts when you choose **Start scanning** or **Take photo**.

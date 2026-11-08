@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Aperture, ArrowDownToLine, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Focus, Gauge, Images, Layers3, Lock, LockOpen, Menu, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, Share2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X } from 'lucide-react';
 import { useScanner } from './useScanner';
 import { useTheme } from './useTheme';
@@ -137,16 +137,21 @@ export default function App() {
   const batchReserved = count + s.pending >= quantity;
   const progress = Math.min(100, count / quantity * 100);
   const rate = s.measuredScans > 1 && s.elapsedMs > 0 ? (s.measuredScans / (s.elapsedMs / 60000)).toFixed(1) : '—';
-  const latest = s.scans.at(-1), active = s.scans.find(scan => scan.id === selected);
+  const newestFirst = s.settings.galleryNewestFirst;
+  const galleryScans = useMemo(() => newestFirst ? [...s.scans].reverse() : s.scans, [newestFirst, s.scans]);
+  const activeIndex = selected ? galleryScans.findIndex(scan => scan.id === selected) : -1;
+  const active = galleryScans[activeIndex];
+  const captureIndex = (index: number) => newestFirst ? count - 1 - index : index;
   const safe = async (action: () => Promise<unknown>) => { setWorking(true); try { await action(); } catch (err) { s.setError(message(err)); } finally { setWorking(false); } };
   const exportButton = () => <button className="button dark" aria-label={`Export ZIP, ${count} saved photos`} disabled={!count || editingDisabled} onClick={() => setExportOpen(true)}><ArrowDownToLine size={17} />Export ZIP<span className="button-count">{count}</span></button>;
   const gallery = () => <>
-    {count ? <div className="gallery-grid">{s.scans.map((scan, index) => {
+    {count ? <div className="gallery-grid">{galleryScans.map((scan, index) => {
+      const imageIndex = captureIndex(index);
       return <button className="scan-tile" key={scan.id} onClick={() => setSelected(scan.id)}>
-        <div className="scan-image"><BlobImage blob={scan.thumbnail ?? scan.blob} alt={`Scanned card ${index + 1}`} loading="lazy" /><span><Check size={12} /></span></div>
-        <span className="scan-name">{filename(index)}</span><span className="scan-meta">{scan.width && scan.height ? `${scan.width} × ${scan.height}` : 'JPEG'}</span>
+        <div className="scan-image"><BlobImage blob={scan.thumbnail ?? scan.blob} alt={`Scanned card ${imageIndex + 1}`} loading="lazy" /><span><Check size={12} /></span></div>
+        <span className="scan-name">{filename(imageIndex)}</span><span className="scan-meta">{scan.width && scan.height ? `${scan.width} × ${scan.height}` : 'JPEG'}</span>
       </button>;
-    })}</div> : <div className="gallery-empty"><div className="empty-icon"><Images size={26} strokeWidth={1.5} /></div><strong>Your collection starts here</strong><p>Photos appear here in capture order.</p></div>}
+    })}</div> : <div className="gallery-empty"><div className="empty-icon"><Images size={26} strokeWidth={1.5} /></div><strong>Your collection starts here</strong><p>Saved photos appear here.</p></div>}
     {s.attempts.length > 0 && <div className="attempts">
       <h3>Retained photos</h3>
       {s.attempts.map(photo => <div className="attempt" key={photo.id}>
@@ -338,6 +343,7 @@ export default function App() {
     {showSettings && <Dialog title="Settings" close={() => setShowSettings(false)}><div className="settings-content simple-settings">
       <p className="dialog-intro">Your choices are saved automatically on this device.</p>
       <Toggle label="Dark mode" checked={theme.dark} onChange={theme.setDark} />
+      <Toggle label="Newest first in gallery" hint="Show your most recent photos at the top." checked={newestFirst} onChange={galleryNewestFirst => s.setSettings({ ...s.settings, galleryNewestFirst })} />
       <Setting label="Wait before each photo" value={waitLabel} hint="Auto takes a photo once movement stops and the green bar fills.">
         <input aria-label="Wait before each photo" type="range" min="10" max="1000" step="10" value={s.settings.stabilityMs} onChange={event => s.setSettings({ ...s.settings, stabilityMs: +event.target.value })} />
       </Setting>
@@ -373,7 +379,16 @@ export default function App() {
     ].map(([title, text], i) => <div className="guide-step" key={title}><span>{String(i + 1).padStart(2,'0')}</span><div><h3>{title}</h3><p>{text}</p></div></div>)}<div className="guide-callout"><ShieldCheck size={18} /><p>Scans stay in this browser’s local storage. Download your batch before clearing browser data. When reopening a saved batch in Auto, clear the camera view before placing a card.</p></div></div><div className="dialog-footer"><button className="button primary" onClick={() => setShowHelp(false)}>Ready to scan <ArrowRight size={16} /></button></div></Dialog>}
     {confirmClear && <Dialog title="Start a fresh batch?" close={() => setConfirmClear(false)}><div className="confirm-content"><p>This deletes this batch’s {count} saved images and {s.attempts.length} retained captures from this device. Download your ZIP first if you want to keep them.</p>{exportButton()}<p className="setting-hint">A download does not automatically clear your batch.</p></div><div className="dialog-footer"><button className="button outline" onClick={() => setConfirmClear(false)}>Keep batch</button><button className="button danger" disabled={editingDisabled} onClick={() => void safe(async () => { await s.clear(); setExportOpen(false); setConfirmClear(false); setShowBatch(false); setShowGallery(false); setShowMenu(false); })}><Trash2 size={15} /> Delete & start new</button></div></Dialog>}
     {exportOpen && s.batch && <BatchExport batch={s.batch} scans={s.scans} disabled={editingDisabled} rename={s.renameBatch} close={() => setExportOpen(false)} />}
-    {active && <Dialog title={filename(s.scans.findIndex(a => a.id === active.id))} close={() => setSelected(undefined)} wide><div className="review-image"><BlobImage blob={active.blob} alt="Full-resolution scanned card" /></div><div className="review-meta"><span>{active.width && active.height ? `${active.width} × ${active.height} · JPEG` : 'JPEG'}</span></div><div className="dialog-footer review-actions"><button className="icon-button" aria-label="Previous card" disabled={s.scans[0].id === active.id} onClick={() => setSelected(s.scans[s.scans.findIndex(a => a.id === active.id) - 1]?.id)}><ArrowLeft size={20} /></button><button className="button outline" disabled={editingDisabled} onClick={() => void safe(async () => s.updateScan(await rotateScan(active)))}><RotateCw size={16} /> Rotate 180°</button><button className="button danger-outline" disabled={editingDisabled} onClick={() => setDeleteId(active.id)}><Trash2 size={16} /> Delete</button><button className="icon-button" aria-label="Next card" disabled={latest?.id === active.id} onClick={() => setSelected(s.scans[s.scans.findIndex(a => a.id === active.id) + 1]?.id)}><ArrowRight size={20} /></button></div></Dialog>}
+    {active && <Dialog title={filename(captureIndex(activeIndex))} close={() => setSelected(undefined)} wide>
+      <div className="review-image"><BlobImage blob={active.blob} alt="Full-resolution scanned card" /></div>
+      <div className="review-meta"><span>{active.width && active.height ? `${active.width} × ${active.height} · JPEG` : 'JPEG'}</span></div>
+      <div className="dialog-footer review-actions">
+        <button className="icon-button" aria-label="Previous card" disabled={activeIndex === 0} onClick={() => setSelected(galleryScans[activeIndex - 1]?.id)}><ArrowLeft size={20} /></button>
+        <button className="button outline" disabled={editingDisabled} onClick={() => void safe(async () => s.updateScan(await rotateScan(active)))}><RotateCw size={16} /> Rotate 180°</button>
+        <button className="button danger-outline" disabled={editingDisabled} onClick={() => setDeleteId(active.id)}><Trash2 size={16} /> Delete</button>
+        <button className="icon-button" aria-label="Next card" disabled={activeIndex === count - 1} onClick={() => setSelected(galleryScans[activeIndex + 1]?.id)}><ArrowRight size={20} /></button>
+      </div>
+    </Dialog>}
     {deleteId && <Dialog title="Delete this scan?" close={() => setDeleteId(undefined)}><div className="confirm-content"><p>The image will be removed and exported filenames will stay sequential. Scanning stays paused until you explicitly resume.</p></div><div className="dialog-footer"><button className="button outline" onClick={() => setDeleteId(undefined)}>Keep image</button><button className="button danger" disabled={editingDisabled} onClick={() => void safe(async () => { const scan = s.scans.find(a => a.id === deleteId); if (scan) await s.remove(scan); setSelected(undefined); setDeleteId(undefined); })}>Delete image</button></div></Dialog>}
   </>;
 }

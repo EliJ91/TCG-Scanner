@@ -3,13 +3,13 @@ export interface Settings {
   focusLocked: boolean; focusDistance: number | null;
   captureMode: 'auto' | 'manual'; zoom: number;
   stabilityMs: number; sensitivity: number; quality: number;
-  volume: number; muted: boolean; debug: boolean;
+  volume: number; muted: boolean; debug: boolean; galleryNewestFirst: boolean;
   resolution: number; useImageCapture: boolean;
 }
 export const defaults: Settings = {
   captureVersion: 3, cameraId: '', torch: false, lockCamera: false, focusLocked: false, focusDistance: null,
   captureMode: 'auto', zoom: 1, stabilityMs: 100, sensitivity: 0.025, quality: 1,
-  volume: 0.6, muted: false, debug: false,
+  volume: 0.6, muted: false, debug: false, galleryNewestFirst: false,
   resolution: 2560, useImageCapture: false,
 };
 export interface Batch {

@@ -283,8 +283,20 @@ describe('manual capture, continuous errors, and batch naming', () => {
     const gallery = container.querySelector('dialog[open]');
     expect(gallery?.querySelector('h2')?.textContent).toBe('Recent cards');
     expect(gallery?.querySelectorAll('img')).toHaveLength(5);
-    await act(async () => gallery?.querySelector<HTMLButtonElement>('.scan-tile')?.click());
+    expect(gallery?.querySelector('.scan-name')?.textContent).toBe('Pokemon_0001.jpg');
+    await act(async () => gallery?.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')?.click());
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
+    await click('Settings');
+    const order = [...container.querySelectorAll('label')].find(label => label.textContent?.startsWith('Newest first in gallery'));
+    await act(async () => order!.querySelector('input')!.click());
+    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!).galleryNewestFirst).toBe(true);
+    await click('Done');
+    await click('5 / 50');
+    expect(container.querySelector('.scan-name')?.textContent).toBe('Pokemon_0005.jpg');
+    await act(async () => container.querySelector<HTMLButtonElement>('.scan-tile')!.click());
     expect(container.querySelector('dialog[open] img[alt="Full-resolution scanned card"]')).not.toBeNull();
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Next card"]')!.click());
+    expect(container.querySelector('.review-image')?.closest('dialog')?.querySelector('h2')?.textContent).toBe('Pokemon_0004.jpg');
   });
   it('restores cached camera controls and resets settings without deleting the saved batch', async () => {
     mocks.capabilities={torch:true,focusMode:['manual','continuous']};
