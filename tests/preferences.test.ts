@@ -21,9 +21,9 @@ describe('browser-cached camera preferences',()=>{
     expect(cachedSettings({...defaults,cameraId:'rear',zoom:2}).zoom).toBe(2);
     localStorage.setItem('cardslinger-settings','invalid');expect(cachedSettings({...defaults,torch:true}).torch).toBe(true);
   });
-  it('keeps legacy focus and photo quality while dropping retired preferences',()=>{
+  it('keeps legacy focus and rounds older quality settings to the nearest preset',()=>{
     const settings = normalizeSettings({ lockCamera: true, debug: true, quality: 0.86 });
-    expect(settings).toMatchObject({ focusLocked: true, quality: 0.86 });
+    expect(settings).toMatchObject({ focusLocked: true, quality: 0.9 });
     expect(settings).not.toHaveProperty('lockCamera');
     expect(settings).not.toHaveProperty('debug');
   });

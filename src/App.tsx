@@ -6,9 +6,9 @@ import { createZip, downloadArchive, rotateScan } from './core/export';
 import { archiveFilename, defaultBatchName, filename, maxBatchTarget, message, validBatchTarget, type Batch, type Scan } from './core/types';
 
 const photoQualities = [
-  { value: 0.8, label: 'Smaller files (80%)' },
-  { value: 0.9, label: 'Balanced (90%)' },
-  { value: 1, label: 'Best quality (100%)' },
+  { value: 0.8, label: 'Small' },
+  { value: 0.9, label: 'Balanced' },
+  { value: 1, label: 'Best' },
 ];
 
 function BlobImage({ blob, alt, ...props }: { blob: Blob; alt: string } & React.ImgHTMLAttributes<HTMLImageElement>) {
@@ -385,7 +385,6 @@ export default function App() {
         </Setting>
         <label className="select-setting">Photo quality
           <select aria-label="Photo quality" disabled={busy} value={s.settings.quality} onChange={e => s.setSettings({ ...s.settings, quality: +e.target.value })}>
-            {!photoQualities.some(option => option.value === s.settings.quality) && <option value={s.settings.quality}>Current ({Math.round(s.settings.quality * 100)}%)</option>}
             {photoQualities.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
           <small>Higher JPEG quality makes larger files.</small>

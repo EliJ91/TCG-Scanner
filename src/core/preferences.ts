@@ -2,7 +2,7 @@ import { defaults, type Settings } from './types';
 const key = 'cardslinger-settings';
 const batchNameKey = 'cardslinger-custom-batch-name';
 type SavedSettings = Partial<Settings> & { lockCamera?: boolean; debug?: boolean };
-/** Migrate the earlier slow-capture defaults once, preserving all other choices. */
+/** Migrate saved settings to the current controls. */
 export function normalizeSettings(saved?: SavedSettings): Settings {
   const { lockCamera, debug: _debug, ...current } = saved ?? {};
   const next = { ...defaults, ...current };
@@ -11,6 +11,9 @@ export function normalizeSettings(saved?: SavedSettings): Settings {
   next.captureVersion = defaults.captureVersion;
   next.zoom = Number.isFinite(next.zoom) ? Math.max(1, Math.min(3, next.zoom)) : defaults.zoom;
   next.stabilityMs = Number.isFinite(next.stabilityMs) ? Math.max(10, Math.min(1000, Math.round(next.stabilityMs))) : defaults.stabilityMs;
+  next.quality = Number.isFinite(next.quality)
+    ? Math.max(8, Math.min(10, Math.round(next.quality * 10))) / 10
+    : defaults.quality;
   next.focusLocked = current.focusLocked ?? lockCamera ?? defaults.focusLocked;
   next.focusDistance = typeof next.focusDistance === 'number' && Number.isFinite(next.focusDistance) ? next.focusDistance : null;
   next.cameraId = typeof next.cameraId === 'string' ? next.cameraId : '';
