@@ -72,7 +72,10 @@ beforeEach(() => {
   mocks.capabilities={}; mocks.control.mockResolvedValue(undefined); mocks.lock.mockResolvedValue(undefined); mocks.focus.mockResolvedValue(2);
   mocks.load.mockResolvedValue(loaded); mocks.settings.mockResolvedValue(undefined); mocks.saveBatch.mockResolvedValue(undefined);
   mocks.start.mockResolvedValue({ width: 1280, height: 720 }); mocks.unlock.mockResolvedValue(true);
-  mocks.capture.mockResolvedValue({ blob: new Blob(['source'], { type: 'image/jpeg' }), width: 1280, height: 720 });
+  mocks.capture.mockImplementation(async (_alternate, _quality, frameCopied) => {
+    frameCopied();
+    return { blob: new Blob(['source'], { type: 'image/jpeg' }), width: 1280, height: 720 };
+  });
   mocks.getAttempt.mockResolvedValue(undefined);
   mocks.accept.mockResolvedValue(undefined); mocks.rename.mockResolvedValue(undefined);
   mocks.create.mockImplementation(async (target, name) => ({id:'test-batch',number:1,name:name || 'Batch#001',target,createdAt:Date.now(),status:'paused',nextOrdinal:0}));
@@ -156,7 +159,10 @@ describe('manual capture, continuous errors, and batch naming', () => {
   it('animates the bar and keeps taking cards during a slow encode and a slow save', async () => {
     const jpeg = { blob: new Blob(['first JPEG'], { type: 'image/jpeg' }), width: 1280, height: 720 };
     let finishEncoding!: (image: typeof jpeg) => void, finishSaving!: () => void;
-    mocks.capture.mockImplementationOnce(() => new Promise(resolve => { finishEncoding = resolve; }));
+    mocks.capture.mockImplementationOnce((_alternate, _quality, frameCopied) => {
+      frameCopied();
+      return new Promise(resolve => { finishEncoding = resolve; });
+    });
     mocks.accept.mockImplementationOnce(() => new Promise<void>(resolve => { finishSaving = resolve; }));
     const empty = emptyFrame(), card = printedCard();
     const { tick } = await startAutoPreview(200, empty);
@@ -169,8 +175,12 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(fill.style.animation).toBe('shutter-fill 200ms linear both');
     await tick(100);
     expect(mocks.capture).not.toHaveBeenCalled();
+    expect(mocks.success).not.toHaveBeenCalled();
     await tick(100);
     expect(mocks.capture).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('.auto-countdown.is-snapped')).not.toBeNull();
+    expect(mocks.success).toHaveBeenCalledOnce();
+    expect(mocks.accept).not.toHaveBeenCalled();
     await tick(33, printedCard(1));
     await tick(250, printedCard(1));
     expect(mocks.capture).toHaveBeenCalledTimes(1);
@@ -192,11 +202,17 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await tick(200);
     expect(mocks.capture).toHaveBeenCalledTimes(3);
     expect(mocks.accept).toHaveBeenCalledTimes(1);
+    expect(mocks.success).toHaveBeenCalledTimes(3);
     await act(async () => finishSaving());
     expect(mocks.accept.mock.calls.map(([scan]) => scan.ordinal)).toEqual([0, 1, 2]);
+    expect(mocks.success).toHaveBeenCalledTimes(3);
     expect(container.querySelector('.scan-count')?.textContent).toBe('3 / 50');
   });
-  it('saves each manual photo immediately with its original bytes and dimensions', async () => {
+  it('saves each manual photo and opens those photos from the scan count', async () => {
+    vi.stubGlobal('URL', class extends URL {
+      static createObjectURL = vi.fn(() => 'blob:scan');
+      static revokeObjectURL = vi.fn();
+    });
     await renderApp();
     await click('Manual');
     for (let i = 0; i < 5; i++) await click('Take photo');
@@ -206,7 +222,12 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.accept.mock.calls[0][0].blob).toBe(original.blob);
     expect(mocks.accept.mock.calls[0][0]).toMatchObject({ width: 1280, height: 720 });
     expect(mocks.success).toHaveBeenCalledTimes(5);
-    expect(container.querySelector('.scan-count')?.textContent).toBe('5 / 50');
+    await click('5 / 50');
+    const gallery = container.querySelector('dialog[open]');
+    expect(gallery?.querySelector('h2')?.textContent).toBe('Recent cards');
+    expect(gallery?.querySelectorAll('img')).toHaveLength(5);
+    await act(async () => gallery?.querySelector<HTMLButtonElement>('.scan-tile')?.click());
+    expect(container.querySelector('dialog[open] img[alt="Full-resolution scanned card"]')).not.toBeNull();
   });
   it('restores cached camera controls and resets settings without deleting the saved batch', async () => {
     mocks.capabilities={torch:true,focusMode:['manual','continuous']};
@@ -227,6 +248,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await renderApp(); await click('Manual'); expect(mocks.capture).not.toHaveBeenCalled();
     mocks.capture.mockRejectedValueOnce(new Error('Camera encoding failed')); await click('Take photo');
     expect(mocks.capture).toHaveBeenCalledTimes(1); expect(mocks.accept).not.toHaveBeenCalled();
+    expect(mocks.success).not.toHaveBeenCalled();
     expect(button('Take photo').disabled).toBe(false); expect(container.textContent).not.toContain('Scanning paused');
     expect(mocks.error).toHaveBeenCalled(); await click('Take photo');
     expect(mocks.accept).toHaveBeenCalledTimes(1); expect(container.querySelector('.scan-count')?.textContent).toBe('1 / 50');

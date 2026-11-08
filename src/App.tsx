@@ -106,7 +106,9 @@ export default function App() {
   const focusModes = s.capabilities.focusMode ?? [];
   const canToggleFocus = focusModes.includes('manual') && (focusModes.includes('continuous') || focusModes.includes('single-shot'));
   const focusPosition = focusRange ? Math.min(focusRange.max, Math.max(focusRange.min, s.focusPosition ?? focusRange.min)) : undefined;
-  const showCountdown = autoMode && s.session === 'scanning' && s.cameraPhase === 'ready' && s.countdown !== null && !s.storageIssue;
+  const snapped = s.countdown === 'snapped';
+  const showCountdown = autoMode && s.cameraPhase === 'ready' && s.countdown !== null && !s.storageIssue
+    && (s.session === 'scanning' || (s.session === 'complete' && snapped));
   const countdownDeadline = showCountdown && typeof s.countdown === 'number' ? s.countdown : null;
   const countdownFill = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -136,7 +138,7 @@ export default function App() {
   else if (s.session === 'paused') scannerStatus = 'Scanning paused';
   else if (s.session === 'scanning') {
     if (!autoMode) scannerStatus = 'Manual · tap to take a photo';
-    else if (showCountdown && s.countdown !== 'snapped') scannerStatus = 'Hold still';
+    else if (showCountdown && !snapped) scannerStatus = 'Hold still';
     else if (s.reading?.needsRemoval) scannerStatus = 'Remove the card';
     else if (s.reading?.state === 'moving') scannerStatus = 'Card moving';
     else scannerStatus = s.reading?.presence === 'uncertain' ? 'Center one card' : 'Place a card';
@@ -161,7 +163,7 @@ export default function App() {
               <Menu size={22} />{failedCount > 0 && <span className="menu-attention" aria-label={`${failedCount} scan${failedCount === 1 ? '' : 's'} need review`} />}
             </button>
             {!s.cameraSize.width && <div className="camera-placeholder"><ScanLine size={35} strokeWidth={1.25} /><p>{s.cameraPhase === 'requesting' ? 'Choose Allow to use your camera' : 'Enable your camera to begin'}</p></div>}
-            <div className={`auto-countdown${s.countdown === 'snapped' ? ' is-snapped' : ''}`} hidden={!showCountdown} aria-hidden="true">
+            <div className={`auto-countdown${snapped ? ' is-snapped' : ''}`} hidden={!showCountdown} aria-hidden="true">
               <div ref={countdownFill} />
             </div>
             <label className="zoom-control"><span>Zoom</span><input aria-label="Camera zoom" type="range" min="1" max="3" step="0.1" value={s.settings.zoom} disabled={s.cameraPhase !== 'ready'} onPointerDown={() => s.zoomGesture(true)} onPointerUp={() => s.zoomGesture(false)} onPointerCancel={() => s.zoomGesture(false)} onBlur={() => s.zoomGesture(false)} onChange={event => s.setZoom(+event.target.value)} /><output>{s.settings.zoom.toFixed(1)}×</output></label>
@@ -192,9 +194,11 @@ export default function App() {
             </div>
           )}
         </div>
-        <div className="scanner-status" role="status" aria-live="polite">
-          <span className={`session-state ${s.session === 'scanning' ? 'is-live' : ''} ${failedCount ? 'needs-attention' : ''}`}><i /><span>{scannerStatus}</span></span>
-          <span className="scan-count" aria-label={`${count} saved photos out of ${quantity}`}>{count}<span> / {quantity}</span></span>
+        <div className="scanner-status">
+          <span className={`session-state ${s.session === 'scanning' ? 'is-live' : ''} ${failedCount ? 'needs-attention' : ''}`} role="status"><i /><span>{scannerStatus}</span></span>
+          <button type="button" className="scan-count" aria-haspopup="dialog" aria-expanded={showGallery} aria-label={`View recent cards, ${count} saved photos out of ${quantity}`} onClick={() => setShowGallery(true)}>
+            <Images size={14} aria-hidden="true" /><span>{count}<span> / {quantity}</span></span>
+          </button>
         </div>
         <div className="capture-mode-row"><div className="capture-modes" role="group" aria-label="Capture mode"><button aria-pressed={autoMode} onClick={() => s.setCaptureMode('auto')}>Auto</button><button aria-pressed={!autoMode} onClick={() => s.setCaptureMode('manual')}>Manual</button></div></div>
         {s.cameraPhase !== 'ready' ? <button className="button primary scan-action" disabled={s.cameraPhase === 'requesting'} onClick={() => void s.connectCamera()}><Camera size={19} />{s.cameraPhase === 'requesting' ? 'Requesting camera…' : 'Enable camera'}</button> : !autoMode && s.session !== 'complete' ? <button className="button primary scan-action" disabled={!s.loaded || s.session === 'starting' || !!s.storageIssue || s.capturing || s.queueFull || batchReserved} onClick={() => void s.takePhoto(target)}><Camera size={19} />{s.session === 'starting' ? 'Preparing…' : 'Take photo'}</button> : s.session === 'scanning' ? <button className="button primary scan-action" onClick={s.pause}><Pause size={18} fill="currentColor" />Pause scanning</button> : <button className="button primary scan-action" disabled={!s.loaded || s.session === 'starting' || s.session === 'complete' || batchReserved} onClick={() => void s.start(target)}>
@@ -263,7 +267,7 @@ export default function App() {
       <Setting label="Wait before each photo" value={waitLabel} hint="Auto takes a photo once movement stops and the green bar fills.">
         <input aria-label="Wait before each photo" type="range" min="10" max="1000" step="10" value={s.settings.stabilityMs} onChange={event => s.setSettings({ ...s.settings, stabilityMs: +event.target.value })} />
       </Setting>
-      <Toggle label="Sounds" hint="A ding means saved. A low buzz means there’s a problem." checked={!s.settings.muted} onChange={v => s.setSettings({ ...s.settings, muted: !v })} />
+      <Toggle label="Sounds" hint="A ding means the camera took a photo. A low buzz means there’s a problem." checked={!s.settings.muted} onChange={v => s.setSettings({ ...s.settings, muted: !v })} />
       {!s.settings.muted && <>
         <Setting label="Volume" value={`${Math.round(s.settings.volume * 100)}%`}><input aria-label="Sound volume" type="range" min="0" max="1" step="0.05" value={s.settings.volume} onChange={e => s.setSettings({ ...s.settings, volume: +e.target.value })} /></Setting>
         <div className="sound-previews" role="group" aria-label="Preview sounds"><button className="button outline" onClick={() => void s.testSound()}><Volume2 size={16} />Play ding</button><button className="button outline" onClick={() => void s.testErrorSound()}><Volume2 size={16} />Play buzz</button></div>
@@ -290,8 +294,8 @@ export default function App() {
     {showHelp && <Dialog title="How to scan" close={() => setShowHelp(false)}><div className="guide-content"><p className="dialog-intro">Use Auto for hands-free photos, or Manual to take each photo yourself.</p>{[
       ['Position your phone', 'Keep your phone steady above one card. Allow camera access when asked. Keep all four card edges visible, with a little space around them. Avoid glare from lights.'],
       ['Choose your batch', 'Open Menu → Batch to choose how many cards to scan. Tap the name at the top of the camera view to change it. Use the zoom slider to bring the card closer.'],
-      ['Take your photos', 'In Auto, place a card and tap Start scanning. The green bar fills while the card is still. After it fills, remove the card before placing the next one. Each ding confirms a photo was saved. In Manual, tap Take photo.'],
-      ['Check and download', 'When the batch is full, scanning stops and an alarm plays. Open Menu → Recent cards to check your photos. Choose Download ZIP to save them together in one file.'],
+      ['Take your photos', 'In Auto, place a card and tap Start scanning. The camera takes the photo and dings when the green bar fills. Remove the card before placing the next one. In Manual, tap Take photo.'],
+      ['Check and download', 'Tap the scan count to view your photos. When the batch is full, scanning stops and an alarm plays. Choose Download ZIP to save the photos together in one file.'],
     ].map(([title, text], i) => <div className="guide-step" key={title}><span>{String(i + 1).padStart(2,'0')}</span><div><h3>{title}</h3><p>{text}</p></div></div>)}<div className="guide-callout"><ShieldCheck size={18} /><p>Scans stay in this browser’s local storage. Download your batch before clearing browser data. When reopening a saved batch in Auto, clear the camera view before placing a card.</p></div></div><div className="dialog-footer"><button className="button primary" onClick={() => setShowHelp(false)}>Ready to scan <ArrowRight size={16} /></button></div></Dialog>}
     {confirmClear && <Dialog title="Start a fresh batch?" close={() => setConfirmClear(false)}><div className="confirm-content"><p>This deletes this batch’s {count} saved images and {s.attempts.length} retained captures from this device. Download your ZIP first if you want to keep them.</p>{exportButton()}<p className="setting-hint">A download does not automatically clear your batch.</p></div><div className="dialog-footer"><button className="button outline" onClick={() => setConfirmClear(false)}>Keep batch</button><button className="button danger" disabled={editingDisabled} onClick={() => void safe(async () => { await s.clear(); setLastExport(undefined); setConfirmClear(false); setShowBatch(false); setShowGallery(false); setShowMenu(false); })}><Trash2 size={15} /> Delete & start new</button></div></Dialog>}
     {exportOpen && <Dialog title="Download your batch" close={() => { if (exporting === null) setExportOpen(false); }}><div className="confirm-content">{lastExport ? <div className="export-success" role="status"><strong>{lastExport} is ready</strong><p>Check your browser’s downloads. Photos stay saved here.</p></div> : <p>Give this batch a name before saving your archive.</p>}<label className="select-setting batch-name-field" htmlFor="export-batch-name">Batch name<input id="export-batch-name" autoFocus type="text" maxLength={100} value={exportName} disabled={exporting !== null} placeholder={defaultBatchName(s.batch?.number ?? 1)} onChange={e => setExportName(e.target.value)} /></label><p className="archive-preview">{archiveFilename(exportName, s.batch?.number ?? 1)}</p><p className="setting-hint">{count} saved photos · sequential Pokémon filenames inside the ZIP. The batch name is remembered for your next download.</p>{exporting !== null && <div className="progress-track" role="progressbar" aria-label="ZIP export progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={exporting}><div style={{width:`${exporting}%`}} /></div>}</div><div className="dialog-footer"><button className="button outline" disabled={exporting !== null} onClick={() => setExportOpen(false)}>Cancel</button><button className="button dark" disabled={exporting !== null || s.pending > 0 || busy} onClick={() => void exportBatch()}><ArrowDownToLine size={16}/>{exporting !== null ? `Creating ZIP · ${exporting}%` : `Download ZIP · ${count} images`}</button></div></Dialog>}

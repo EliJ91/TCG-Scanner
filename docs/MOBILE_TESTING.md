@@ -38,7 +38,8 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 ## Batch limits
 
 - [ ] Select 50 and feed 50 valid cards. Verify exactly 50 stored images and 50 success dings.
-- [ ] Check that the ding follows a successful write and the completion alarm follows the final saved photo.
+- [ ] Check that the ding plays when the green bar fills and the camera takes the photo. The completion alarm follows the final saved photo.
+- [ ] Tap the scan count and open a saved image from Recent cards.
 - [ ] Force the final image to fail. Batch remains incomplete; no completion alarm until the valid replacement fills its slot.
 - [ ] Feed one card per second and compare the physical count with the saved photos.
 - [ ] Slow a storage write and replace the card while it is pending. Confirm capture continues and queued JPEGs save in order.

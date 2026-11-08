@@ -87,7 +87,6 @@ export function useScanner() {
         setScans(items => ordered([...items.filter(item => item.id !== scan.id), scan]));
         updateAttempts(attemptsRef.current.filter(item => item.id !== scan.id));
         setMeasuredScans(value => value + 1);
-        audio.current?.success();
       },
       storageIssue: reason => {
         if (!mounted.current) return;
@@ -204,7 +203,7 @@ export function useScanner() {
       setCapturing(true);
     }
     let waitingForFrame = alternateCapture;
-    function frameCopied() {
+    function finishWaitingForFrame() {
       if (!waitingForFrame) return;
       waitingForFrame = false;
       captureBusy.current = false;
@@ -212,12 +211,18 @@ export function useScanner() {
     }
     detector.current.consume();
     setReading(detector.current.advance(performance.now()));
-    if (automatic) setCountdown('snapped');
-    else setCountdown(null);
+    if (!automatic) setCountdown(null);
     // Canvas capture copies the preview immediately. Encoding and saving can finish later.
-    try { await c.capture(() => camera.current!.capture(alternateCapture, quality, frameCopied)); }
+    try {
+      await c.capture(() => camera.current!.capture(alternateCapture, quality, () => {
+        finishWaitingForFrame();
+        if (!mounted.current) return;
+        if (automatic) setCountdown('snapped');
+        audio.current?.success();
+      }));
+    }
     catch (err) { setError(`Photo could not be taken: ${message(err)}. Try again.`); }
-    finally { frameCopied(); }
+    finally { finishWaitingForFrame(); }
   };
 
   useEffect(() => {

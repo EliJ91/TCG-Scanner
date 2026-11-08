@@ -23,7 +23,7 @@ h1, h2, h3, p { margin: 0; }
 input, select { accent-color: var(--accent); }
 input:disabled, select:disabled { opacity: .5; }
 
-/* One centered scanner. Secondary surfaces are mounted only from the menu. */
+/* One centered scanner. */
 .scanner-screen {
   width: 100%; min-height: 100svh; min-height: 100dvh;
   display: grid; place-items: center;
@@ -39,15 +39,16 @@ input:disabled, select:disabled { opacity: .5; }
 .camera-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 15px; align-items: center; justify-content: center; color: #999; pointer-events: none; }
 .camera-placeholder svg { color: #b5b5b5; }
 .camera-placeholder p { font-size: 13px; }
-.scanner-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 10px 2px; font-size: 12px; }
+.scanner-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 2px; font-size: 12px; }
 .session-state { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--muted); }
 .session-state i { flex: 0 0 5px; height: 5px; background: #888; border-radius: 50%; }
 .session-state.is-live { color: var(--text); }
 .session-state.is-live i { background: var(--text); }
 .session-state.needs-attention { color: var(--danger); }
 .session-state.needs-attention i { background: var(--danger); }
-.scan-count { flex-shrink: 0; font-variant-numeric: tabular-nums; color: var(--text); }
-.scan-count > span { color: var(--muted); }
+.scan-count { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; min-height: 44px; padding: 0 8px; border-radius: 8px; font-variant-numeric: tabular-nums; color: var(--text); }
+.scan-count svg, .scan-count > span > span { color: var(--muted); }
+.scan-count:hover { background: var(--soft); }
 .original-placeholder { display: grid; place-items: center; flex-shrink: 0; width: 48px; height: 66px; border-radius: 4px; background: var(--line); color: var(--muted); }
 .button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 11px 16px; border: 1px solid transparent; border-radius: 9px; font-size: 12px; font-weight: 600; line-height: 1.4; }
 .button.primary, .button.dark { background: var(--accent); color: var(--accent-text); }
