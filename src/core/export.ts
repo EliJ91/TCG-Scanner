@@ -1,8 +1,10 @@
 import JSZip from 'jszip';
 import { filename, ordered, type Scan } from './types';
-export async function createZip(scans: Scan[], onProgress: (percent: number) => void) {
+export async function createZip(scans: Scan[], onProgress: (percent: number) => void, newestFirst = false) {
   const zip = new JSZip();
-  for (const [i, scan] of ordered(scans).entries()) zip.file(filename(i), await scan.blob.arrayBuffer());
+  const exportScans = ordered(scans);
+  if (newestFirst) exportScans.reverse();
+  for (const [i, scan] of exportScans.entries()) zip.file(filename(i), await scan.blob.arrayBuffer());
   return zip.generateAsync({ type: 'blob', compression: 'STORE', streamFiles: true }, meta => onProgress(Math.round(meta.percent)));
 }
 export function downloadArchive(file: File) {

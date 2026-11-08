@@ -66,6 +66,14 @@ describe('storage, recovery, filenames, ZIP', () => {
     expect(await zip.file('Pokemon_0003.jpg')!.async('string')).toBe('image-9');
     expect(progress.at(-1)).toBe(100);
   });
+  it('numbers the newest photos first in a newest-first ZIP', async () => {
+    const scans = [scan('test', 4), scan('test', 1), scan('test', 9)];
+    const blob = await createZip(scans, () => {}, true);
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    expect(Object.keys(zip.files)).toEqual(['Pokemon_0001.jpg', 'Pokemon_0002.jpg', 'Pokemon_0003.jpg']);
+    expect(await Promise.all(Object.values(zip.files).map(file => file.async('string'))))
+      .toEqual(['image-9', 'image-4', 'image-1']);
+  });
   it('creates increasing batch archive numbers and resets image numbering', async () => {
     const a = await storage.create(10), b = await storage.create(10);
     expect(b.number).toBe(a.number + 1); expect(b.nextOrdinal).toBe(0);

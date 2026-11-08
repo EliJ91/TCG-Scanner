@@ -120,9 +120,11 @@ describe('batch file sharing', () => {
   it('shares the ready archive on tap and leaves it available after canceling', async () => {
     let finishZip!: (blob: Blob) => void;
     const build = vi.spyOn(exportTools, 'createZip').mockImplementationOnce(() => new Promise(resolve => { finishZip = resolve; }));
+    localStorage.setItem('cardslinger-settings', JSON.stringify({ ...defaults, galleryNewestFirst: true }));
     const share = vi.fn<(data: ShareData) => Promise<void>>()
       .mockRejectedValueOnce(new DOMException('Canceled', 'AbortError')).mockResolvedValue(undefined);
     await openExport(share);
+    expect(build).toHaveBeenCalledWith(expect.any(Array), expect.any(Function), true);
     expect(button('Share ZIP').disabled).toBe(true);
     await input('#export-batch-name', 'Trade night');
     await act(async () => finishZip(zip));
@@ -310,10 +312,15 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await renderApp();expect(mocks.start).toHaveBeenCalledWith(3840,'rear-wide');
     expect(mocks.control).toHaveBeenCalledWith({torch:true});expect(mocks.focus).toHaveBeenCalledWith(true, 2);
     expect(mocks.lock).not.toHaveBeenCalled();
+    const flashlight = container.querySelector<HTMLButtonElement>('main .viewfinder button[aria-label="Flashlight"]')!;
+    expect(flashlight.getAttribute('aria-pressed')).toBe('true');
+    await act(async () => flashlight.click());
+    expect(mocks.control).toHaveBeenLastCalledWith({ torch: false });
+    expect(flashlight.getAttribute('aria-pressed')).toBe('false');
     await act(async()=>container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
     expect(container.querySelector('nav')?.textContent).not.toContain('Scan details');
     await click('Settings');
-    expect(container.querySelector('.advanced-settings')?.textContent).not.toMatch(/Troubleshooting|Lock brightness and color/);
+    expect(container.querySelector('.advanced-settings')?.textContent).not.toMatch(/Troubleshooting|Lock brightness and color|Flashlight/);
     const quality = container.querySelector<HTMLSelectElement>('select[aria-label="Photo quality"]')!;
     expect(Array.from(quality.options, option => option.text)).toEqual(['Lowest', 'Balanced', 'Best']);
     expect(quality.value).toBe('0.9');

@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Aperture, ArrowDownToLine, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Focus, Images, Layers3, Lock, LockOpen, Menu, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, Share2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X } from 'lucide-react';
+import { Aperture, ArrowDownToLine, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Focus, Images, Layers3, Lock, LockOpen, Menu, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, Share2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X, Zap } from 'lucide-react';
 import { useScanner } from './useScanner';
 import { useTheme } from './useTheme';
 import { createZip, downloadArchive, rotateScan } from './core/export';
@@ -34,15 +34,16 @@ function OriginalPhoto({ id, load }: { id: string; load(id: string): Promise<Blo
   return blob ? <BlobImage blob={blob} alt="Retained original photo" /> : <div className="original-placeholder" aria-label="Original photo saved"><Camera size={20} /></div>;
 }
 
-function BatchExport({ batch, scans, disabled, rename, close }: {
+function BatchExport({ batch, scans, newestFirst, disabled, rename, close }: {
   batch: Batch;
   scans: Scan[];
+  newestFirst: boolean;
   disabled: boolean;
   rename(name: string): Promise<void>;
   close(): void;
 }) {
   const [name, setName] = useState(batch.name);
-  const [build, setBuild] = useState<{ progress: number } | { blob: Blob; scans: Scan[] } | { error: string }>({ progress: 0 });
+  const [build, setBuild] = useState<{ progress: number } | { blob: Blob; scans: Scan[]; newestFirst: boolean } | { error: string }>({ progress: 0 });
   const [shareState, setShareState] = useState<'idle' | 'sharing' | 'unavailable'>('idle');
   const [downloaded, setDownloaded] = useState('');
   const [actionError, setActionError] = useState('');
@@ -52,16 +53,17 @@ function BatchExport({ batch, scans, disabled, rename, close }: {
     setBuild({ progress: 0 });
     void createZip(scans, progress => {
       if (current) setBuild(previous => 'progress' in previous && previous.progress === progress ? previous : { progress });
-    }).then(blob => {
-      if (current) setBuild({ blob, scans });
+    }, newestFirst).then(blob => {
+      if (current) setBuild({ blob, scans, newestFirst });
     }).catch(error => {
       if (current) setBuild({ error: `Could not prepare the ZIP. ${message(error)}` });
     });
     return () => { current = false; };
-  }, [scans]);
+  }, [scans, newestFirst]);
 
   const archiveName = archiveFilename(name, batch.number);
-  const file = 'blob' in build && build.scans === scans ? new File([build.blob], archiveName, { type: 'application/zip' }) : undefined;
+  const file = 'blob' in build && build.scans === scans && build.newestFirst === newestFirst
+    ? new File([build.blob], archiveName, { type: 'application/zip' }) : undefined;
   const nativeShare = typeof navigator.share === 'function' && typeof navigator.canShare === 'function';
   const canShare = !!file && nativeShare && shareState !== 'unavailable' && navigator.canShare({ files: [file] });
   const sharing = shareState === 'sharing';
@@ -266,10 +268,19 @@ export default function App() {
             <div className="camera-feed" style={{ width: `${Math.min(1, ratio / .75) * 100}%`, height: `${Math.min(1, .75 / ratio) * 100}%` }}>
               <video ref={s.videoRef} style={{ transform: `scale(${s.settings.zoom})` }} playsInline muted autoPlay aria-label="Live camera preview" />
             </div>
-            <button className="batch-name-trigger" aria-label="Edit batch name" title="Edit batch name" onClick={editName}><span>{s.batchName}</span><Pencil size={13} /></button>
-            <button className="menu-trigger" aria-label="Open menu" aria-haspopup="dialog" aria-expanded={showMenu} onClick={() => setShowMenu(true)}>
-              <Menu size={22} />{failedCount > 0 && <span className="menu-attention" aria-label={`${failedCount} scan${failedCount === 1 ? '' : 's'} need review`} />}
-            </button>
+            <div className="viewfinder-toolbar">
+              <button className="batch-name-trigger" aria-label="Edit batch name" title="Edit batch name" onClick={editName}><span>{s.batchName}</span><Pencil size={13} /></button>
+              <div className="viewfinder-actions">
+                {s.cameraPhase === 'ready' && s.capabilities.torch && (
+                  <button type="button" className="viewfinder-button flashlight-trigger" aria-label="Flashlight" aria-pressed={s.settings.torch} title="Flashlight" onClick={() => void s.control({ torch: !s.settings.torch })}>
+                    <Zap size={21} />
+                  </button>
+                )}
+                <button className="viewfinder-button" aria-label="Open menu" aria-haspopup="dialog" aria-expanded={showMenu} onClick={() => setShowMenu(true)}>
+                  <Menu size={22} />{failedCount > 0 && <span className="menu-attention" aria-label={`${failedCount} scan${failedCount === 1 ? '' : 's'} need review`} />}
+                </button>
+              </div>
+            </div>
             {!s.cameraSize.width && <div className="camera-placeholder"><ScanLine size={35} strokeWidth={1.25} /><p>{s.cameraPhase === 'requesting' ? 'Choose Allow to use your camera' : 'Enable your camera to begin'}</p></div>}
             <div className={`auto-countdown${snapped ? ' is-snapped' : ''}`} hidden={!showCountdown} aria-hidden="true">
               <div ref={countdownFill} />
@@ -364,7 +375,7 @@ export default function App() {
     {showSettings && <Dialog title="Settings" close={() => setShowSettings(false)}><div className="settings-content simple-settings">
       <p className="dialog-intro">Your choices are saved automatically on this device.</p>
       <Toggle label="Dark mode" checked={theme.dark} onChange={theme.setDark} />
-      <Toggle label="Newest first in gallery" hint="Show your most recent photos at the top." checked={newestFirst} onChange={galleryNewestFirst => s.setSettings({ ...s.settings, galleryNewestFirst })} />
+      <Toggle label="Newest first in gallery and ZIP" hint="Show recent photos at the top and number them first in the ZIP." checked={newestFirst} onChange={galleryNewestFirst => s.setSettings({ ...s.settings, galleryNewestFirst })} />
       <Setting label="Wait before each photo" value={waitLabel} hint="Auto takes a photo once movement stops and the green bar fills.">
         <input aria-label="Wait before each photo" type="range" min="10" max="1000" step="10" value={s.settings.stabilityMs} onChange={event => s.setSettings({ ...s.settings, stabilityMs: +event.target.value })} />
       </Setting>
@@ -391,7 +402,6 @@ export default function App() {
         </label>
         <h3><Camera size={16} /> Camera</h3>
         {s.devices.length > 1 && <label className="select-setting">Choose a camera<select disabled={busy || s.pending > 0} value={s.settings.cameraId} onChange={e => void s.switchCamera(e.target.value)}><option value="">Automatic rear camera</option>{s.devices.map((d, i) => <option key={d.deviceId} value={d.deviceId}>{d.label || `Camera ${i + 1}`}</option>)}</select></label>}
-        {s.capabilities.torch && <Toggle label="Flashlight" hint="Add light from your phone while scanning." checked={s.settings.torch} onChange={v => void s.control({ torch: v })} />}
         <p className="setting-hint">Use the zoom slider below the preview to frame your photo. On supported cameras, use the side slider to focus and the lock to hold focus.</p>
         <label className="select-setting">Camera resolution
           <select disabled={busy || s.cameraSize.width > 0} value={s.settings.resolution} onChange={e => s.setSettings({ ...s.settings, resolution: +e.target.value })}>
@@ -412,7 +422,7 @@ export default function App() {
       ['Check and export', 'Tap the scan count to view your photos. When the batch is full, scanning stops and an alarm plays. Choose Export ZIP to download or share the batch.'],
     ].map(([title, text], i) => <div className="guide-step" key={title}><span>{String(i + 1).padStart(2,'0')}</span><div><h3>{title}</h3><p>{text}</p></div></div>)}<div className="guide-callout"><ShieldCheck size={18} /><p>Scans stay in this browser’s local storage. Download your batch before clearing browser data. When reopening a saved batch in Auto, clear the camera view before placing a card.</p></div></div><div className="dialog-footer"><button className="button primary" onClick={() => setShowHelp(false)}>Ready to scan <ArrowRight size={16} /></button></div></Dialog>}
     {confirmClear && <Dialog title="Start a fresh batch?" close={() => setConfirmClear(false)}><div className="confirm-content"><p>This deletes this batch’s {count} saved images and {s.attempts.length} retained captures from this device. Download your ZIP first if you want to keep them.</p>{exportButton()}<p className="setting-hint">A download does not automatically clear your batch.</p></div><div className="dialog-footer"><button className="button outline" onClick={() => setConfirmClear(false)}>Keep batch</button><button className="button danger" disabled={editingDisabled} onClick={() => void safe(async () => { await s.clear(); setExportOpen(false); setConfirmClear(false); setShowBatch(false); setShowGallery(false); setShowMenu(false); })}><Trash2 size={15} /> Delete & start new</button></div></Dialog>}
-    {exportOpen && s.batch && <BatchExport batch={s.batch} scans={s.scans} disabled={editingDisabled} rename={s.renameBatch} close={() => setExportOpen(false)} />}
+    {exportOpen && s.batch && <BatchExport batch={s.batch} scans={s.scans} newestFirst={newestFirst} disabled={editingDisabled} rename={s.renameBatch} close={() => setExportOpen(false)} />}
     {active && <Dialog title={filename(captureIndex(activeIndex))} close={() => setSelected(undefined)} wide>
       <div className="review-image"><BlobImage blob={active.blob} alt="Full-resolution scanned card" /></div>
       <div className="review-meta"><span>{active.width && active.height ? `${active.width} × ${active.height} · JPEG` : 'JPEG'}</span></div>
