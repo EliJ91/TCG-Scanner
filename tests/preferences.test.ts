@@ -10,7 +10,9 @@ describe('browser-cached camera preferences',()=>{
     expect(cachedSettings({...defaults,resolution:1920})).toEqual(saved);
   });
   it('migrates the old slow-capture setting once and preserves new explicit delay choices',()=>{
-    expect(normalizeSettings({stabilityMs:1200,zoom:2}).stabilityMs).toBe(220);
+    expect(normalizeSettings({stabilityMs:1200,zoom:2}).stabilityMs).toBe(100);
+    expect(normalizeSettings({captureVersion:2,stabilityMs:220}).stabilityMs).toBe(100);
+    expect(normalizeSettings({captureVersion:2,stabilityMs:800}).stabilityMs).toBe(800);
     expect(normalizeSettings({...defaults,stabilityMs:1400}).stabilityMs).toBe(1000);
     expect(normalizeSettings({...defaults,stabilityMs:1}).stabilityMs).toBe(10);
     expect(normalizeSettings({...defaults,stabilityMs:10}).stabilityMs).toBe(10);

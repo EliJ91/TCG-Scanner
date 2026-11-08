@@ -43,7 +43,6 @@ export function useScanner() {
   const [reading, setReading] = useState<MotionReading>();
   const [timing, setTiming] = useState(0);
   const [countdown, setCountdown] = useState<number | 'snapped' | null>(null);
-  const countdownFill = useRef<HTMLDivElement>(null);
   const [focusPosition, setFocusPosition] = useState<number>();
   const [focusLocked, setFocusLocked] = useState(false);
   const [focusBusy, setFocusBusy] = useState(false);
@@ -198,31 +197,40 @@ export function useScanner() {
   const capture = async (automatic = false) => {
     const c = controller.current;
     if (!c?.hasCapacity || captureBusy.current || cameraPhaseRef.current !== 'ready' || storageIssueRef.current) return;
-    captureBusy.current = true;
-    setCapturing(true);
+    const { useImageCapture, quality } = settingsRef.current;
+    const alternateCapture = !automatic && useImageCapture;
+    if (alternateCapture) {
+      captureBusy.current = true;
+      setCapturing(true);
+    }
+    let waitingForFrame = alternateCapture;
+    function frameCopied() {
+      if (!waitingForFrame) return;
+      waitingForFrame = false;
+      captureBusy.current = false;
+      if (mounted.current) setCapturing(false);
+    }
     detector.current.consume();
     setReading(detector.current.advance(performance.now()));
     if (automatic) setCountdown('snapped');
     else setCountdown(null);
-    const { useImageCapture, quality } = settingsRef.current;
-    // Auto copies the same preview frame that passed the shutter checks.
-    try { await c.capture(() => camera.current!.capture(!automatic && useImageCapture, quality)); }
+    // Canvas capture copies the preview immediately. Encoding and saving can finish later.
+    try { await c.capture(() => camera.current!.capture(alternateCapture, quality, frameCopied)); }
     catch (err) { setError(`Photo could not be taken: ${message(err)}. Try again.`); }
-    finally {
-      captureBusy.current = false;
-      if (mounted.current) setCapturing(false);
-    }
+    finally { frameCopied(); }
   };
 
   useEffect(() => {
-    if (session !== 'scanning') return;
+    const video = videoRef.current;
+    if (session !== 'scanning' || cameraPhase !== 'ready' || !video) return;
     const canvas = document.createElement('canvas');
     canvas.width = previewWidth;
     canvas.height = previewHeight;
     const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
     const gray = new Uint8Array(canvas.width * canvas.height);
     const card = new CardPresenceDetector();
-    let frame = 0, lastFrameAt = 0, lastVideoTime = -1, lastUI = 0;
+    const useVideoFrames = typeof video.requestVideoFrameCallback === 'function';
+    let frame = 0, lastFrameAt = performance.now(), lastVideoTime = -1, lastUI = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let scheduledDeadline: number | null = null;
 
@@ -234,64 +242,70 @@ export function useScanner() {
       if (deadline !== null) {
         timer = setTimeout(() => {
           timer = undefined;
-          inspect(performance.now());
+          inspect(false);
         }, Math.max(1, Math.ceil(deadline - performance.now())));
       }
     }
 
-    function inspect(now: number) {
-      const video = videoRef.current, c = controller.current, motion = detector.current;
+    function inspect(freshFrame: boolean) {
+      const now = performance.now();
+      const c = controller.current, motion = detector.current;
       if (!video || document.hidden || sessionRef.current !== 'scanning' || !c?.running || cameraPhaseRef.current !== 'ready') {
         schedule(null);
         return;
       }
-      const freshFrame = video.readyState >= 2 && video.currentTime !== lastVideoTime;
-      if (freshFrame) {
-        lastFrameAt = now;
-        lastVideoTime = video.currentTime;
-      } else if (now - lastFrameAt > 1800) {
-        lastFrameAt = now;
-        recoverCamera('Camera frames stopped. Reconnecting automatically.');
-        schedule(null);
-        return;
-      }
+      if (freshFrame) lastFrameAt = now;
       if (settingsRef.current.captureMode !== 'auto' || zoomAdjusting.current || focusApplying.current || video.readyState < 2) {
         schedule(null);
         return;
       }
-      const begin = performance.now();
-      let next: MotionReading;
-      if (freshFrame) {
-        const crop = zoomRect(video.videoWidth, video.videoHeight, settingsRef.current.zoom);
-        ctx.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, canvas.width, canvas.height);
-        toLuma(ctx.getImageData(0, 0, canvas.width, canvas.height).data, gray);
-        next = motion.update(gray, now, card.detect(gray));
-      } else {
-        next = motion.advance(now);
+      if (!freshFrame && now - lastFrameAt > 650) {
+        resetMotion();
+        schedule(null);
+        return;
       }
+      // Check the current pixels at the deadline too, in case movement just resumed.
+      const crop = zoomRect(video.videoWidth, video.videoHeight, settingsRef.current.zoom);
+      ctx.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, canvas.width, canvas.height);
+      toLuma(ctx.getImageData(0, 0, canvas.width, canvas.height).data, gray);
+      const next = motion.update(gray, now, card.detect(gray));
       const deadline = c.hasCapacity && !captureBusy.current && !storageIssueRef.current ? motion.deadline : null;
-      if (deadline !== null) countdownFill.current?.style.setProperty('--countdown-progress', String(next.stability));
       schedule(deadline);
       if (now - lastUI > 100) {
         setReading(next);
-        if (freshFrame) setTiming(performance.now() - begin);
+        if (freshFrame) setTiming(performance.now() - now);
         lastUI = now;
         setElapsedMs(elapsedRef.current + (startTime.current === null ? 0 : now - startTime.current));
       }
       if (next.state === 'ready' && c.hasCapacity && !captureBusy.current) void capture(true);
     }
 
-    const tick = (now: number) => {
+    const tick = () => {
       frame = requestAnimationFrame(tick);
-      inspect(now);
+      if (video.readyState >= 2 && video.currentTime !== lastVideoTime) {
+        lastVideoTime = video.currentTime;
+        inspect(true);
+      }
     };
-    frame = requestAnimationFrame(tick);
+    const presented = () => {
+      frame = video.requestVideoFrameCallback(presented);
+      inspect(true);
+    };
+    frame = useVideoFrames ? video.requestVideoFrameCallback(presented) : requestAnimationFrame(tick);
+    const watchdog = setInterval(() => {
+      if (!document.hidden && cameraPhaseRef.current === 'ready' && performance.now() - lastFrameAt >= 1800) {
+        schedule(null);
+        recoverCamera('Camera frames stopped. Reconnecting automatically.');
+      }
+    }, 300);
     return () => {
-      cancelAnimationFrame(frame);
+      if (useVideoFrames) video.cancelVideoFrameCallback(frame);
+      else cancelAnimationFrame(frame);
       clearTimeout(timer);
+      clearInterval(watchdog);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session]);
+  }, [session, cameraPhase]);
 
   const enableCamera = (deviceId?: string): Promise<void> => {
     if (!videoRef.current) return Promise.reject(new Error('Camera preview is unavailable.'));
@@ -542,7 +556,7 @@ export function useScanner() {
   const original = useCallback(async (id: string) => (await controller.current?.original(id)), []);
   return { videoRef, batch, batchName, scans, attempts: [...attempts.filter(item => !retained.some(photo => photo.id === item.id)), ...retained], settings, setSettings: updateSettings, resetSettings, setCaptureMode, setZoom, zoomGesture, session, error, setError, notice, loaded, pending, capturing, queueFull: controller.current?.queueFull ?? false, storageIssue,
     cameraPhase, connectCamera, openBrowserSuggested,
-    reading, timing, countdown, countdownFill, cameraSize, capabilities, focusPosition, focusLocked, focusBusy, setFocus, devices, elapsedMs, measuredScans, start, takePhoto, pause: () => pause(), stop,
+    reading, timing, countdown, cameraSize, capabilities, focusPosition, focusLocked, focusBusy, setFocus, devices, elapsedMs, measuredScans, start, takePhoto, pause: () => pause(), stop,
     keepOriginal, remove, discard, clear, switchCamera, control, lock, explicitCapture, renameBatch,
     original,
     updateScan: async (scan: Scan) => { await storage.accept(scan); setScans(items => ordered(items.map(s => s.id === scan.id ? scan : s))); },

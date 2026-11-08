@@ -44,6 +44,17 @@ describe('card-gated motion', () => {
     expect(d.advance(460).state).toBe('ready');
   });
 
+  it('starts the default countdown on the first quiet comparison, tolerating minor camera variation', () => {
+    const d = new MotionDetector(), card = printedCard();
+    d.update(card, 0, 'uncertain');
+    const slightlyChanged = card.slice();
+    slightlyChanged.fill(215, 0, 240);
+    expect(sample(d, slightlyChanged, 33)).toMatchObject({ state: 'stabilizing', stability: 0 });
+    expect(d.deadline).toBe(133);
+    expect(d.advance(132).state).toBe('stabilizing');
+    expect(d.advance(133).state).toBe('ready');
+  });
+
   it('does not photograph removal, duplicate a card, or rearm on a single empty frame', () => {
     const d = new MotionDetector(10), card = printedCard(), empty = emptyFrame();
     sample(d, card, 0); sample(d, card, 33); expect(d.advance(43).state).toBe('ready');

@@ -122,12 +122,20 @@ describe('mobile video preview startup', () => {
   });
   it('uses the same centered zoom crop for the saved full-resolution snapshot', async () => {
     const fixture=streamFixture();getUserMedia.mockResolvedValue(fixture.stream);
-    const drawImage=vi.fn();const canvas={width:0,height:0,getContext:()=>({drawImage}),toBlob:(done:(blob:Blob)=>void)=>done(new Blob(['jpeg']))};
+    const drawImage = vi.fn();
+    let finishEncoding!: (blob: Blob) => void;
+    const canvas = { width: 0, height: 0, getContext: () => ({ drawImage }), toBlob: (done: (blob: Blob) => void) => { finishEncoding = done; } };
     vi.stubGlobal('document',{createElement:()=>canvas});
     const preview=new Preview(), camera=new Camera(preview as unknown as HTMLVideoElement,vi.fn());
-    await camera.start(2560);camera.setZoom(2);await camera.capture();
+    await camera.start(2560); camera.setZoom(2);
+    const frameCopied = vi.fn();
+    const snapshot = camera.capture(false, 1, frameCopied);
     expect(drawImage).toHaveBeenCalledWith(preview,320,180,640,360,0,0,640,360);
-    expect([canvas.width,canvas.height]).toEqual([640,360]);camera.stop();
+    expect(frameCopied).toHaveBeenCalledOnce();
+    const jpeg = new Blob(['jpeg']);
+    finishEncoding(jpeg);
+    expect(await snapshot).toEqual({ blob: jpeg, width: 640, height: 360 });
+    camera.stop();
   });
   it('sets Safari inline/muted properties before play and uses actual portrait frame dimensions', async () => {
     const fixture = streamFixture(); getUserMedia.mockResolvedValue(fixture.stream);

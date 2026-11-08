@@ -51,7 +51,7 @@ Batch size is immutable once a batch exists. Download and explicitly clear the b
 
 ## Errors, retries, and storage
 
-Each framed JPEG is queued for IndexedDB while capture continues. Up to eight unsaved photos can queue, subject to the batch target. Previously queued originals are added to the active batch up to its target. Additional originals can be downloaded or added to the batch from **Recent cards**.
+The shutter copies the current preview frame. JPEG encoding and IndexedDB writes can finish while the next card is captured. Up to eight photos can queue, subject to the batch target. Previously queued originals are added to the active batch up to its target. Additional originals can be downloaded or added to the batch from **Recent cards**. [Canvas specification](https://html.spec.whatwg.org/multipage/canvas.html#dom-canvas-toblob)
 
 If storage fails, the session stays active and holds the unsaved JPEGs in memory. It waits for storage to recover and retries the retained photos in capture order every three seconds, including while capture is paused. Keep the page open until they save or download the originals. The camera remains visible. Browser eviction and private browsing can limit persistence. If an older scanner tab blocks a database upgrade, close the older tab to let recovery finish.
 
@@ -59,12 +59,12 @@ Deleting a stored scan reduces the count and pauses the scanner, including a pre
 
 ## Settings
 
-**Menu → Settings** starts with Dark mode, Wait before each photo, and Sounds/Volume. Camera and photo tuning stay inside **Advanced settings**. Selected camera, resolution, zoom, flashlight, focus position, camera locks, capture mode, and tuning are saved in browser preferences and restored on entry. A missing remembered camera falls back to the rear camera. **Reset settings** restores defaults and the device's theme preference without deleting photos or the batch; pause capture before resetting. Earlier slow-capture settings migrate once to the new 220 ms default; existing delay choices are clamped to the new range.
+**Menu → Settings** starts with Dark mode, Wait before each photo, and Sounds/Volume. Camera and photo tuning stay inside **Advanced settings**. Selected camera, resolution, zoom, flashlight, focus position, camera locks, capture mode, and tuning are saved in browser preferences and restored on entry. A missing remembered camera falls back to the rear camera. **Reset settings** restores defaults and the device's theme preference while keeping photos and the batch. Pause capture before resetting. The previous 220 ms setting migrates to 100 ms. Other custom delays are kept within the supported range.
 
 | Control | Default | Notes |
 | --- | --- | --- |
 | Capture mode | Auto | Manual takes one snapshot per tap |
-| Wait before each photo | 220 ms | Adjustable from 10 ms to 1 second |
+| Wait before each photo | 100 ms | Adjustable from 10 ms to 1 second |
 | Ignore small movements | A little (2.5%) | Advanced; fraction of changed luma pixels after exposure-shift compensation |
 | Zoom | 1× | Preview slider, 1–3× center crop; capture and motion use identical framing |
 | Photo quality | 100% | JPEG encoding quality for new photos |

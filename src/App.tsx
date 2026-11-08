@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Aperture, ArrowDownToLine, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Focus, Gauge, Images, Layers3, Lock, LockOpen, Menu, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X } from 'lucide-react';
 import { useScanner } from './useScanner';
 import { useTheme } from './useTheme';
@@ -107,6 +107,21 @@ export default function App() {
   const canToggleFocus = focusModes.includes('manual') && (focusModes.includes('continuous') || focusModes.includes('single-shot'));
   const focusPosition = focusRange ? Math.min(focusRange.max, Math.max(focusRange.min, s.focusPosition ?? focusRange.min)) : undefined;
   const showCountdown = autoMode && s.session === 'scanning' && s.cameraPhase === 'ready' && s.countdown !== null && !s.storageIssue;
+  const countdownDeadline = showCountdown && typeof s.countdown === 'number' ? s.countdown : null;
+  const countdownFill = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const fill = countdownFill.current;
+    if (countdownDeadline === null || !fill) return;
+    const start = performance.now();
+    const duration = Math.max(0, countdownDeadline - start);
+    if (typeof fill.animate !== 'function') {
+      fill.style.animation = `shutter-fill ${duration}ms linear both`;
+      return () => { fill.style.removeProperty('animation'); };
+    }
+    const animation = fill.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], { duration, fill: 'both' });
+    animation.startTime = start;
+    return () => animation.cancel();
+  }, [countdownDeadline]);
   const waitLabel = s.settings.stabilityMs === 1000 ? '1 s' : `${s.settings.stabilityMs} ms`;
   let scannerStatus = 'Camera ready';
   if (s.session === 'complete') scannerStatus = 'Batch complete';
@@ -147,7 +162,7 @@ export default function App() {
             </button>
             {!s.cameraSize.width && <div className="camera-placeholder"><ScanLine size={35} strokeWidth={1.25} /><p>{s.cameraPhase === 'requesting' ? 'Choose Allow to use your camera' : 'Enable your camera to begin'}</p></div>}
             <div className={`auto-countdown${s.countdown === 'snapped' ? ' is-snapped' : ''}`} hidden={!showCountdown} aria-hidden="true">
-              <div ref={s.countdownFill} />
+              <div ref={countdownFill} />
             </div>
             <label className="zoom-control"><span>Zoom</span><input aria-label="Camera zoom" type="range" min="1" max="3" step="0.1" value={s.settings.zoom} disabled={s.cameraPhase !== 'ready'} onPointerDown={() => s.zoomGesture(true)} onPointerUp={() => s.zoomGesture(false)} onPointerCancel={() => s.zoomGesture(false)} onBlur={() => s.zoomGesture(false)} onChange={event => s.setZoom(+event.target.value)} /><output>{s.settings.zoom.toFixed(1)}×</output></label>
           </div>

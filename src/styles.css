@@ -190,9 +190,10 @@ input[type='range'] { width: 100%; margin: 16px 0 7px; }
 .focus-control input { writing-mode: vertical-lr; direction: rtl; width: 38px; height: clamp(44px, 22dvh, 140px); margin: 4px 0 8px; accent-color: #fff; color-scheme: dark; }
 .focus-control :focus-visible { outline-color: #fff; outline-offset: -3px; }
 .auto-countdown { position: absolute; z-index: 3; bottom: 66px; left: 16px; right: 16px; height: 3px; border-radius: 4px; background: #0007; overflow: hidden; pointer-events: none; }
-.auto-countdown > div { width: 100%; height: 100%; background: #5fda8a; transform-origin: left; transform: scaleX(var(--countdown-progress, 0)); }
+.auto-countdown > div { width: 100%; height: 100%; background: #5fda8a; transform-origin: left; transform: scaleX(0); }
 .auto-countdown.is-snapped { animation: shutter-fade 170ms ease-out both; }
 .auto-countdown.is-snapped > div { transform: scaleX(1); }
+@keyframes shutter-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes shutter-fade { from { opacity: 1; } to { opacity: 0; } }
 @media (max-height: 480px) and (orientation: landscape) {
   .focus-control { right: -54px; }

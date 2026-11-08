@@ -1,4 +1,5 @@
 import type { CardPresence } from './card-presence';
+import { defaults } from './types';
 
 export type MotionState = 'waiting' | 'moving' | 'stabilizing' | 'ready';
 export interface MotionReading {
@@ -18,7 +19,7 @@ export class MotionDetector {
   private needsRemoval = false;
   private emptyFrames = 0;
   private cycle = 0;
-  constructor(public stabilityMs = 220, public sensitivity = 0.055) {}
+  constructor(public stabilityMs = defaults.stabilityMs, public sensitivity = defaults.sensitivity) {}
 
   get deadline() { return this.state === 'stabilizing' && this.stableStart !== null ? this.stableStart + this.stabilityMs : null; }
 
@@ -36,7 +37,6 @@ export class MotionDetector {
   update(gray: Uint8Array, now: number, presence: CardPresence): MotionReading {
     if (this.lastTime !== null && now - this.lastTime > 650) this.reset();
     const previous = this.previous;
-    const wasVisible = this.presence === 'card';
     this.lastTime = now;
     this.presence = presence;
     this.score = 0;
@@ -61,10 +61,10 @@ export class MotionDetector {
       this.emptyFrames = presence === 'empty' ? this.emptyFrames + 1 : 0;
       if (this.emptyFrames >= 2) this.needsRemoval = false;
     }
-    if (presence !== 'card' || this.needsRemoval || !wasVisible) {
+    if (presence !== 'card' || this.needsRemoval || !previous) {
       this.state = 'waiting';
       this.stableStart = null;
-    } else if (this.score >= this.sensitivity * 0.35) {
+    } else if (this.score >= this.sensitivity) {
       this.state = 'moving';
       this.stableStart = null;
     } else if (this.state !== 'ready') {

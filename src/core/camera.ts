@@ -88,20 +88,23 @@ export class Camera {
     return { ready, check: () => check(), cleanup: () => cleanup() };
   }
   /** Canvas draw is synchronous: copies the exact stabilized frame before async encoding. */
-  async capture(useImageCapture = false, quality = 1): Promise<Snapshot> {
+  async capture(useImageCapture = false, quality = 1, frameCopied?: () => void): Promise<Snapshot> {
     if (!this.stream?.active || this.video.readyState < 2) throw new Error('Camera is not delivering frames. Waiting for reconnection.');
     let bitmap: ImageBitmap | undefined;
     if (useImageCapture && this.grabber) { try { bitmap = await this.grabber.grabFrame(); } catch { /* Compatible fallback below. */ } }
     const source = bitmap ?? this.video;
     const crop = zoomRect(bitmap?.width ?? this.video.videoWidth, bitmap?.height ?? this.video.videoHeight, this.zoom);
-    this.canvas.width = crop.width; this.canvas.height = crop.height;
+    if (this.canvas.width !== crop.width) this.canvas.width = crop.width;
+    if (this.canvas.height !== crop.height) this.canvas.height = crop.height;
     try {
       this.canvas.getContext('2d')!.drawImage(source, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
     } finally { bitmap?.close(); }
-    const blob = await new Promise<Blob>((resolve, reject) => {
+    // toBlob copies the canvas before encoding, so the next shutter can reuse it.
+    const encoding = new Promise<Blob>((resolve, reject) => {
       this.canvas.toBlob(value => value ? resolve(value) : reject(new Error('Camera frame encoding failed. Try again.')), 'image/jpeg', quality);
     });
-    return { blob, width: crop.width, height: crop.height };
+    frameCopied?.();
+    return { blob: await encoding, width: crop.width, height: crop.height };
   }
   async control(values: Record<string, unknown>) {
     const track = this.stream?.getVideoTracks()[0];

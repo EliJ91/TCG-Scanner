@@ -7,8 +7,8 @@ export interface Settings {
   resolution: number; useImageCapture: boolean;
 }
 export const defaults: Settings = {
-  captureVersion: 2, cameraId: '', torch: false, lockCamera: false, focusLocked: false, focusDistance: null,
-  captureMode: 'auto', zoom: 1, stabilityMs: 220, sensitivity: 0.025, quality: 1,
+  captureVersion: 3, cameraId: '', torch: false, lockCamera: false, focusLocked: false, focusDistance: null,
+  captureMode: 'auto', zoom: 1, stabilityMs: 100, sensitivity: 0.025, quality: 1,
   volume: 0.6, muted: false, debug: false,
   resolution: 2560, useImageCapture: false,
 };

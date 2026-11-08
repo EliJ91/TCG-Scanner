@@ -3,7 +3,8 @@ const key = 'cardslinger-settings';
 /** Migrate the earlier slow-capture defaults once, preserving all other choices. */
 export function normalizeSettings(saved?: Partial<Settings>): Settings {
   const next = { ...defaults, ...saved };
-  if (saved?.captureVersion !== defaults.captureVersion) next.stabilityMs = defaults.stabilityMs;
+  const version = saved?.captureVersion ?? 0;
+  if (version < 2 || (version === 2 && next.stabilityMs === 220)) next.stabilityMs = defaults.stabilityMs;
   next.captureVersion = defaults.captureVersion;
   next.zoom = Number.isFinite(next.zoom) ? Math.max(1, Math.min(3, next.zoom)) : defaults.zoom;
   next.stabilityMs = Number.isFinite(next.stabilityMs) ? Math.max(10, Math.min(1000, Math.round(next.stabilityMs))) : defaults.stabilityMs;

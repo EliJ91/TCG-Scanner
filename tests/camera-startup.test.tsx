@@ -153,9 +153,11 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.capture).toHaveBeenCalledTimes(1);
     expect(container.querySelector('.auto-countdown.is-snapped')).not.toBeNull();
   });
-  it('fills the bar, skips the bare surface, and takes the next card before the first save completes', async () => {
-    let release!: () => void;
-    mocks.accept.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve; }));
+  it('animates the bar and keeps taking cards during a slow encode and a slow save', async () => {
+    const jpeg = { blob: new Blob(['first JPEG'], { type: 'image/jpeg' }), width: 1280, height: 720 };
+    let finishEncoding!: (image: typeof jpeg) => void, finishSaving!: () => void;
+    mocks.capture.mockImplementationOnce(() => new Promise(resolve => { finishEncoding = resolve; }));
+    mocks.accept.mockImplementationOnce(() => new Promise<void>(resolve => { finishSaving = resolve; }));
     const empty = emptyFrame(), card = printedCard();
     const { tick } = await startAutoPreview(200, empty);
     await tick();
@@ -163,10 +165,10 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.capture).not.toHaveBeenCalled();
     await tick(33, card);
     await tick(33, card);
-    const progress = () => container.querySelector<HTMLDivElement>('.auto-countdown > div')!.style.getPropertyValue('--countdown-progress');
-    expect(progress()).toBe('0');
+    const fill = container.querySelector<HTMLDivElement>('.auto-countdown > div')!;
+    expect(fill.style.animation).toBe('shutter-fill 200ms linear both');
     await tick(100);
-    expect(progress()).toBe('0.5');
+    expect(mocks.capture).not.toHaveBeenCalled();
     await tick(100);
     expect(mocks.capture).toHaveBeenCalledTimes(1);
     await tick(33, printedCard(1));
@@ -180,10 +182,19 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await tick(33, card);
     await tick(200);
     expect(mocks.capture).toHaveBeenCalledTimes(2);
+    expect(mocks.accept).not.toHaveBeenCalled();
+    await act(async () => finishEncoding(jpeg));
     expect(mocks.accept).toHaveBeenCalledTimes(1);
-    await act(async () => release());
-    expect(mocks.accept).toHaveBeenCalledTimes(2);
-    expect(container.querySelector('.scan-count')?.textContent).toBe('2 / 50');
+    await tick(33, empty);
+    await tick(33, empty);
+    await tick(33, card);
+    await tick(33, card);
+    await tick(200);
+    expect(mocks.capture).toHaveBeenCalledTimes(3);
+    expect(mocks.accept).toHaveBeenCalledTimes(1);
+    await act(async () => finishSaving());
+    expect(mocks.accept.mock.calls.map(([scan]) => scan.ordinal)).toEqual([0, 1, 2]);
+    expect(container.querySelector('.scan-count')?.textContent).toBe('3 / 50');
   });
   it('saves each manual photo immediately with its original bytes and dimensions', async () => {
     await renderApp();
@@ -259,10 +270,9 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(container.querySelector('.batch-name-trigger')?.textContent).toContain('Batch#008');
   });
   it('reconnects stalled frames without changing active scan intent', async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout','clearTimeout','setInterval','clearInterval','Date'] }); let tick!: FrameRequestCallback;
-    vi.stubGlobal('requestAnimationFrame', vi.fn(callback => { tick = callback; return 0; }));
+    vi.useFakeTimers({ toFake: ['setTimeout','clearTimeout','setInterval','clearInterval','performance'] });
     await renderApp(); await click('Start scanning');
-    await act(async()=>tick(2000));
+    await act(async()=>{await vi.advanceTimersByTimeAsync(1800);});
     expect(container.textContent).toContain('Camera frames stopped'); expect(container.textContent).not.toContain('Scanning paused');
     await act(async()=>{await vi.advanceTimersByTimeAsync(2001);});
     expect(mocks.start).toHaveBeenCalledTimes(2); expect(button('Pause scanning').disabled).toBe(false);
