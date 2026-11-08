@@ -94,6 +94,8 @@ input:disabled, select:disabled { opacity: .5; }
 .setting > div > span { color: var(--muted); font-size: 12px; }
 .setting-hint { font-size: 11px; line-height: 1.8; color: var(--muted); }
 input[type='range'] { width: 100%; margin: 16px 0 7px; }
+.setting > .range-with-labels { gap: 8px; margin: 12px 0 7px; }
+.range-with-labels input[type='range'] { flex: 1; width: auto; min-width: 0; margin: 0; }
 .select-setting { display: flex; flex-direction: column; gap: 9px; margin-bottom: 22px; font-size: 13px; }
 .select-setting select, .batch-name-field input { width: 100%; min-width: 0; padding: 11px; border: 1px solid var(--line); border-radius: 7px; background: var(--soft); color: var(--text); font-size: 12px; }
 .select-setting small { font-size: 11px; line-height: 1.8; color: var(--muted); }
@@ -145,9 +147,6 @@ input[type='range'] { width: 100%; margin: 16px 0 7px; }
 .attempt small { font-size: 10px; color: var(--muted); }
 .attempt-buttons { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 7px; }
 .attempt-buttons button { display: flex; align-items: center; gap: 4px; min-height: 36px; padding: 4px 0; font-size: 11px; text-decoration: underline; }
-.diagnostics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; padding: 22px; }
-.diagnostics-grid > span { display: flex; flex-direction: column; gap: 7px; font-size: 11px; color: var(--muted); }
-.diagnostics-grid b { color: var(--text); font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
 .guide-step { display: flex; gap: 15px; margin-bottom: 27px; }
 .guide-step > span { font-size: 12px; color: var(--muted); padding-top: 3px; }
 .guide-step h3 { font-size: 13px; font-weight: 600; margin-bottom: 7px; }
@@ -169,7 +168,7 @@ input[type='range'] { width: 100%; margin: 16px 0 7px; }
 .review-actions .button { padding: 10px; font-size: 11px; }
 @media (max-width: 380px) {
   .scanner-status { font-size: 11px; gap: 8px; }
-  .dialog-heading, .settings-content, .guide-content, .batch-content, .confirm-content, .attempts, .diagnostics-grid { padding-left: 17px; padding-right: 17px; }
+  .dialog-heading, .settings-content, .guide-content, .batch-content, .confirm-content, .attempts { padding-left: 17px; padding-right: 17px; }
   .dialog-footer { padding-left: 14px; padding-right: 14px; }
   .gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-left: 17px; padding-right: 17px; }
   .gallery-heading { padding-left: 17px; padding-right: 17px; }

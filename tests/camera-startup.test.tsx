@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   resize: vi.fn(), clear: vi.fn(),
   accept: vi.fn(), getAttempt: vi.fn(),
   start: vi.fn(), stop: vi.fn(), zoom: vi.fn(), capture: vi.fn(),
-  control: vi.fn(), lock: vi.fn(), focus: vi.fn(), capabilities: {} as {torch?:boolean;focusMode?:string[];focusDistance?:{min:number;max:number;step:number}},
+  control: vi.fn(), lock: vi.fn(), focus: vi.fn(), capabilities: {} as {torch?:boolean;exposureMode?:string[];focusMode?:string[];focusDistance?:{min:number;max:number;step:number}},
   unlock: vi.fn(), error: vi.fn(), success: vi.fn(), complete: vi.fn(),
   lost: undefined as ((reason: string) => void) | undefined,
 }));
@@ -303,14 +303,22 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(container.querySelector('.review-image')?.closest('dialog')?.querySelector('h2')?.textContent).toBe('Pokemon_0004.jpg');
   });
   it('restores cached camera controls and resets settings without deleting the saved batch', async () => {
-    mocks.capabilities={torch:true,focusMode:['manual','continuous']};
-    localStorage.setItem('cardslinger-settings',JSON.stringify({...defaults,cameraId:'rear-wide',resolution:3840,zoom:2,torch:true,focusLocked:true,focusDistance:2}));
+    mocks.capabilities={torch:true,exposureMode:['manual','continuous'],focusMode:['manual','continuous']};
+    localStorage.setItem('cardslinger-settings',JSON.stringify({...defaults,cameraId:'rear-wide',resolution:3840,zoom:2,torch:true,focusLocked:true,focusDistance:2,lockCamera:true,debug:true,quality:0.86}));
     const b={id:'saved-batch',number:3,name:'Keep these photos',target:5,createdAt:1,status:'paused',nextOrdinal:1};
     mocks.load.mockResolvedValueOnce({...loaded,batch:b,scans:[{id:'saved',batchId:b.id,ordinal:0,blob:new Blob(),thumbnail:new Blob(),processingMs:1,corners:[],width:900,height:1257}]});
     await renderApp();expect(mocks.start).toHaveBeenCalledWith(3840,'rear-wide');
     expect(mocks.control).toHaveBeenCalledWith({torch:true});expect(mocks.focus).toHaveBeenCalledWith(true, 2);
+    expect(mocks.lock).not.toHaveBeenCalled();
     await act(async()=>container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
-    await click('Settings');await click('Reset settings');
+    expect(container.querySelector('nav')?.textContent).not.toContain('Scan details');
+    await click('Settings');
+    expect(container.querySelector('.advanced-settings')?.textContent).not.toMatch(/Troubleshooting|Lock brightness and color/);
+    const quality = container.querySelector<HTMLSelectElement>('select[aria-label="Photo quality"]')!;
+    expect(quality.value).toBe('0.86');
+    await act(async () => { quality.value = '0.9'; quality.dispatchEvent(new Event('change', { bubbles: true })); });
+    expect(mocks.settings.mock.calls.at(-1)?.[0].quality).toBe(0.9);
+    await click('Reset settings');
     expect(JSON.parse(localStorage.getItem('cardslinger-settings')!)).toEqual(defaults);
     expect(mocks.settings.mock.calls.at(-1)?.[0]).toEqual(defaults);expect(mocks.start).toHaveBeenLastCalledWith(2560,undefined);
     expect(container.querySelector('.scan-count')?.textContent).toBe('1 / 5');

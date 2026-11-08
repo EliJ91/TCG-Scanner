@@ -72,7 +72,7 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 
 ## Performance and offline
 
-- [ ] Enable Show scan details in Settings. Record motion analysis time and measured capture pace.
+- [ ] Select each Photo quality option and compare the sizes of new JPEGs. Check that Less and More label the ends of the movement slider.
 - [ ] Run for 10–15 minutes. Check heat, battery use, frame gaps, memory, and responsiveness. Lower camera resolution or feed speed if the device cannot keep up.
 - [ ] After production service worker is active, close/reopen the site in airplane mode and scan/export. Fonts, gallery, and ZIP should work without network.
 - [ ] Install on Android and through iOS Add to Home Screen. Repeat camera/sound/offline tests in installed mode.

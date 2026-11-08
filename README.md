@@ -62,22 +62,20 @@ Deleting a stored scan reduces the count and pauses the scanner, including a pre
 
 ## Settings
 
-**Menu → Settings** starts with Dark mode, Wait before each photo, and Sounds/Volume. Camera and photo tuning stay inside **Advanced settings**. Selected camera, resolution, zoom, flashlight, focus position, camera locks, capture mode, and tuning are saved in browser preferences and restored on entry. A missing remembered camera falls back to the rear camera. **Reset settings** restores defaults and the device's theme preference while keeping photos and the batch. Pause capture before resetting. The previous 220 ms setting migrates to 100 ms. Other custom delays are kept within the supported range.
+**Menu → Settings** starts with Dark mode, gallery order, Wait before each photo, and Sounds/Volume. Camera and photo tuning stay inside **Advanced settings**. Selected camera, resolution, zoom, flashlight, focus position and lock, capture mode, and tuning are saved in browser preferences and restored on entry. A missing remembered camera falls back to the rear camera. **Reset settings** restores defaults and the device's theme preference while keeping photos and the batch. Pause capture before resetting. The previous 220 ms setting migrates to 100 ms. Other custom delays are kept within the supported range.
 
 | Control | Default | Notes |
 | --- | --- | --- |
 | Capture mode | Auto | Manual takes one snapshot per tap |
 | Wait before each photo | 100 ms | Adjustable from 10 ms to 1 second |
-| Ignore small movements | A little (2.5%) | Advanced; fraction of changed luma pixels after exposure-shift compensation |
+| Ignore small movements | 2.5% | The Less to More slider adjusts which movements restart the countdown |
 | Zoom | 1× | Preview slider, 1–3× center crop; capture and motion use identical framing |
-| Photo quality | 100% | JPEG encoding quality for new photos |
+| Photo quality | Best quality (100%) | Choose Smaller files (80%), Balanced (90%), or Best quality (100%) |
 
-| Camera detail | High (2560 px wide) | Advanced; rear-facing, closest available resolution |
+| Camera resolution | High (2560 px wide) | Requests a camera frame width. The phone chooses the closest supported size |
 | Alternate manual photo method | Off | Advanced; optional `ImageCapture.grabFrame()` for manual shots, with video-canvas fallback |
 
 Zoom controls framing. Camera selection appears after permission, and resolution changes require stopping the camera. The focus slider and lock use camera capabilities exposed by the browser. [MediaStream Image Capture specification](https://w3c.github.io/mediacapture-image/)
-
-Enable **Show scan details** in Settings to see motion, stability, capture state, analysis time, and capture pace.
 
 ## How it works
 

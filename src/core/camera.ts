@@ -6,7 +6,7 @@ export interface FocusRange { min: number; max: number; step?: number }
 export interface CameraCapabilities {
   torch?: boolean; zoom?: { min: number; max: number; step: number };
   focusDistance?: FocusRange;
-  focusMode?: string[]; exposureMode?: string[]; whiteBalanceMode?: string[];
+  focusMode?: string[];
 }
 interface FrameGrabber { grabFrame(): Promise<ImageBitmap> }
 export class Camera {
@@ -150,16 +150,6 @@ export class Camera {
     } else position = undefined;
     await this.control({ focusMode: modes.includes('manual') ? 'manual' : undefined, focusDistance: position });
     return position ?? this.focusDistance;
-  }
-  async lock(locked: boolean) {
-    const values: Record<string, unknown> = {};
-    for (const key of ['exposureMode', 'whiteBalanceMode'] as const) {
-      const modes = this.capabilities[key];
-      if (locked && modes?.includes('manual')) values[key] = 'manual';
-      else if (!locked && modes?.includes('continuous')) values[key] = 'continuous';
-    }
-    if (!Object.keys(values).length) throw new Error('This camera does not expose brightness or color locks.');
-    await this.control(values);
   }
   stop() { this.generation++; this.cancelPreview?.(); this.cancelPreview = undefined; this.disposeSynthetic?.(); this.disposeSynthetic = undefined; this.stream?.getTracks().forEach(track => track.stop()); this.stream = undefined; this.capabilities = {}; this.video.srcObject = null; this.grabber = undefined; this.adjustments = {}; this.controlQueue = Promise.resolve(); this.baseConstraints = {}; }
 }

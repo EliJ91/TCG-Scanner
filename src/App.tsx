@@ -1,9 +1,15 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Aperture, ArrowDownToLine, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Focus, Gauge, Images, Layers3, Lock, LockOpen, Menu, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, Share2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X } from 'lucide-react';
+import { Aperture, ArrowDownToLine, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Focus, Images, Layers3, Lock, LockOpen, Menu, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, Share2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X } from 'lucide-react';
 import { useScanner } from './useScanner';
 import { useTheme } from './useTheme';
 import { createZip, downloadArchive, rotateScan } from './core/export';
 import { archiveFilename, defaultBatchName, filename, maxBatchTarget, message, validBatchTarget, type Batch, type Scan } from './core/types';
+
+const photoQualities = [
+  { value: 0.8, label: 'Smaller files (80%)' },
+  { value: 0.9, label: 'Balanced (90%)' },
+  { value: 1, label: 'Best quality (100%)' },
+];
 
 function BlobImage({ blob, alt, ...props }: { blob: Blob; alt: string } & React.ImgHTMLAttributes<HTMLImageElement>) {
   const [url, setUrl] = useState('');
@@ -121,7 +127,6 @@ export default function App() {
   const [quantityDraft, setQuantityDraft] = useState('');
   const [quantityError, setQuantityError] = useState('');
   const [showGallery, setShowGallery] = useState(false);
-  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [target, setTarget] = useState(50); const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false); const [selected, setSelected] = useState<string>();
   const [confirmClear, setConfirmClear] = useState(false); const [deleteId, setDeleteId] = useState<string>();
@@ -140,7 +145,6 @@ export default function App() {
   const sizeDisabled = !s.loaded || s.session === 'starting' || s.pending > 0 || working;
   const batchReserved = count + s.pending >= quantity;
   const progress = Math.min(100, count / quantity * 100);
-  const rate = s.measuredScans > 1 && s.elapsedMs > 0 ? (s.measuredScans / (s.elapsedMs / 60000)).toFixed(1) : '—';
   const newestFirst = s.settings.galleryNewestFirst;
   const galleryScans = useMemo(() => newestFirst ? [...s.scans].reverse() : s.scans, [newestFirst, s.scans]);
   const activeIndex = selected ? galleryScans.findIndex(scan => scan.id === selected) : -1;
@@ -323,7 +327,6 @@ export default function App() {
         <button onClick={() => openFromMenu(() => setShowGallery(true))}><Images size={20} /><span>Recent cards<small>{failedCount ? `${failedCount} need review` : `${count} saved`}</small></span><ChevronRight size={17} /></button>
         <button onClick={() => openFromMenu(() => setShowSettings(true))}><Settings2 size={20} /><span>Settings</span><ChevronRight size={17} /></button>
         <button onClick={() => openFromMenu(() => setShowHelp(true))}><CircleHelp size={20} /><span>Scanning guide</span><ChevronRight size={17} /></button>
-        {s.settings.debug && <button onClick={() => openFromMenu(() => setShowDiagnostics(true))}><Gauge size={20} /><span>Scan details</span><ChevronRight size={17} /></button>}
         {s.cameraSize.width > 0 && <>
           <div className="menu-divider" />
           {!autoMode && s.session === 'scanning' && <button onClick={() => openFromMenu(s.pause)}><Pause size={18} /><span>Pause scanning</span><ChevronRight size={17} /></button>}
@@ -358,18 +361,6 @@ export default function App() {
       {gallery()}
     </Dialog>}
 
-    {showDiagnostics && <Dialog title="Scan details" close={() => setShowDiagnostics(false)}><div className="diagnostics-grid">
-      <span>Motion<b>{((s.reading?.score ?? 0) * 100).toFixed(2)}%</b></span>
-      <span>Stability<b>{((s.reading?.stability ?? 0) * 100).toFixed(0)}%</b></span>
-      <span>Noise<b>{s.reading?.noise.toFixed(2) ?? '—'}</b></span>
-      <span>Capture state<b>{s.reading?.state ?? 'waiting'}</b></span>
-      <span>Analysis<b>{timingLabel(s.timing)}</b></span>
-      <span>Measured pace<b>{rate} cards/min</b></span>
-      <span>Failures<b>{failedCount}</b></span>
-      <span>Cycle<b>{s.reading?.cycle ?? 0}</b></span>
-      <span>Camera<b>{s.cameraSize.width ? `${s.cameraSize.width} × ${s.cameraSize.height}` : 'Off'}</b></span>
-    </div></Dialog>}
-
     {showSettings && <Dialog title="Settings" close={() => setShowSettings(false)}><div className="settings-content simple-settings">
       <p className="dialog-intro">Your choices are saved automatically on this device.</p>
       <Toggle label="Dark mode" checked={theme.dark} onChange={theme.setDark} />
@@ -383,21 +374,35 @@ export default function App() {
         <div className="sound-previews" role="group" aria-label="Preview sounds"><button className="button outline" onClick={() => void s.testSound()}><Volume2 size={16} />Play ding</button><button className="button outline" onClick={() => void s.testErrorSound()}><Volume2 size={16} />Play buzz</button></div>
       </>}
       <details className="advanced-settings"><summary><span>Advanced settings<small>Extra camera and photo controls</small></span><ChevronRight size={18} /></summary><div>
-        <p className="setting-hint">You can leave these as they are unless you’re having trouble.</p>
         {busy && <div className="settings-pause-note"><p>Pause scanning to change the greyed-out controls.</p><button className="button outline" onClick={s.pause}><Pause size={16} />Pause scanning</button></div>}
         <h3><Focus size={16} /> Photos</h3>
-        <Setting label="Ignore small movements" value={s.settings.sensitivity < .05 ? 'A little' : s.settings.sensitivity < .12 ? 'Some' : 'More'} hint="Turn this up if small vibrations keep restarting the countdown."><input aria-label="Ignore small movements" disabled={busy} type="range" min="0.02" max="0.2" step="0.005" value={s.settings.sensitivity} onChange={e => s.setSettings({ ...s.settings, sensitivity: +e.target.value })} /></Setting>
-        <Setting label="Photo quality" value={`${Math.round(s.settings.quality * 100)}%`} hint="Higher quality makes larger download files."><input aria-label="Photo quality" disabled={busy} type="range" min="0.8" max="1" step="0.01" value={s.settings.quality} onChange={e => s.setSettings({ ...s.settings, quality: +e.target.value })} /></Setting>
+        <Setting label="Ignore small movements" hint="Turn this up if small vibrations keep restarting the countdown.">
+          <div className="range-with-labels">
+            <span aria-hidden="true">Less</span>
+            <input aria-label="Ignore small movements" disabled={busy} type="range" min="0.02" max="0.2" step="0.005" value={s.settings.sensitivity} onChange={e => s.setSettings({ ...s.settings, sensitivity: +e.target.value })} />
+            <span aria-hidden="true">More</span>
+          </div>
+        </Setting>
+        <label className="select-setting">Photo quality
+          <select aria-label="Photo quality" disabled={busy} value={s.settings.quality} onChange={e => s.setSettings({ ...s.settings, quality: +e.target.value })}>
+            {!photoQualities.some(option => option.value === s.settings.quality) && <option value={s.settings.quality}>Current ({Math.round(s.settings.quality * 100)}%)</option>}
+            {photoQualities.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+          <small>Higher JPEG quality makes larger files.</small>
+        </label>
         <h3><Camera size={16} /> Camera</h3>
         {s.devices.length > 1 && <label className="select-setting">Choose a camera<select disabled={busy || s.pending > 0} value={s.settings.cameraId} onChange={e => void s.switchCamera(e.target.value)}><option value="">Automatic rear camera</option>{s.devices.map((d, i) => <option key={d.deviceId} value={d.deviceId}>{d.label || `Camera ${i + 1}`}</option>)}</select></label>}
         {s.capabilities.torch && <Toggle label="Flashlight" hint="Add light from your phone while scanning." checked={s.settings.torch} onChange={v => void s.control({ torch: v })} />}
         <p className="setting-hint">Use the zoom slider below the preview to frame your photo. On supported cameras, use the side slider to focus and the lock to hold focus.</p>
-        <label className="select-setting">Camera detail<select disabled={busy || s.cameraSize.width > 0} value={s.settings.resolution} onChange={e => s.setSettings({ ...s.settings, resolution: +e.target.value })}>{[[1920,'Standard'],[2560,'High'],[3840,'Highest']].map(([n,label]) => <option key={n} value={n}>{label}</option>)}</select><small>Use Menu → Stop camera before changing this. Your phone chooses the closest size it supports.</small></label>
-        {(s.capabilities.exposureMode?.includes('manual') || s.capabilities.whiteBalanceMode?.includes('manual')) && <Toggle label="Lock brightness and color" checked={s.settings.lockCamera} disabled={busy} hint="Turn on once the picture is clear to hold the brightness or color settings your phone supports." onChange={v => void s.lock(v)} />}
+        <label className="select-setting">Camera resolution
+          <select disabled={busy || s.cameraSize.width > 0} value={s.settings.resolution} onChange={e => s.setSettings({ ...s.settings, resolution: +e.target.value })}>
+            <option value={1920}>Standard (1920 px)</option>
+            <option value={2560}>High (2560 px)</option>
+            <option value={3840}>Highest (3840 px)</option>
+          </select>
+          <small>Sets the requested camera frame width. Use Menu → Stop camera before changing it.</small>
+        </label>
         <Toggle label="Alternate manual photo method" hint="Try this if the Take photo button fails on your phone." checked={s.settings.useImageCapture} disabled={busy} onChange={v => s.setSettings({ ...s.settings, useImageCapture: v })} />
-        <h3><Gauge size={16} /> Troubleshooting</h3>
-
-        <Toggle label="Show scan details" checked={s.settings.debug} hint="Adds Scan details to the menu to help check problems with scanning." onChange={v => s.setSettings({ ...s.settings, debug: v })} />
         <h3><ArrowDownToLine size={16} /> Add to your home screen</h3><p className="setting-hint">On iPhone, open Safari → Share → Add to Home Screen. On Android, choose Install app in the browser menu.</p>{installPrompt && <button className="button outline install-scanner" onClick={() => { void installPrompt.prompt(); setInstallPrompt(undefined); }}>Install app</button>}
       </div></details>
     </div><div className="dialog-footer"><button className="button outline" disabled={!s.loaded || busy || s.capturing || working || s.cameraPhase === 'requesting'} title={busy ? 'Pause scanning to reset settings' : 'Restore defaults and keep your photos'} onClick={() => void safe(async () => { await s.resetSettings(); theme.setDark(window.matchMedia('(prefers-color-scheme: dark)').matches); })}>Reset settings</button><button className="button dark" onClick={() => setShowSettings(false)}>Done</button></div></Dialog>}
@@ -422,7 +427,6 @@ export default function App() {
     {deleteId && <Dialog title="Delete this scan?" close={() => setDeleteId(undefined)}><div className="confirm-content"><p>The image will be removed and exported filenames will stay sequential. Scanning stays paused until you explicitly resume.</p></div><div className="dialog-footer"><button className="button outline" onClick={() => setDeleteId(undefined)}>Keep image</button><button className="button danger" disabled={editingDisabled} onClick={() => void safe(async () => { const scan = s.scans.find(a => a.id === deleteId); if (scan) await s.remove(scan); setSelected(undefined); setDeleteId(undefined); })}>Delete image</button></div></Dialog>}
   </>;
 }
-function timingLabel(ms: number) { return `${ms.toFixed(1)} ms`; }
 function Setting({ label, value, hint, children }: { label: string; value?: string; hint?: string; children: ReactNode }) {
   return <div className="setting"><div><label>{label}</label>{value && <span>{value}</span>}</div>{children}{hint && <p className="setting-hint">{hint}</p>}</div>;
 }
