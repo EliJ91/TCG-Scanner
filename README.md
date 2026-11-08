@@ -1,6 +1,6 @@
 # CardSlinger — Pokémon Auto Scanner
 
-A mobile-first React and TypeScript camera app for hands-free photography above a physical card-slinger. Photos and ZIP downloads stay in the browser.
+A mobile-first React and TypeScript camera app for hands-free photography above a physical card-slinger. The browser stores photos and builds the batch ZIP on your device.
 
 Live app: [elij91.github.io/TCG-Scanner](https://elij91.github.io/TCG-Scanner/). Source: [EliJ91/TCG-Scanner](https://github.com/EliJ91/TCG-Scanner).
 
@@ -31,7 +31,8 @@ Fonts and app assets are bundled locally. Use `npm ci` for a reproducible instal
 3. Choose **Auto** or **Manual**. In Auto, place the first card and tap **Start scanning**. The green bar fills during the stillness delay. Remove the card after the photo and briefly show the bare surface before placing the next card. Set **Wait before each photo** from **10 ms to 1 second** in Settings. In Manual, tap **Take photo**.
 4. Use zoom to frame the photo. On a supported camera, drag the right-side slider to focus manually. Tap the lock to hold focus or restore autofocus.
 5. The camera dings when it takes a photo. The completion alarm plays after the batch target is saved.
-6. Tap the scan count to view **Recent cards**, rotate any upside-down cards, and choose **Download ZIP** from the menu or gallery. Edit the batch name in the download dialog. It defaults to `Batch#001`, `Batch#002`, and so on, and your edit is remembered for later exports. The archive uses the batch name, such as `Batch#001.zip` or `Trade night.zip`. Images inside use sequential filenames such as `Pokemon_0001.jpg` in capture order, with no gaps from failed or deleted scans.
+6. Tap the scan count to view **Recent cards**, rotate any upside-down cards, and choose **Export ZIP** from the menu or gallery. Edit the batch name before downloading or sharing. It defaults to `Batch#001`, `Batch#002`, and so on, and your edit is remembered for later exports. The archive uses the batch name, such as `Batch#001.zip` or `Trade night.zip`. Images inside use sequential filenames such as `Pokemon_0001.jpg` in capture order, with no gaps from failed or deleted scans.
+7. Tap **Share ZIP** to choose an available mail or messaging app from your device’s share sheet. If the browser blocks ZIP sharing, choose **Download ZIP** and share that file from Files or Downloads. [Web Share API](https://www.w3.org/TR/web-share/)
 
 The centered scanner includes an editable batch name, zoom slider, capture mode, scan count, and capture control. The count opens Recent cards. **Menu** also gives access to batch quantity, recent cards, downloads, settings, and the guide. Opening the menu or gallery keeps the camera mounted and detection running. Thumbnails render only while the gallery is open.
 

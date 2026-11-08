@@ -1,9 +1,9 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { Aperture, ArrowDownToLine, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Focus, Gauge, Images, Layers3, Lock, LockOpen, Menu, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X } from 'lucide-react';
+import { Aperture, ArrowDownToLine, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Focus, Gauge, Images, Layers3, Lock, LockOpen, Menu, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, Share2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X } from 'lucide-react';
 import { useScanner } from './useScanner';
 import { useTheme } from './useTheme';
-import { downloadZip, rotateScan } from './core/export';
-import { archiveFilename, defaultBatchName, filename, message } from './core/types';
+import { createZip, downloadArchive, rotateScan } from './core/export';
+import { archiveFilename, defaultBatchName, filename, message, type Batch, type Scan } from './core/types';
 
 function BlobImage({ blob, alt, ...props }: { blob: Blob; alt: string } & React.ImgHTMLAttributes<HTMLImageElement>) {
   const [url, setUrl] = useState('');
@@ -27,6 +27,92 @@ function OriginalPhoto({ id, load }: { id: string; load(id: string): Promise<Blo
   }, [id, load]);
   return blob ? <BlobImage blob={blob} alt="Retained original photo" /> : <div className="original-placeholder" aria-label="Original photo saved"><Camera size={20} /></div>;
 }
+
+function BatchExport({ batch, scans, disabled, rename, close }: {
+  batch: Batch;
+  scans: Scan[];
+  disabled: boolean;
+  rename(name: string): Promise<void>;
+  close(): void;
+}) {
+  const [name, setName] = useState(batch.name);
+  const [build, setBuild] = useState<{ progress: number } | { blob: Blob; scans: Scan[] } | { error: string }>({ progress: 0 });
+  const [shareState, setShareState] = useState<'idle' | 'sharing' | 'unavailable'>('idle');
+  const [downloaded, setDownloaded] = useState('');
+  const [actionError, setActionError] = useState('');
+
+  useEffect(() => {
+    let current = true;
+    setBuild({ progress: 0 });
+    void createZip(scans, progress => {
+      if (current) setBuild(previous => 'progress' in previous && previous.progress === progress ? previous : { progress });
+    }).then(blob => {
+      if (current) setBuild({ blob, scans });
+    }).catch(error => {
+      if (current) setBuild({ error: `Could not prepare the ZIP. ${message(error)}` });
+    });
+    return () => { current = false; };
+  }, [scans]);
+
+  const archiveName = archiveFilename(name, batch.number);
+  const file = 'blob' in build && build.scans === scans ? new File([build.blob], archiveName, { type: 'application/zip' }) : undefined;
+  const nativeShare = typeof navigator.share === 'function' && typeof navigator.canShare === 'function';
+  const canShare = !!file && nativeShare && shareState !== 'unavailable' && navigator.canShare({ files: [file] });
+  const sharing = shareState === 'sharing';
+  const showShare = sharing || canShare || (nativeShare && 'progress' in build);
+  const ready = !!file && !disabled && !sharing;
+
+  const rememberName = () => {
+    void rename(name).catch(() => setActionError('Could not remember the batch name.'));
+  };
+  const download = () => {
+    if (!file || !ready) return;
+    setActionError('');
+    try {
+      downloadArchive(file);
+      setDownloaded(file.name);
+      rememberName();
+    } catch (error) {
+      setActionError(`Could not download the ZIP. ${message(error)}`);
+    }
+  };
+  const share = async () => {
+    if (!file || !ready || !canShare) return;
+    setShareState('sharing');
+    setActionError('');
+    try {
+      // The ZIP is ready before this tap, so sharing can use its user activation.
+      await navigator.share({ files: [file] });
+      setShareState('idle');
+      rememberName();
+    } catch (error) {
+      setShareState(error instanceof DOMException && error.name === 'AbortError' ? 'idle' : 'unavailable');
+    }
+  };
+
+  return <Dialog title="Export batch" close={close}>
+    <div className="confirm-content">
+      {downloaded && <div className="export-success" role="status"><strong>{downloaded}</strong><p>Check your browser’s downloads.</p></div>}
+      <label className="select-setting batch-name-field" htmlFor="export-batch-name">Batch name
+        <input id="export-batch-name" type="text" maxLength={100} value={name} disabled={sharing} placeholder={defaultBatchName(batch.number)} onChange={event => setName(event.target.value)} />
+      </label>
+      <p className="archive-preview">{archiveName}</p>
+      <p className="setting-hint">{scans.length} saved photos in this ZIP.</p>
+      {(!nativeShare || (file && !showShare)) && <p className="setting-hint" role="status">Download the ZIP, then share it from Files or Downloads.</p>}
+      {'progress' in build && <>
+        <p className="setting-hint">Preparing ZIP · {build.progress}%</p>
+        <div className="progress-track" role="progressbar" aria-label="ZIP export progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={build.progress}><div style={{ width: `${build.progress}%` }} /></div>
+      </>}
+      {'error' in build && <p className="name-error" role="alert">{build.error}</p>}
+      {actionError && <p className="name-error" role="alert">{actionError}</p>}
+    </div>
+    <div className="dialog-footer">
+      <button type="button" className={`button ${showShare ? 'outline' : 'dark'}`} disabled={!ready} onClick={download}><ArrowDownToLine size={16} />Download ZIP</button>
+      {showShare && <button type="button" className="button dark" disabled={!ready} onClick={() => void share()}><Share2 size={16} />{sharing ? 'Sharing…' : 'Share ZIP'}</button>}
+    </div>
+  </Dialog>;
+}
+
 export default function App() {
   const s = useScanner();
   const theme = useTheme();
@@ -37,9 +123,8 @@ export default function App() {
   const [target, setTarget] = useState(50); const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false); const [selected, setSelected] = useState<string>();
   const [confirmClear, setConfirmClear] = useState(false); const [deleteId, setDeleteId] = useState<string>();
-  const [exporting, setExporting] = useState<number | null>(null); const [working, setWorking] = useState(false);
-  const [lastExport, setLastExport] = useState<string>();
-  const [exportOpen, setExportOpen] = useState(false); const [exportName, setExportName] = useState('');
+  const [working, setWorking] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [showName, setShowName] = useState(false); const [nameDraft, setNameDraft] = useState(''); const [nameError, setNameError] = useState('');
   const [installPrompt, setInstallPrompt] = useState<Event & { prompt(): Promise<void> }>();
   useEffect(() => {
@@ -54,18 +139,7 @@ export default function App() {
   const rate = s.measuredScans > 1 && s.elapsedMs > 0 ? (s.measuredScans / (s.elapsedMs / 60000)).toFixed(1) : '—';
   const latest = s.scans.at(-1), active = s.scans.find(scan => scan.id === selected);
   const safe = async (action: () => Promise<unknown>) => { setWorking(true); try { await action(); } catch (err) { s.setError(message(err)); } finally { setWorking(false); } };
-  const exportBatch = async () => {
-    if (!s.batch || !count || exporting !== null) return;
-    setExporting(0); s.setError('');
-    try {
-      const name = exportName.trim() || defaultBatchName(s.batch.number);
-      await s.renameBatch(name);
-      setLastExport((await downloadZip(s.scans, { ...s.batch, name }, setExporting)).name);
-    }
-    catch (err) { s.setError(`ZIP export failed: ${message(err)}. Your saved images are still on this device.`); }
-    finally { setExporting(null); }
-  };
-  const exportButton = (className = 'button dark') => <button className={className} disabled={!count || exporting !== null || s.pending > 0 || busy} onClick={() => { setLastExport(undefined); setExportName(s.batch?.name || defaultBatchName(s.batch?.number ?? 1)); setExportOpen(true); }}><ArrowDownToLine size={17} />{exporting !== null ? `Creating ZIP · ${exporting}%` : 'Download ZIP'}{exporting === null && <span className="button-count">{count}</span>}</button>;
+  const exportButton = () => <button className="button dark" aria-label={`Export ZIP, ${count} saved photos`} disabled={!count || editingDisabled} onClick={() => setExportOpen(true)}><ArrowDownToLine size={17} />Export ZIP<span className="button-count">{count}</span></button>;
   const gallery = () => <>
     {count ? <div className="gallery-grid">{s.scans.map((scan, index) => {
       return <button className="scan-tile" key={scan.id} onClick={() => setSelected(scan.id)}>
@@ -227,7 +301,7 @@ export default function App() {
           <button onClick={() => openFromMenu(s.stop)}><Square size={18} /><span>Stop camera</span><ChevronRight size={17} /></button>
         </>}
       </nav>
-      <div className="menu-footer">{exportButton()}{busy && <p className="setting-hint">Pause scanning to download or edit images.</p>}</div>
+      <div className="menu-footer">{exportButton()}{busy && <p className="setting-hint">Pause scanning to export or edit images.</p>}</div>
     </Dialog>}
 
     {showBatch && <Dialog title={s.batch?.name || 'Batch'} close={() => setShowBatch(false)}>
@@ -295,10 +369,10 @@ export default function App() {
       ['Position your phone', 'Keep your phone steady above one card. Allow camera access when asked. Keep all four card edges visible, with a little space around them. Avoid glare from lights.'],
       ['Choose your batch', 'Open Menu → Batch to choose how many cards to scan. Tap the name at the top of the camera view to change it. Use the zoom slider to bring the card closer.'],
       ['Take your photos', 'In Auto, place a card and tap Start scanning. The camera takes the photo and dings when the green bar fills. Remove the card before placing the next one. In Manual, tap Take photo.'],
-      ['Check and download', 'Tap the scan count to view your photos. When the batch is full, scanning stops and an alarm plays. Choose Download ZIP to save the photos together in one file.'],
+      ['Check and export', 'Tap the scan count to view your photos. When the batch is full, scanning stops and an alarm plays. Choose Export ZIP to download or share the batch.'],
     ].map(([title, text], i) => <div className="guide-step" key={title}><span>{String(i + 1).padStart(2,'0')}</span><div><h3>{title}</h3><p>{text}</p></div></div>)}<div className="guide-callout"><ShieldCheck size={18} /><p>Scans stay in this browser’s local storage. Download your batch before clearing browser data. When reopening a saved batch in Auto, clear the camera view before placing a card.</p></div></div><div className="dialog-footer"><button className="button primary" onClick={() => setShowHelp(false)}>Ready to scan <ArrowRight size={16} /></button></div></Dialog>}
-    {confirmClear && <Dialog title="Start a fresh batch?" close={() => setConfirmClear(false)}><div className="confirm-content"><p>This deletes this batch’s {count} saved images and {s.attempts.length} retained captures from this device. Download your ZIP first if you want to keep them.</p>{exportButton()}<p className="setting-hint">A download does not automatically clear your batch.</p></div><div className="dialog-footer"><button className="button outline" onClick={() => setConfirmClear(false)}>Keep batch</button><button className="button danger" disabled={editingDisabled} onClick={() => void safe(async () => { await s.clear(); setLastExport(undefined); setConfirmClear(false); setShowBatch(false); setShowGallery(false); setShowMenu(false); })}><Trash2 size={15} /> Delete & start new</button></div></Dialog>}
-    {exportOpen && <Dialog title="Download your batch" close={() => { if (exporting === null) setExportOpen(false); }}><div className="confirm-content">{lastExport ? <div className="export-success" role="status"><strong>{lastExport} is ready</strong><p>Check your browser’s downloads. Photos stay saved here.</p></div> : <p>Give this batch a name before saving your archive.</p>}<label className="select-setting batch-name-field" htmlFor="export-batch-name">Batch name<input id="export-batch-name" autoFocus type="text" maxLength={100} value={exportName} disabled={exporting !== null} placeholder={defaultBatchName(s.batch?.number ?? 1)} onChange={e => setExportName(e.target.value)} /></label><p className="archive-preview">{archiveFilename(exportName, s.batch?.number ?? 1)}</p><p className="setting-hint">{count} saved photos · sequential Pokémon filenames inside the ZIP. The batch name is remembered for your next download.</p>{exporting !== null && <div className="progress-track" role="progressbar" aria-label="ZIP export progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={exporting}><div style={{width:`${exporting}%`}} /></div>}</div><div className="dialog-footer"><button className="button outline" disabled={exporting !== null} onClick={() => setExportOpen(false)}>Cancel</button><button className="button dark" disabled={exporting !== null || s.pending > 0 || busy} onClick={() => void exportBatch()}><ArrowDownToLine size={16}/>{exporting !== null ? `Creating ZIP · ${exporting}%` : `Download ZIP · ${count} images`}</button></div></Dialog>}
+    {confirmClear && <Dialog title="Start a fresh batch?" close={() => setConfirmClear(false)}><div className="confirm-content"><p>This deletes this batch’s {count} saved images and {s.attempts.length} retained captures from this device. Download your ZIP first if you want to keep them.</p>{exportButton()}<p className="setting-hint">A download does not automatically clear your batch.</p></div><div className="dialog-footer"><button className="button outline" onClick={() => setConfirmClear(false)}>Keep batch</button><button className="button danger" disabled={editingDisabled} onClick={() => void safe(async () => { await s.clear(); setExportOpen(false); setConfirmClear(false); setShowBatch(false); setShowGallery(false); setShowMenu(false); })}><Trash2 size={15} /> Delete & start new</button></div></Dialog>}
+    {exportOpen && s.batch && <BatchExport batch={s.batch} scans={s.scans} disabled={editingDisabled} rename={s.renameBatch} close={() => setExportOpen(false)} />}
     {active && <Dialog title={filename(s.scans.findIndex(a => a.id === active.id))} close={() => setSelected(undefined)} wide><div className="review-image"><BlobImage blob={active.blob} alt="Full-resolution scanned card" /></div><div className="review-meta"><span>{active.width && active.height ? `${active.width} × ${active.height} · JPEG` : 'JPEG'}</span></div><div className="dialog-footer review-actions"><button className="icon-button" aria-label="Previous card" disabled={s.scans[0].id === active.id} onClick={() => setSelected(s.scans[s.scans.findIndex(a => a.id === active.id) - 1]?.id)}><ArrowLeft size={20} /></button><button className="button outline" disabled={editingDisabled} onClick={() => void safe(async () => s.updateScan(await rotateScan(active)))}><RotateCw size={16} /> Rotate 180°</button><button className="button danger-outline" disabled={editingDisabled} onClick={() => setDeleteId(active.id)}><Trash2 size={16} /> Delete</button><button className="icon-button" aria-label="Next card" disabled={latest?.id === active.id} onClick={() => setSelected(s.scans[s.scans.findIndex(a => a.id === active.id) + 1]?.id)}><ArrowRight size={20} /></button></div></Dialog>}
     {deleteId && <Dialog title="Delete this scan?" close={() => setDeleteId(undefined)}><div className="confirm-content"><p>The image will be removed and exported filenames will stay sequential. Scanning stays paused until you explicitly resume.</p></div><div className="dialog-footer"><button className="button outline" onClick={() => setDeleteId(undefined)}>Keep image</button><button className="button danger" disabled={editingDisabled} onClick={() => void safe(async () => { const scan = s.scans.find(a => a.id === deleteId); if (scan) await s.remove(scan); setSelected(undefined); setDeleteId(undefined); })}>Delete image</button></div></Dialog>}
   </>;

@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { CameraAccessError } from '../src/core/camera-access';
+import * as exportTools from '../src/core/export';
 import { defaults } from '../src/core/types';
 import { emptyFrame, printedCard } from './card-frame';
 
@@ -90,6 +91,62 @@ beforeEach(() => {
   container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container);
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.restoreAllMocks(); vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+describe('batch file sharing', () => {
+  const zip = new Blob(['batch ZIP'], { type: 'application/zip' });
+
+  async function openExport(share: (data: ShareData) => Promise<void>) {
+    Object.defineProperties(navigator, {
+      canShare: { configurable: true, value: ({ files }: ShareData) => files?.[0].type === 'application/zip' },
+      share: { configurable: true, value: share },
+    });
+    const batch = { id: 'exported', number: 7, name: 'Batch#007', target: 5, createdAt: 1, status: 'paused', nextOrdinal: 1 };
+    const scan = { id: 'photo', batchId: batch.id, ordinal: 0, blob: new Blob(['JPEG']), width: 900, height: 1257 };
+    mocks.load.mockResolvedValueOnce({ ...loaded, batch, scans: [scan] });
+    await renderApp();
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Export ZIP, 1 saved photos"]')!.click());
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'canShare');
+    Reflect.deleteProperty(navigator, 'share');
+  });
+
+  it('shares the ready archive on tap and leaves it available after canceling', async () => {
+    let finishZip!: (blob: Blob) => void;
+    const build = vi.spyOn(exportTools, 'createZip').mockImplementationOnce(() => new Promise(resolve => { finishZip = resolve; }));
+    const share = vi.fn<(data: ShareData) => Promise<void>>()
+      .mockRejectedValueOnce(new DOMException('Canceled', 'AbortError')).mockResolvedValue(undefined);
+    await openExport(share);
+    expect(button('Share ZIP').disabled).toBe(true);
+    await input('#export-batch-name', 'Trade night');
+    await act(async () => finishZip(zip));
+    await act(async () => {
+      button('Share ZIP').click();
+      expect(share).toHaveBeenCalledOnce();
+    });
+    expect(mocks.rename).not.toHaveBeenCalled();
+    await click('Share ZIP');
+    const file = share.mock.calls[1][0].files?.[0];
+    expect(file).toMatchObject({ name: 'Trade night.zip', type: 'application/zip', size: zip.size });
+    expect(build).toHaveBeenCalledOnce();
+    expect(mocks.rename).toHaveBeenCalledWith('exported', 'Trade night');
+  });
+
+  it('offers the same ZIP for download when native sharing rejects it', async () => {
+    vi.spyOn(exportTools, 'createZip').mockResolvedValueOnce(zip);
+    const download = vi.spyOn(exportTools, 'downloadArchive').mockImplementation(() => {});
+    const share = vi.fn().mockRejectedValue(new DOMException('ZIP sharing is blocked', 'NotAllowedError'));
+    await openExport(share);
+    await click('Share ZIP');
+    expect(container.textContent).toContain('share it from Files or Downloads');
+    expect(mocks.rename).not.toHaveBeenCalled();
+    await click('Download ZIP');
+    expect(download.mock.calls[0][0]).toMatchObject({ name: 'Batch#007.zip', type: 'application/zip', size: zip.size });
+    expect(mocks.rename).toHaveBeenCalledWith('exported', 'Batch#007');
+  });
+});
 
 describe('automatic camera preview independent from scanner initialization', () => {
   it('opens the camera on entry while IndexedDB is pending, without audio', async () => {
