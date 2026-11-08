@@ -42,6 +42,20 @@ describe('batch reservations and ordered durable commits', () => {
     expect(c.count).toBe(0); expect(c.pending).toBe(1); expect(c.reserve()).toBeNull();
     finish(); await c.idle(); expect(c.count).toBe(1);
   });
+  it('keeps pending slots on resize and requires a restart after expanding a complete batch', async () => {
+    const { c } = setup(5, 2);
+    const ticket = c.reserve()!;
+    expect(() => c.resize(2)).toThrow('pending photos');
+    c.resize(3);
+    expect(c.reserve()).toBeNull();
+    await c.settle(ticket, { value: 1 });
+    expect(c.complete).toBe(true);
+    c.resize(6);
+    expect(c.complete).toBe(false);
+    expect(c.reserve()).toBeNull();
+    c.start();
+    expect(c.reserve()).not.toBeNull();
+  });
   it('ignores duplicate processing results', async () => {
     const { c, saved } = setup(); const a = c.reserve()!;
     c.settle(a, { value: 1 }); c.settle(a, { value: 99 }); await c.idle(); expect(saved).toEqual([1]);

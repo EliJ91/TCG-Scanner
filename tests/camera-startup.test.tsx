@@ -5,11 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { CameraAccessError } from '../src/core/camera-access';
 import * as exportTools from '../src/core/export';
+import { cacheBatchName, cachedBatchName } from '../src/core/preferences';
 import { defaults } from '../src/core/types';
 import { emptyFrame, printedCard } from './card-frame';
 
 const mocks = vi.hoisted(() => ({
   load: vi.fn(), settings: vi.fn(), saveBatch: vi.fn(), create: vi.fn(), rename: vi.fn(),
+  resize: vi.fn(), clear: vi.fn(),
   accept: vi.fn(), getAttempt: vi.fn(),
   start: vi.fn(), stop: vi.fn(), zoom: vi.fn(), capture: vi.fn(),
   control: vi.fn(), lock: vi.fn(), focus: vi.fn(), capabilities: {} as {torch?:boolean;focusMode?:string[];focusDistance?:{min:number;max:number;step:number}},
@@ -19,6 +21,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../src/core/storage', () => ({ storage: {
   load: mocks.load, settings: mocks.settings, saveBatch: mocks.saveBatch, create: mocks.create,
   renameBatch: mocks.rename, accept: mocks.accept, getAttempt: mocks.getAttempt,
+  resizeBatch: mocks.resize, clear: mocks.clear,
 } }));
 vi.mock('../src/core/camera', () => ({ Camera: class {
   stream?: { active: boolean }; get capabilities() { return mocks.capabilities; }
@@ -79,6 +82,7 @@ beforeEach(() => {
   });
   mocks.getAttempt.mockResolvedValue(undefined);
   mocks.accept.mockResolvedValue(undefined); mocks.rename.mockResolvedValue(undefined);
+  mocks.resize.mockResolvedValue(undefined); mocks.clear.mockResolvedValue(undefined);
   mocks.create.mockImplementation(async (target, name) => ({id:'test-batch',number:1,name:name || 'Batch#001',target,createdAt:Date.now(),status:'paused',nextOrdinal:0}));
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   // Lifecycle tests drive frame callbacks explicitly; motion timing has its own suite.
@@ -344,6 +348,37 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await act(async()=>container.querySelector<HTMLButtonElement>('[aria-label="Edit batch name"]')!.click());
     await input('#batch-name','Binder Saturday'); await click('Save name');
     expect(mocks.rename).toHaveBeenCalledWith('test-batch','Binder Saturday'); expect(mocks.create).toHaveBeenCalledTimes(1);
+    await click('Auto'); await click('Pause scanning');
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
+    await click('Batch1 / 50 cards scanned');
+    await click('New batch'); await click('Delete & start new');
+    expect(mocks.clear).toHaveBeenCalledWith('test-batch');
+    expect(container.querySelector('.batch-name-trigger')?.textContent).toBe('Binder Saturday');
+    expect(cachedBatchName()).toBe('Binder Saturday');
+    await act(async () => root.unmount()); root = createRoot(container);
+    mocks.load.mockResolvedValueOnce({ ...loaded, nextBatchNumber: 2 });
+    await renderApp(); await click('Manual'); await click('Take photo');
+    expect(mocks.create).toHaveBeenLastCalledWith(50, 'Binder Saturday');
+  });
+  it('resizes a saved batch through the batch dialog and lets capture resume', async () => {
+    const batch = { id: 'full', number: 1, name: 'Batch#001', target: 2, createdAt: 1, status: 'complete', nextOrdinal: 2 };
+    const scans = [0, 1].map(ordinal => ({ id: `scan-${ordinal}`, batchId: batch.id, ordinal, blob: new Blob(['JPEG']) }));
+    mocks.load.mockResolvedValueOnce({ ...loaded, batch, scans });
+    await renderApp();
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
+    await click('Batch2 / 2 cards scanned');
+    await input('#batch-quantity', '1'); await click('Save size');
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('from 2 to');
+    expect(mocks.resize).not.toHaveBeenCalled();
+    await input('#batch-quantity', '3'); await click('Save size');
+    expect(mocks.resize).toHaveBeenCalledWith('full', 3);
+    expect(container.querySelector('.scan-count')?.textContent).toBe('2 / 3');
+    expect(button('Resume scanning').disabled).toBe(false);
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')!.click());
+    await click('Manual'); await click('Take photo');
+    expect(mocks.accept).toHaveBeenCalledWith(expect.objectContaining({ batchId: 'full', ordinal: 2 }));
+    expect(container.querySelector('.scan-count')?.textContent).toBe('3 / 3');
+    expect(mocks.create).not.toHaveBeenCalled();
   });
   it('recovers storage failures automatically without another snapshot or pausing', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout','clearTimeout','setInterval','clearInterval','Date'] }); mocks.accept.mockRejectedValueOnce(new Error('Quota exceeded'));
@@ -355,10 +390,12 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(button('Take photo').disabled).toBe(false);
   });
   it('keeps the next sequential default when an empty draft name is saved', async () => {
+    cacheBatchName('Remembered name');
     mocks.load.mockResolvedValueOnce({ ...loaded, nextBatchNumber: 8 }); await renderApp();
     await act(async()=>container.querySelector<HTMLButtonElement>('[aria-label="Edit batch name"]')!.click());
     await input('#batch-name',' '); await click('Save name');
     expect(container.querySelector('.batch-name-trigger')?.textContent).toContain('Batch#008');
+    expect(cachedBatchName()).toBeUndefined();
   });
   it('reconnects stalled frames without changing active scan intent', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout','clearTimeout','setInterval','clearInterval','performance'] });

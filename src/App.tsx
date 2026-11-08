@@ -3,7 +3,7 @@ import { Aperture, ArrowDownToLine, ArrowLeft, ArrowRight, Camera, Check, CheckC
 import { useScanner } from './useScanner';
 import { useTheme } from './useTheme';
 import { createZip, downloadArchive, rotateScan } from './core/export';
-import { archiveFilename, defaultBatchName, filename, message, type Batch, type Scan } from './core/types';
+import { archiveFilename, defaultBatchName, filename, maxBatchTarget, message, validBatchTarget, type Batch, type Scan } from './core/types';
 
 function BlobImage({ blob, alt, ...props }: { blob: Blob; alt: string } & React.ImgHTMLAttributes<HTMLImageElement>) {
   const [url, setUrl] = useState('');
@@ -118,6 +118,8 @@ export default function App() {
   const theme = useTheme();
   const [showMenu, setShowMenu] = useState(false);
   const [showBatch, setShowBatch] = useState(false);
+  const [quantityDraft, setQuantityDraft] = useState('');
+  const [quantityError, setQuantityError] = useState('');
   const [showGallery, setShowGallery] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [target, setTarget] = useState(50); const [showSettings, setShowSettings] = useState(false);
@@ -134,6 +136,8 @@ export default function App() {
   const busy = s.session === 'starting' || s.session === 'scanning';
   const editingDisabled = busy || s.pending > 0 || working;
   const count = s.scans.length, quantity = s.batch?.target ?? target;
+  const minimumQuantity = Math.max(1, count);
+  const sizeDisabled = !s.loaded || s.session === 'starting' || s.pending > 0 || working;
   const batchReserved = count + s.pending >= quantity;
   const progress = Math.min(100, count / quantity * 100);
   const rate = s.measuredScans > 1 && s.elapsedMs > 0 ? (s.measuredScans / (s.elapsedMs / 60000)).toFixed(1) : '—';
@@ -142,6 +146,27 @@ export default function App() {
   const activeIndex = selected ? galleryScans.findIndex(scan => scan.id === selected) : -1;
   const active = galleryScans[activeIndex];
   const captureIndex = (index: number) => newestFirst ? count - 1 - index : index;
+  const openBatch = () => { setQuantityDraft(String(quantity)); setQuantityError(''); setShowBatch(true); };
+  const changeBatchSize = async (next: number) => {
+    if (sizeDisabled) return;
+    if (!validBatchTarget(next, count)) {
+      setQuantityError(`Enter a whole number from ${minimumQuantity} to ${maxBatchTarget}.`);
+      return;
+    }
+    setQuantityError('');
+    if (!s.batch) {
+      setTarget(next);
+      setQuantityDraft(String(next));
+      return;
+    }
+    setWorking(true);
+    try {
+      await s.resizeBatch(next);
+      setQuantityDraft(String(next));
+    } catch (error) {
+      setQuantityError(message(error));
+    } finally { setWorking(false); }
+  };
   const safe = async (action: () => Promise<unknown>) => { setWorking(true); try { await action(); } catch (err) { s.setError(message(err)); } finally { setWorking(false); } };
   const exportButton = () => <button className="button dark" aria-label={`Export ZIP, ${count} saved photos`} disabled={!count || editingDisabled} onClick={() => setExportOpen(true)}><ArrowDownToLine size={17} />Export ZIP<span className="button-count">{count}</span></button>;
   const gallery = () => <>
@@ -290,11 +315,11 @@ export default function App() {
       </section>
     </main>
 
-    {showName && <Dialog title="Edit batch name" close={() => setShowName(false)}><div className="confirm-content"><label className="select-setting batch-name-field" htmlFor="batch-name">Batch name<input id="batch-name" autoFocus maxLength={100} enterKeyHint="done" value={nameDraft} onChange={event => setNameDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); saveName(); } }} /></label><p className="setting-hint">This name appears on your scanner and downloaded ZIP.</p>{nameError && <p className="name-error" role="alert">{nameError}</p>}</div><div className="dialog-footer"><button className="button outline" onClick={() => setShowName(false)}>Cancel</button><button className="button dark" disabled={working || !s.loaded} onClick={saveName}>Save name</button></div></Dialog>}
+    {showName && <Dialog title="Edit batch name" close={() => setShowName(false)}><div className="confirm-content"><label className="select-setting batch-name-field" htmlFor="batch-name">Batch name<input id="batch-name" autoFocus maxLength={100} enterKeyHint="done" value={nameDraft} onChange={event => setNameDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); saveName(); } }} /></label><p className="setting-hint">Your custom name carries over to the next batch. Clear it to use automatic numbering.</p>{nameError && <p className="name-error" role="alert">{nameError}</p>}</div><div className="dialog-footer"><button className="button outline" onClick={() => setShowName(false)}>Cancel</button><button className="button dark" disabled={working || !s.loaded} onClick={saveName}>Save name</button></div></Dialog>}
 
     {showMenu && <Dialog title="Menu" close={() => setShowMenu(false)}>
       <nav className="menu-list" aria-label="Scanner menu">
-        <button onClick={() => openFromMenu(() => setShowBatch(true))}><Layers3 size={20} /><span>Batch<small>{count} / {quantity} cards scanned</small></span><ChevronRight size={17} /></button>
+        <button onClick={() => openFromMenu(openBatch)}><Layers3 size={20} /><span>Batch<small>{count} / {quantity} cards scanned</small></span><ChevronRight size={17} /></button>
         <button onClick={() => openFromMenu(() => setShowGallery(true))}><Images size={20} /><span>Recent cards<small>{failedCount ? `${failedCount} need review` : `${count} saved`}</small></span><ChevronRight size={17} /></button>
         <button onClick={() => openFromMenu(() => setShowSettings(true))}><Settings2 size={20} /><span>Settings</span><ChevronRight size={17} /></button>
         <button onClick={() => openFromMenu(() => setShowHelp(true))}><CircleHelp size={20} /><span>Scanning guide</span><ChevronRight size={17} /></button>
@@ -313,11 +338,16 @@ export default function App() {
       <div className="batch-content">
         <button className="edit-name-link" onClick={editName}><Pencil size={14} />Edit batch name<span>{s.batchName}</span></button>
         <label className="field-label" htmlFor="batch-quantity">Cards per batch</label>
-        <div className="quantity-options">{[10,25,50,100].map(q => <button key={q} disabled={!!s.batch || busy} aria-pressed={quantity === q} className={quantity === q ? 'selected' : ''} onClick={() => setTarget(q)}>{q}</button>)}</div>
-        <div className="custom-quantity"><label htmlFor="batch-quantity">Custom quantity</label><input id="batch-quantity" type="number" inputMode="numeric" min="1" max="10000" value={quantity} disabled={!!s.batch || busy} onChange={e => setTarget(Math.min(10000, Math.max(1, Number(e.target.value) || 1)))} /></div>
+        <div className="quantity-options">{[10, 25, 50, 100].map(q => <button key={q} disabled={sizeDisabled || q < minimumQuantity} aria-pressed={quantity === q} className={quantity === q ? 'selected' : ''} onClick={() => void changeBatchSize(q)}>{q}</button>)}</div>
+        <form className="custom-quantity" noValidate onSubmit={event => { event.preventDefault(); void changeBatchSize(Number(quantityDraft)); }}>
+          <label htmlFor="batch-quantity">Custom size</label>
+          <input id="batch-quantity" type="number" inputMode="numeric" min={minimumQuantity} max={maxBatchTarget} step="1" value={quantityDraft} disabled={sizeDisabled} aria-invalid={!!quantityError} onChange={event => { setQuantityDraft(event.target.value); setQuantityError(''); }} />
+          <button type="submit" className="button outline" disabled={sizeDisabled}>Save size</button>
+        </form>
+        {quantityError && <p className="name-error" role="alert">{quantityError}</p>}
         <div className="progress-heading"><span>{count} / {quantity} cards scanned</span><span>{Math.round(progress)}%</span></div>
         <div className="progress-track" role="progressbar" aria-label="Batch progress" aria-valuemin={0} aria-valuemax={quantity} aria-valuenow={count}><div style={{ width: `${progress}%` }} /></div>
-        {s.batch && <p className="setting-hint batch-hint">Quantity is fixed for this batch. Start a new batch to change it.</p>}
+        {s.pending > 0 && <p className="setting-hint batch-hint">Wait for the current photos to save before changing the size.</p>}
         {s.notice && <p className="setting-hint batch-hint">{s.notice}</p>}
       </div>
       <div className="dialog-footer batch-actions">{s.batch && <button className="button danger-outline" disabled={busy || s.pending > 0} onClick={() => setConfirmClear(true)}>New batch</button>}{exportButton()}</div>

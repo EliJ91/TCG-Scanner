@@ -1,5 +1,6 @@
 import { defaults, type Settings } from './types';
 const key = 'cardslinger-settings';
+const batchNameKey = 'cardslinger-custom-batch-name';
 /** Migrate the earlier slow-capture defaults once, preserving all other choices. */
 export function normalizeSettings(saved?: Partial<Settings>): Settings {
   const next = { ...defaults, ...saved };
@@ -19,4 +20,14 @@ export function cachedSettings(fallback?: Partial<Settings>): Settings {
 }
 export function cacheSettings(settings: Settings) {
   try { localStorage.setItem(key, JSON.stringify(settings)); } catch { /* IndexedDB remains the persistent fallback. */ }
+}
+export function cachedBatchName() {
+  try { return localStorage.getItem(batchNameKey)?.trim() || undefined; }
+  catch { return undefined; }
+}
+export function cacheBatchName(name?: string) {
+  try {
+    if (name) localStorage.setItem(batchNameKey, name);
+    else localStorage.removeItem(batchNameKey);
+  } catch { /* The current batch name remains available in memory. */ }
 }

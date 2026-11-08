@@ -115,6 +115,7 @@ input[type='range'] { width: 100%; margin: 16px 0 7px; }
 .custom-quantity { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; }
 .custom-quantity label { flex: 1; color: var(--muted); }
 .custom-quantity input { width: 84px; min-width: 0; border: 0; border-radius: 4px; padding: 5px; background: var(--soft); color: var(--text); text-align: right; font-size: 14px; }
+.custom-quantity .button { padding: 8px 10px; }
 .progress-heading { display: flex; justify-content: space-between; gap: 12px; margin: 28px 0 11px; color: var(--muted); font-size: 12px; }
 .progress-track { height: 4px; border-radius: 4px; background: var(--soft); overflow: hidden; }
 .progress-track > div { height: 100%; background: var(--accent); }

@@ -50,7 +50,7 @@ The preview is visible during startup, explicitly muted, and marked for inline p
 
 Auto checks low-resolution preview frames for printed detail against the surrounding surface. Once a card is visible and still, Auto copies the confirmed preview frame. After a photo, Auto waits for two camera frames showing the bare surface before it can capture another placement. Clear the view when reopening a saved batch. Manual fires on tap. Mode switches keep the camera running. Use **Pause scanning** or **Menu → Stop camera** to pause capture while pending saves finish. The app reconnects on return if the browser suspended the camera.
 
-Batch size is immutable once a batch exists. Download and explicitly clear the batch to start a different one. **Clearing deletes the active batch**; downloads never clear it automatically. Only one active batch is presented in the UI.
+Change the current batch size in **Menu → Batch** after pending photos finish saving. The size must cover every saved photo. Increasing a completed batch lets you resume scanning. Starting a new batch still requires clearing the active one. The browser remembers the custom name for the next batch. Clear the name field to return to automatic numbering.
 
 ## Errors, retries, and storage
 

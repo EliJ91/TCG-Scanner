@@ -34,6 +34,8 @@ export function originalScan(attempt: Attempt): Scan {
 }
 export const filename = (index: number) => `Pokemon_${String(index + 1).padStart(4, '0')}.jpg`;
 export const defaultBatchName = (number: number) => `Batch#${String(number).padStart(3, '0')}`;
+export const maxBatchTarget = 10000;
+export const validBatchTarget = (target: number, count = 0) => Number.isInteger(target) && target >= Math.max(1, count) && target <= maxBatchTarget;
 export const archiveFilename = (name: string | undefined, number: number) => {
   const safe = (name || defaultBatchName(number)).replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/\.zip$/i, '').trim().replace(/[. ]+$/, '').slice(0, 100);
   const base = safe || defaultBatchName(number);

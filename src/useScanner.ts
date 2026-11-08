@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CapturePipeline } from './core/pipeline';
-import { cacheSettings, cachedSettings } from './core/preferences';
+import { cacheBatchName, cacheSettings, cachedBatchName, cachedSettings } from './core/preferences';
 import { Camera, type CameraCapabilities } from './core/camera';
 import { CameraAccessError } from './core/camera-access';
 import { CardPresenceDetector, previewHeight, previewWidth } from './core/card-presence';
@@ -8,7 +8,7 @@ import { MotionDetector, toLuma, type MotionReading } from './core/motion';
 import { ScannerAudio } from './core/audio';
 import { storage } from './core/storage';
 import { zoomRect } from './core/zoom';
-import { defaultBatchName, defaults, message, ordered, type AttemptInfo, type Batch, type Scan, type Settings } from './core/types';
+import { defaultBatchName, defaults, message, ordered, validBatchTarget, type AttemptInfo, type Batch, type Scan, type Settings } from './core/types';
 
 export type Session = 'idle' | 'starting' | 'scanning' | 'paused' | 'complete';
 function waitForPermissionDialogToClose() {
@@ -23,7 +23,8 @@ function waitForPermissionDialogToClose() {
 export function useScanner() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [batch, setBatch] = useState<Batch>(); const batchRef = useRef<Batch | undefined>(undefined);
-  const [batchName, setBatchName] = useState(defaultBatchName(1)); const nameRef = useRef(defaultBatchName(1)); const customName = useRef(false); const nextBatchNumber = useRef(1);
+  const [batchName, setBatchName] = useState(() => cachedBatchName() ?? defaultBatchName(1));
+  const nameRef = useRef(batchName); const nextBatchNumber = useRef(1);
   const [scans, setScans] = useState<Scan[]>([]);
   const [attempts, setAttempts] = useState<AttemptInfo[]>([]); const attemptsRef = useRef<AttemptInfo[]>([]);
   const [retained, setRetained] = useState<AttemptInfo[]>([]);
@@ -64,6 +65,11 @@ export function useScanner() {
   const changeSession = (value: Session) => { sessionRef.current = value; if (mounted.current) setSession(value); };
   const changeCameraPhase = (value: 'off' | 'requesting' | 'ready') => { cameraPhaseRef.current = value; if (mounted.current) setCameraPhase(value); };
   const updateAttempts = (items: AttemptInfo[]) => { attemptsRef.current = items; if (mounted.current) setAttempts(items); };
+  const setCurrentBatchName = (name: string, number: number) => {
+    nameRef.current = name;
+    setBatchName(name);
+    cacheBatchName(name === defaultBatchName(number) ? undefined : name);
+  };
   const releaseWake = () => { void wakeLock.current?.release().catch(() => {}); wakeLock.current = undefined; };
   const endTiming = () => {
     if (startTime.current !== null) { elapsedRef.current += performance.now() - startTime.current; startTime.current = null; }
@@ -143,14 +149,18 @@ export function useScanner() {
         const maxOrdinal = Math.max(-1, ...data.scans.map(s => s.ordinal), ...data.attempts.map(a => a.ordinal));
         const b = { ...data.batch, name: data.batch.name || defaultBatchName(data.batch.number), nextOrdinal: Math.max(data.batch.nextOrdinal, maxOrdinal + 1) };
         batchRef.current = b; setBatch(b); setScans(ordered(data.scans));
-        nameRef.current = b.name; setBatchName(b.name);
+        setCurrentBatchName(b.name, b.number);
         updateAttempts(data.attempts);
         resetMotion(data.scans.length > 0 || data.attempts.length > 0);
         lastComplete.current = data.scans.length >= b.target ? b.id : undefined;
         changeSession(data.scans.length >= b.target ? 'complete' : 'paused');
         makeController(b, data.scans.length);
         setNotice(data.scans.length >= b.target ? 'Completed batch recovered from this device. Your images are ready to review and download.' : 'Batch recovered. Clear the camera view before placing the next card.');
-      } else { nextBatchNumber.current = data.nextBatchNumber ?? 1; nameRef.current = defaultBatchName(nextBatchNumber.current); setBatchName(nameRef.current); }
+      } else {
+        const number = data.nextBatchNumber ?? 1;
+        nextBatchNumber.current = number;
+        setCurrentBatchName(cachedBatchName() ?? defaultBatchName(number), number);
+      }
       setLoaded(true);
     }).catch(err => {
       clearTimeout(storageDeadline); if (cancelled) return;
@@ -195,7 +205,7 @@ export function useScanner() {
 
   const capture = async (automatic = false) => {
     const c = controller.current;
-    if (!c?.hasCapacity || captureBusy.current || cameraPhaseRef.current !== 'ready' || storageIssueRef.current) return;
+    if (!c?.hasCapacity || editingBatch.current || captureBusy.current || cameraPhaseRef.current !== 'ready' || storageIssueRef.current) return;
     const { useImageCapture, quality } = settingsRef.current;
     const alternateCapture = !automatic && useImageCapture;
     if (alternateCapture) {
@@ -274,15 +284,15 @@ export function useScanner() {
       ctx.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, canvas.width, canvas.height);
       toLuma(ctx.getImageData(0, 0, canvas.width, canvas.height).data, gray);
       const next = motion.update(gray, now, card.detect(gray));
-      const deadline = c.hasCapacity && !captureBusy.current && !storageIssueRef.current ? motion.deadline : null;
-      schedule(deadline);
+      const canCapture = c.hasCapacity && !editingBatch.current && !captureBusy.current && !storageIssueRef.current;
+      schedule(canCapture ? motion.deadline : null);
       if (now - lastUI > 100) {
         setReading(next);
         if (freshFrame) setTiming(performance.now() - now);
         lastUI = now;
         setElapsedMs(elapsedRef.current + (startTime.current === null ? 0 : now - startTime.current));
       }
-      if (next.state === 'ready' && c.hasCapacity && !captureBusy.current) void capture(true);
+      if (next.state === 'ready' && canCapture) void capture(true);
     }
 
     const tick = () => {
@@ -420,8 +430,9 @@ export function useScanner() {
       await enableCamera();
       if (startToken.current !== token || document.hidden) throw new Error('Scanner startup was interrupted. Keep the app open and resume when ready.');
       if (!batchRef.current) {
-        const b = await storage.create(target, customName.current ? nameRef.current : undefined);
-        batchRef.current = b; setBatch(b); nameRef.current = b.name; setBatchName(b.name); makeController(b, 0);
+        const name = nameRef.current === defaultBatchName(nextBatchNumber.current) ? undefined : nameRef.current;
+        const b = await storage.create(target, name);
+        batchRef.current = b; setBatch(b); setCurrentBatchName(b.name, b.number); makeController(b, 0);
       }
       resetMotion();
       controller.current!.start(); changeSession('scanning'); startTime.current = performance.now();
@@ -448,8 +459,31 @@ export function useScanner() {
     void audio.current?.unlock();
     await controller.current?.keepOriginal(attempt);
   };
+  const resizeBatch = async (target: number) => {
+    const pipeline = controller.current, current = batchRef.current;
+    if (!pipeline || !current || editingBatch.current || pipeline.pending || sessionRef.current === 'starting') {
+      throw new Error('Wait for the current photos to save before changing the batch size.');
+    }
+    if (!validBatchTarget(target, pipeline.count)) throw new Error('The batch needs room for its saved photos.');
+    if (target === current.target) return;
+    editingBatch.current = true;
+    try {
+      await storage.resizeBatch(current.id, target);
+      if (!mounted.current) return;
+      const wasComplete = pipeline.complete;
+      batchRef.current = { ...batchRef.current!, target };
+      setBatch(batchRef.current);
+      pipeline.resize(target);
+      if (wasComplete && !pipeline.complete) {
+        lastComplete.current = undefined;
+        resetMotion();
+        changeSession('paused');
+        setNotice('Batch size updated. Resume scanning to add more photos.');
+      } else if (!pipeline.complete) setNotice('Batch size updated.');
+    } finally { editingBatch.current = false; }
+  };
   const remove = async (scan: Scan) => {
-    if (controller.current?.pending || sessionRef.current === 'scanning') return;
+    if (editingBatch.current || controller.current?.pending || sessionRef.current === 'scanning') return;
     await storage.deleteScan(scan.id); setScans(items => items.filter(s => s.id !== scan.id));
     controller.current?.removeStored(); lastComplete.current = undefined; changeSession('paused');
     setNotice('Image deleted. Resume explicitly to fill the open batch slot.');
@@ -470,10 +504,12 @@ export function useScanner() {
       pause();
       if (batchRef.current) await storage.clear(batchRef.current.id);
     } finally { editingBatch.current = false; }
-    const nextNumber = (batchRef.current?.number ?? 0) + 1;
+    const number = batchRef.current?.number ?? nextBatchNumber.current;
+    const nextNumber = batchRef.current ? number + 1 : number;
+    const nextName = nameRef.current === defaultBatchName(number) ? defaultBatchName(nextNumber) : nameRef.current;
     batchRef.current = undefined; setBatch(undefined); setScans([]); updateAttempts([]); setRetained([]);
     controller.current?.dispose(); controller.current = undefined; storageIssueRef.current = ''; setStorageIssue('');
-    nextBatchNumber.current = nextNumber; nameRef.current = defaultBatchName(nextNumber); setBatchName(nameRef.current); customName.current = false;
+    nextBatchNumber.current = nextNumber; setCurrentBatchName(nextName, nextNumber);
     resetMotion(false); setReading(undefined);
     elapsedRef.current = 0; setElapsedMs(0); setMeasuredScans(0); lastComplete.current = undefined; changeSession('idle'); setError(''); setNotice('Ready for a new batch.');
   };
@@ -531,12 +567,15 @@ export function useScanner() {
   };
   const explicitCapture = () => { if (controller.current?.hasCapacity) { void audio.current?.unlock(); void capture(); } };
   const renameBatch = async (name: string) => {
-    const nextName = name.trim() || defaultBatchName(batchRef.current?.number ?? nextBatchNumber.current);
-    if (batchRef.current) {
-      await storage.renameBatch(batchRef.current.id, nextName);
+    const current = batchRef.current;
+    const number = current?.number ?? nextBatchNumber.current;
+    const nextName = name.trim() || defaultBatchName(number);
+    if (current) {
+      await storage.renameBatch(current.id, nextName);
+      if (batchRef.current?.id !== current.id) return;
       batchRef.current = { ...batchRef.current, name: nextName }; setBatch(batchRef.current);
     }
-    customName.current = true; nameRef.current = nextName; setBatchName(nextName);
+    setCurrentBatchName(nextName, number);
   };
   const setCaptureMode = (captureMode: Settings['captureMode']) => {
     editedPreferences.current.add('captureMode');
@@ -562,7 +601,7 @@ export function useScanner() {
   return { videoRef, batch, batchName, scans, attempts: [...attempts.filter(item => !retained.some(photo => photo.id === item.id)), ...retained], settings, setSettings: updateSettings, resetSettings, setCaptureMode, setZoom, zoomGesture, session, error, setError, notice, loaded, pending, capturing, queueFull: controller.current?.queueFull ?? false, storageIssue,
     cameraPhase, connectCamera, openBrowserSuggested,
     reading, timing, countdown, cameraSize, capabilities, focusPosition, focusLocked, focusBusy, setFocus, devices, elapsedMs, measuredScans, start, takePhoto, pause: () => pause(), stop,
-    keepOriginal, remove, discard, clear, switchCamera, control, lock, explicitCapture, renameBatch,
+    keepOriginal, resizeBatch, remove, discard, clear, switchCamera, control, lock, explicitCapture, renameBatch,
     original,
     updateScan: async (scan: Scan) => { await storage.accept(scan); setScans(items => ordered(items.map(s => s.id === scan.id ? scan : s))); },
     testSound: async () => { await audio.current?.unlock(); audio.current?.success(); },

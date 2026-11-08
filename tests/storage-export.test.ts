@@ -42,6 +42,20 @@ describe('storage, recovery, filenames, ZIP', () => {
     expect(recovered.scans).toHaveLength(1); expect(recovered.attempts).toHaveLength(0); expect(recovered.batch?.nextOrdinal).toBe(3);
     await storage.clear(b.id); expect((await storage.load()).batch).toBeUndefined();
   });
+  it('validates the saved count and protects a resized batch from stale metadata writes', async () => {
+    const batch = await storage.create(5, 'Card binder');
+    await storage.accept(scan(batch.id, 0));
+    await storage.accept(scan(batch.id, 1));
+    await expect(storage.resizeBatch(batch.id, 1)).rejects.toThrow('2 saved photos');
+    await storage.resizeBatch(batch.id, 2);
+    await storage.saveBatch({ ...batch, status: 'scanning', nextOrdinal: 2 });
+    expect((await storage.load()).batch).toMatchObject({ name: batch.name, target: 2, status: 'complete', nextOrdinal: 2 });
+    await storage.resizeBatch(batch.id, 8);
+    const restored = await storage.load();
+    expect(restored.batch).toMatchObject({ target: 8, status: 'paused' });
+    expect(restored.scans).toHaveLength(2);
+    await storage.clear(batch.id);
+  });
   it('exports in capture order, with no gaps from failures or deletion', async () => {
     const data = [scan('test', 9), scan('test', 1), scan('test', 4)];
     const progress: number[] = [];

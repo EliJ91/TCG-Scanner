@@ -64,7 +64,8 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 
 - [ ] Check that optional camera capability and device enumeration failures leave the preview active.
 - [ ] Force a ZIP generation error; saved images remain available for another export.
-- [ ] Clear a test batch through the explicit confirmation. New batch starts at image 0001 and the next batch archive number.
+- [ ] Resize a batch with saved photos. A size below the saved count must be rejected. Increase a completed batch and resume scanning into the same batch.
+- [ ] Clear a test batch through the explicit confirmation. The new batch starts at image 0001 and reuses the previous custom name after reload. Clear the name to restore automatic batch numbering.
 
 - [ ] On a camera with manual focus support, adjust the side slider and lock focus. Reload and check that the setting is restored. Unlock and verify autofocus resumes.
 - [ ] Pause and use Reset settings. Restore defaults, keep the batch name and every saved photo, and verify the reset survives reload.

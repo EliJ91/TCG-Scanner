@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import { attemptInfo, defaultBatchName, ordered, originalScan, type Attempt, type AttemptInfo, type Batch, type Scan, type Settings } from './types';
+import { attemptInfo, defaultBatchName, ordered, originalScan, validBatchTarget, type Attempt, type AttemptInfo, type Batch, type Scan, type Settings } from './types';
 interface ScannerDB extends DBSchema {
   batches: { key: string; value: Batch };
   scans: { key: string; value: Scan; indexes: { 'by-batch': string } };
@@ -56,6 +56,7 @@ export const storage = {
     return { batch, scans, attempts: retained, settings, nextBatchNumber };
   },
   async create(target: number, name?: string): Promise<Batch> {
+    if (!validBatchTarget(target)) throw new Error('Choose a valid batch size.');
     const d = await db();
     const tx = d.transaction(['preferences', 'batches'], 'readwrite');
     const number = Number(await tx.objectStore('preferences').get('number') ?? 0) + 1;
@@ -67,7 +68,25 @@ export const storage = {
   },
   async saveBatch(batch: Batch) {
     const d = await db(); const tx = d.transaction('batches', 'readwrite'); const current = await tx.store.get(batch.id);
-    await tx.store.put({ ...batch, name: current?.name ?? batch.name, nextOrdinal: Math.max(current?.nextOrdinal ?? 0, batch.nextOrdinal) }); await tx.done;
+    if (current) await tx.store.put({
+      ...current,
+      status: current.target === batch.target ? batch.status : current.status,
+      nextOrdinal: Math.max(current.nextOrdinal, batch.nextOrdinal),
+    });
+    await tx.done;
+  },
+  async resizeBatch(id: string, target: number) {
+    if (!validBatchTarget(target)) throw new Error('Choose a valid batch size.');
+    const d = await db();
+    const tx = d.transaction(['batches', 'scans'], 'readwrite');
+    const batches = tx.objectStore('batches');
+    const current = await batches.get(id);
+    if (!current) throw new Error('This batch is no longer available.');
+    const count = await tx.objectStore('scans').index('by-batch').count(id);
+    if (target < count) throw new Error(`The batch already has ${count} saved photos.`);
+    const status = target === count ? 'complete' : current.status === 'complete' ? 'paused' : current.status;
+    await batches.put({ ...current, target, status });
+    await tx.done;
   },
   async renameBatch(id: string, name: string) {
     const d = await db(); const tx = d.transaction('batches', 'readwrite');

@@ -1,3 +1,5 @@
+import { validBatchTarget } from './types';
+
 export interface Ticket { id: number; ordinal: number }
 interface Slot<T> { ticket: Ticket; result?: { value: T } | { error: unknown; value?: T }; done?: Promise<void>; finish?: () => void }
 
@@ -11,16 +13,23 @@ export class BatchController<T> {
   public count: number;
   public nextOrdinal: number;
   constructor(
-    public readonly target: number, initial: number, nextOrdinal: number,
+    private batchTarget: number, initial: number, nextOrdinal: number,
     public queueLimit: number,
     private readonly commit: (value: T, ticket: Ticket) => Promise<void>,
     private readonly failed: (error: unknown, ticket: Ticket, value?: T) => unknown,
     private readonly changed: () => void = () => {},
   ) { this.count = initial; this.nextOrdinal = nextOrdinal; }
+  get target() { return this.batchTarget; }
   get pending() { return this.slots.length; }
   get complete() { return this.count >= this.target; }
   get hasCapacity() { return this.running && !this.complete && this.pending < this.queueLimit && this.count + this.pending < this.target; }
   get atBatchLimit() { return this.count + this.pending >= this.target; }
+  resize(target: number) {
+    if (!validBatchTarget(target, this.count + this.pending)) throw new Error('The batch needs room for its saved and pending photos.');
+    this.batchTarget = target;
+    if (this.complete) this.running = false;
+    this.changed();
+  }
   start() { if (!this.complete) this.running = true; this.changed(); }
   pause() { this.running = false; this.changed(); }
   reserve(ordinal?: number, retained = false): Ticket | null {

@@ -53,6 +53,7 @@ export class CapturePipeline {
 
   start() { this.controller.start(); }
   pause() { this.controller.pause(); }
+  resize(target: number) { this.controller.resize(target); }
   removeStored() { this.controller.removeStored(); }
   dispose() { this.disposed = true; }
 
