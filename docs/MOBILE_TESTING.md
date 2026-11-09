@@ -56,8 +56,7 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 - [ ] Download a partial batch, then a completed batch. Unzip and check exact file count, valid JPEG decoding, camera frame dimensions, sequential filenames without gaps, and physical order.
 - [ ] Confirm rotated/deleted images are reflected in the next ZIP. Download never clears saved data.
 - [ ] In Export ZIP, confirm default `Batch#XXX`, edit the batch name, and check the archive name and persisted name on the next export. Names inside run from `0001.jpg` onward.
-- [ ] Use Share ZIP on a device that accepts ZIP attachments. Verify that a batch of more than ten photos arrives as one named ZIP. Cancel the share sheet and try again. If the browser blocks ZIP attachments, download the archive and share it from Files or Downloads.
-- [ ] After Download ZIP or a successful ZIP share, check that Start a fresh batch? appears. Keep batch should preserve every photo. Delete & start new should clear the batch only after confirmation.
+- [ ] After Download ZIP, check that Start a fresh batch? appears. Keep batch should preserve every photo. Delete & start new should clear the batch only after confirmation.
 - [ ] Reload after saved scans; verify recovery and no automatic stationary recapture.
 - [ ] Upgrade an earlier batch with queued originals and check that the original JPEGs are recovered without duplicates.
 - [ ] Switch apps, switch browser tabs, move focus to another window, and lock the device. Check that camera use stops and the camera indicator clears. On return, check that the scanner reconnects and resumes an active scan with the batch intact. Try again after using Stop camera and after denying permission.
