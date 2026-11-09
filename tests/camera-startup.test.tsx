@@ -100,7 +100,7 @@ afterEach(async () => { await act(async () => root.unmount()); container.remove(
 describe('batch file sharing', () => {
   const zip = new Blob(['batch ZIP'], { type: 'application/zip' });
 
-  async function openExport(share: (data: ShareData) => Promise<void>, count = 1, canShare = ({ files }: ShareData) => files?.[0].type === 'image/jpeg') {
+  async function openExport(share: (data: ShareData) => Promise<void>, count = 1, canShare = ({ files }: ShareData) => files?.[0].type === 'application/zip') {
     Object.defineProperties(navigator, {
       canShare: { configurable: true, value: canShare },
       share: { configurable: true, value: share },
@@ -118,18 +118,20 @@ describe('batch file sharing', () => {
     Reflect.deleteProperty(navigator, 'share');
   });
 
-  it('offers only photo sharing and can share before the ZIP is ready', async () => {
+  it('shares a whole batch as one named ZIP on tap after preparation', async () => {
     let finishZip!: (blob: Blob) => void;
     const build = vi.spyOn(exportTools, 'createZip').mockImplementationOnce(() => new Promise(resolve => { finishZip = resolve; }));
     localStorage.setItem('cardslinger-settings', JSON.stringify({ ...defaults, galleryNewestFirst: true }));
     const share = vi.fn<(data: ShareData) => Promise<void>>()
       .mockRejectedValueOnce(new DOMException('Canceled', 'AbortError')).mockResolvedValue(undefined);
-    await openExport(share, 1, () => true);
-    expect(build).toHaveBeenCalledWith(expect.any(Array), expect.any(Function), true);
-    expect(container.textContent).not.toContain('Share photos');
+    await openExport(share, 12);
+    expect(build.mock.calls[0][0]).toHaveLength(12);
+    expect(build.mock.calls[0][2]).toBe(true);
     expect(button('Share ZIP').className).toBe(button('Download ZIP').className);
     expect(button('Download ZIP').disabled).toBe(true);
+    expect(button('Share ZIP').disabled).toBe(true);
     await input('#export-batch-name', 'Trade night');
+    await act(async () => finishZip(zip));
     await act(async () => {
       button('Share ZIP').click();
       expect(share).toHaveBeenCalledOnce();
@@ -137,24 +139,24 @@ describe('batch file sharing', () => {
     expect(mocks.rename).not.toHaveBeenCalled();
     expect(container.textContent).not.toContain('Start a fresh batch?');
     await click('Share ZIP');
-    const file = share.mock.calls[1][0].files?.[0];
-    expect(file).toMatchObject({ name: '0001.jpg', type: 'image/jpeg', size: 1 });
+    expect(share.mock.calls[1][0].files).toMatchObject([{ name: 'Trade night.zip', type: 'application/zip', size: zip.size }]);
     expect(build).toHaveBeenCalledOnce();
     expect(mocks.rename).toHaveBeenCalledWith('exported', 'Trade night');
-    expect(container.textContent).toContain('Start a fresh batch?');
+    expect(container.textContent).toContain('Check that your ZIP reached the app you shared to');
     expect(mocks.clear).not.toHaveBeenCalled();
     await click('Keep batch');
-    expect(container.querySelector('.scan-count')?.textContent).toBe('1 / 2');
-    await act(async () => finishZip(zip));
+    expect(container.querySelector('.scan-count')?.textContent).toBe('12 / 13');
   });
 
-  it('offers the ZIP for download when native photo sharing fails', async () => {
+  it('offers the same ZIP for download when the browser rejects sharing it', async () => {
     vi.spyOn(exportTools, 'createZip').mockResolvedValueOnce(zip);
     const download = vi.spyOn(exportTools, 'downloadArchive').mockImplementation(() => {});
-    const share = vi.fn().mockRejectedValue(new DOMException('Photo sharing is blocked', 'NotAllowedError'));
+    const share = vi.fn().mockRejectedValue(new DOMException('ZIP sharing is blocked', 'NotAllowedError'));
     await openExport(share);
     await click('Share ZIP');
+    expect(share.mock.calls[0][0].files).toMatchObject([{ name: 'Batch#007.zip', type: 'application/zip', size: zip.size }]);
     expect(container.textContent).toContain('share it from Files or Downloads');
+    expect(container.textContent).not.toContain('Share ZIP');
     expect(container.textContent).not.toContain('Start a fresh batch?');
     expect(mocks.rename).not.toHaveBeenCalled();
     await click('Download ZIP');
@@ -166,28 +168,16 @@ describe('batch file sharing', () => {
     expect(mocks.clear).toHaveBeenCalledWith('exported');
   });
 
-  it('shares ordered photos in groups and keeps the group after cancellation', async () => {
+  it('offers download when a browser can share JPEGs but declines ZIPs', async () => {
     vi.spyOn(exportTools, 'createZip').mockResolvedValueOnce(zip);
-    const download = vi.spyOn(exportTools, 'downloadArchive').mockImplementation(() => {});
-    const share = vi.fn<(data: ShareData) => Promise<void>>().mockResolvedValue(undefined)
-      .mockRejectedValueOnce(new DOMException('Canceled', 'AbortError'));
-    localStorage.setItem('cardslinger-settings', JSON.stringify({ ...defaults, galleryNewestFirst: true }));
-    await openExport(share, 12);
-    expect(container.textContent).toContain('Photos 1–10 of 12 ready to share.');
-    await click('Share ZIP');
-    expect(container.textContent).toContain('Photos 1–10 of 12 ready to share.');
-    await act(async () => {
-      button('Share ZIP').click();
-      expect(share).toHaveBeenCalledTimes(2);
-    });
-    expect(share.mock.calls[1][0].files).toHaveLength(10);
-    expect(share.mock.calls[1][0].files?.[0]).toMatchObject({ name: '0001.jpg', type: 'image/jpeg', size: 12 });
-    expect(container.textContent).toContain('Photos 11–12 of 12 ready to share.');
-    expect(container.textContent).not.toContain('Start a fresh batch?');
-    await click('Share ZIP');
-    expect(share.mock.calls[2][0].files).toMatchObject([{ name: '0011.jpg', size: 2 }, { name: '0012.jpg', size: 1 }]);
-    expect(container.textContent).toContain('Start a fresh batch?');
-    expect(download).not.toHaveBeenCalled();
+    const share = vi.fn().mockResolvedValue(undefined);
+    const canShare = vi.fn(({ files }: ShareData) => files?.[0].type === 'image/jpeg');
+    await openExport(share, 12, canShare);
+    expect(canShare).toHaveBeenCalledWith({ files: [expect.objectContaining({ type: 'application/zip' })] });
+    expect(container.textContent).not.toContain('Share ZIP');
+    expect(container.textContent).toContain('share it from Files or Downloads');
+    expect(button('Download ZIP').disabled).toBe(false);
+    expect(share).not.toHaveBeenCalled();
   });
 });
 

@@ -44,8 +44,7 @@ function BatchExport({ batch, scans, newestFirst, disabled, rename, close, compl
   const [name, setName] = useState(batch.name);
   const [build, setBuild] = useState<{ progress: number } | { blob: Blob; scans: Scan[]; newestFirst: boolean } | { error: string }>({ progress: 0 });
   const [exporting, setExporting] = useState<ExportResult['method']>();
-  const [photoShareBlocked, setPhotoShareBlocked] = useState(false);
-  const [photoStart, setPhotoStart] = useState(0);
+  const [zipShareBlocked, setZipShareBlocked] = useState(false);
   const [actionError, setActionError] = useState('');
   const [result, setResult] = useState<ExportResult>();
 
@@ -68,28 +67,15 @@ function BatchExport({ batch, scans, newestFirst, disabled, rename, close, compl
   const file = 'blob' in build && build.scans === scans && build.newestFirst === newestFirst
     ? new File([build.blob], archiveName, { type: 'application/zip' }) : undefined;
   const nativeShare = typeof navigator.share === 'function' && typeof navigator.canShare === 'function';
-  const photoFiles = useMemo(() => {
-    const files: File[] = [];
-    if (!nativeShare || photoShareBlocked) return files;
-    let bytes = 0;
-    // Chromium limits a share to 10 files and 50 MiB.
-    for (let index = photoStart; index < scans.length && files.length < 10; index++) {
-      const { blob } = scans[newestFirst ? scans.length - 1 - index : index];
-      if (files.length && bytes + blob.size > 50 * 1024 * 1024) break;
-      files.push(new File([blob], filename(index), { type: 'image/jpeg' }));
-      bytes += blob.size;
-    }
-    return files;
-  }, [nativeShare, photoShareBlocked, photoStart, scans, newestFirst]);
-  const canSharePhotos = photoFiles.length > 0 && navigator.canShare({ files: photoFiles });
+  const canShareZip = !!file && nativeShare && !zipShareBlocked && navigator.canShare({ files: [file] });
+  const showShare = canShareZip || (nativeShare && !zipShareBlocked && 'progress' in build);
   const ready = !!file && !disabled && !exporting;
 
-  const finishExport = async (method?: ExportResult['method']) => {
+  const finishExport = async (method: ExportResult['method']) => {
     let nameError: string | undefined;
     try { await rename(name); }
     catch { nameError = 'Could not remember the batch name.'; }
-    if (method) setResult({ method, nameError });
-    else if (nameError) setActionError(nameError);
+    setResult({ method, nameError });
   };
   const download = async () => {
     if (!file || !ready) return;
@@ -103,19 +89,16 @@ function BatchExport({ batch, scans, newestFirst, disabled, rename, close, compl
     } finally { setExporting(undefined); }
   };
   const share = async () => {
-    if (!canSharePhotos || disabled || exporting) return;
+    if (!file || !ready || !canShareZip) return;
     setExporting('share');
     setActionError('');
     try {
-      // Files are prepared before this tap so the share sheet can use its activation.
-      await navigator.share({ files: photoFiles });
-      const shared = photoStart + photoFiles.length;
-      setPhotoStart(shared);
-      await finishExport(shared === scans.length ? 'share' : undefined);
+      // The ZIP is ready before the tap so the native share menu can use its activation.
+      await navigator.share({ files: [file] });
+      await finishExport('share');
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
-      setPhotoShareBlocked(true);
-      setActionError('Could not open the share menu for these photos.');
+      setZipShareBlocked(true);
     } finally { setExporting(undefined); }
   };
 
@@ -126,8 +109,7 @@ function BatchExport({ batch, scans, newestFirst, disabled, rename, close, compl
       </label>
       <p className="archive-preview">{archiveName}</p>
       <p className="setting-hint">{scans.length} saved photos in this ZIP.</p>
-      {canSharePhotos ? <p id="share-photos-hint" className="setting-hint">The share menu sends individual photos.</p> : <p className="setting-hint" role="status">Download the ZIP, then share it from Files or Downloads.</p>}
-      {canSharePhotos && photoFiles.length < scans.length && <p className="setting-hint" role="status">Photos {photoStart + 1}–{photoStart + photoFiles.length} of {scans.length} ready to share.</p>}
+      {!showShare && <p className="setting-hint" role="status">Direct ZIP sharing is unavailable here. Download the ZIP, then share it from Files or Downloads.</p>}
       {'progress' in build && <>
         <p className="setting-hint">Preparing ZIP · {build.progress}%</p>
         <div className="progress-track" role="progressbar" aria-label="ZIP export progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={build.progress}><div style={{ width: `${build.progress}%` }} /></div>
@@ -136,8 +118,8 @@ function BatchExport({ batch, scans, newestFirst, disabled, rename, close, compl
       {actionError && <p className="name-error" role="alert">{actionError}</p>}
     </div>
     <div className="dialog-footer">
-      <button type="button" className={`button ${canSharePhotos ? 'outline' : 'dark'}`} disabled={!ready} onClick={() => void download()}><ArrowDownToLine size={16} />Download ZIP</button>
-      {canSharePhotos && <button type="button" className="button outline" aria-describedby="share-photos-hint" disabled={disabled || !!exporting} onClick={() => void share()}><Share2 size={16} />{exporting === 'share' ? 'Sharing…' : 'Share ZIP'}</button>}
+      <button type="button" className={`button ${showShare ? 'outline' : 'dark'}`} disabled={!ready} onClick={() => void download()}><ArrowDownToLine size={16} />Download ZIP</button>
+      {showShare && <button type="button" className="button outline" disabled={!ready || !canShareZip} onClick={() => void share()}><Share2 size={16} />{exporting === 'share' ? 'Sharing…' : 'Share ZIP'}</button>}
     </div>
   </Dialog>;
 }
@@ -454,7 +436,7 @@ export default function App() {
     ].map(([title, text], i) => <div className="guide-step" key={title}><span>{String(i + 1).padStart(2,'0')}</span><div><h3>{title}</h3><p>{text}</p></div></div>)}<div className="guide-callout"><ShieldCheck size={18} /><p>Scans stay in this browser’s local storage. Download your batch before clearing browser data. When resuming a saved batch in Auto with Using Card Slinger off, clear the camera view before placing a card.</p></div></div><div className="dialog-footer"><button className="button primary" onClick={() => setShowHelp(false)}>Ready to scan <ArrowRight size={16} /></button></div></Dialog>}
     {clearPrompt && <Dialog key={clearPrompt === 'manual' ? 'manual' : clearPrompt.method} title="Start a fresh batch?" close={() => setClearPrompt(undefined)}>
       <div className="confirm-content">
-        {clearPrompt === 'manual' ? <p>Download your ZIP first if you want to keep these photos.</p> : <p>{clearPrompt.method === 'download' ? 'Check that your ZIP finished downloading before clearing the batch.' : 'Check that your photos reached the app you shared to before clearing the batch.'}</p>}
+        {clearPrompt === 'manual' ? <p>Download your ZIP first if you want to keep these photos.</p> : <p>{clearPrompt.method === 'download' ? 'Check that your ZIP finished downloading before clearing the batch.' : 'Check that your ZIP reached the app you shared to before clearing the batch.'}</p>}
         <p>Starting fresh deletes this batch’s {count} saved images and {s.attempts.length} retained captures from this device.</p>
         {clearPrompt === 'manual' ? exportButton() : clearPrompt.nameError && <p className="name-error" role="alert">{clearPrompt.nameError}</p>}
       </div>
