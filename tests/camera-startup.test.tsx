@@ -488,7 +488,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(title()).toBe('0005');
     await swipe(120, 220);
     expect(title()).toBe('0004');
-    expect(viewer().querySelector('img')?.style.transform).toContain('rotate(180deg)');
+    expect(viewer().querySelector('img')?.style.transform).toBe('translate(0px, 0px) scale(1)');
   });
   it('restores cached camera controls and resets settings without deleting the saved batch', async () => {
     mocks.capabilities={torch:true,exposureMode:['manual','continuous'],focusMode:['manual','continuous']};
@@ -535,6 +535,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await act(async () => toggle('Flip Interface').click());
     expect(container.querySelector('.interface-flipped main')).not.toBeNull();
     expect(container.querySelector('.interface-flipped dialog[open]')).not.toBeNull();
+    expect(container.querySelector('video')?.style.transform).toBe('scale(1) rotate(180deg)');
     await act(async () => toggle('Alternate manual photo method').click());
     const waitSlider = '[aria-label="Wait before each photo"]';
     await input(waitSlider, '4');
@@ -554,6 +555,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(toggle('Alternate manual photo method').checked).toBe(true);
     await act(async () => toggle('Flip Interface').click());
     expect(container.querySelector('.interface-flipped')).toBeNull();
+    expect(container.querySelector('video')?.style.transform).toBe('scale(1)');
   });
   it('manual mode captures only on tap and keeps working after a camera encoding error', async () => {
     await renderApp(); await click('Manual'); expect(mocks.capture).not.toHaveBeenCalled();

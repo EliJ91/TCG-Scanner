@@ -295,7 +295,7 @@ export default function App() {
         <div className="preview-shell">
           <div className={`viewfinder ${s.cameraSize.width ? 'has-camera' : ''}`}>
             <div className="camera-feed" style={{ width: `${Math.min(1, ratio / .75) * 100}%`, height: `${Math.min(1, .75 / ratio) * 100}%` }}>
-              <video ref={s.videoRef} style={{ transform: `scale(${s.settings.zoom})` }} playsInline muted autoPlay aria-label="Live camera preview" />
+              <video ref={s.videoRef} style={{ transform: `scale(${s.settings.zoom})${s.settings.flipInterface ? ' rotate(180deg)' : ''}` }} playsInline muted autoPlay aria-label="Live camera preview" />
             </div>
             <div className="viewfinder-toolbar">
               <button className="batch-name-trigger" aria-label="Edit batch name" title="Edit batch name" onClick={editName}><span>{s.batchName}</span><Pencil size={13} /></button>

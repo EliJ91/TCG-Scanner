@@ -38,7 +38,7 @@ The centered scanner includes an editable batch name, zoom slider, capture mode,
 
 Toggle dark/light mode under **Menu → Settings → Dark mode**. Dark mode uses a pure black background and neutral gray surfaces, with monochrome controls. The initial theme follows your device preference and your selection is remembered locally.
 
-Turn on **Menu → Settings → Flip Interface** to rotate the scanner and its controls 180° when your phone is mounted upside down. New photos match the preview, and the app remembers this setting on the device.
+Turn on **Menu → Settings → Flip Interface** when your phone is mounted upside down. The controls turn 180°, and the live image rotates within the viewfinder to match the saved photo. The app remembers this setting on the device.
 
 Turn on **Newest first in gallery and ZIP** in Settings to see your latest scans at the top of the Gallery and export them first.
 

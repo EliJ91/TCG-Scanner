@@ -128,6 +128,6 @@ export function PhotoViewer({ photoId, src, flipped, onSwipe }: { photoId: strin
   return <div className="review-image" onPointerDown={start} onPointerMove={move}
     onPointerUp={event => finish(event, true)} onPointerCancel={event => finish(event, false)} onLostPointerCapture={event => finish(event, false)}>
     <img ref={image} src={src} alt="Full-resolution scanned card" draggable={false}
-      style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})${flipped ? ' rotate(180deg)' : ''}` }} />
+      style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }} />
   </div>;
 }

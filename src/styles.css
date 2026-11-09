@@ -164,8 +164,6 @@ input[type='range'] { width: 100%; margin: 16px 0 7px; }
 .attempts h3 { font-size: 13px; margin-bottom: 14px; }
 .attempt { display: flex; align-items: flex-start; gap: 12px; padding: 12px; margin-top: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--soft); }
 .attempt > img { width: 48px; height: 66px; object-fit: cover; border-radius: 4px; }
-/* Show stored pixels in the same orientation as the exported photo. */
-.interface-flipped .scan-image img, .interface-flipped .attempt > img { transform: rotate(180deg); }
 .attempt > div { min-width: 0; }
 .attempt strong { font-size: 12px; font-weight: 600; }
 .attempt p { margin: 5px 0; font-size: 11px; color: var(--muted); line-height: 1.8; overflow-wrap: anywhere; }
