@@ -408,7 +408,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(container.querySelector('.batch-name-trigger')?.textContent).toContain('Keep these photos');
     expect(mocks.create).not.toHaveBeenCalled();
   });
-  it('remembers the batch size, manual photo method and theme after reopening', async () => {
+  it('remembers the batch size, photo delay, manual photo method and theme after reopening', async () => {
     await renderApp();
     const openMenu = () => act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
     await openMenu();
@@ -422,7 +422,10 @@ describe('manual capture, continuous errors, and batch naming', () => {
     const toggle = (name: string) => [...container.querySelectorAll('label')].find(label => label.textContent?.startsWith(name))!.querySelector('input')!;
     await act(async () => toggle('Dark mode').click());
     await act(async () => toggle('Alternate manual photo method').click());
-    expect(mocks.settings).toHaveBeenLastCalledWith(expect.objectContaining({ batchTarget: 73, useImageCapture: true }));
+    const waitSlider = '[aria-label="Wait before each photo"]';
+    await input(waitSlider, '4');
+    expect(container.querySelector(waitSlider)?.getAttribute('aria-valuetext')).toBe('400 ms');
+    expect(mocks.settings).toHaveBeenLastCalledWith(expect.objectContaining({ batchTarget: 73, useImageCapture: true, stabilityMs: 400 }));
     await act(async () => root.unmount());
     root = createRoot(container);
     await renderApp();
@@ -430,6 +433,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(document.documentElement.dataset.theme).toBe('dark');
     await openMenu();
     await click('Settings');
+    expect(container.querySelector(waitSlider)?.getAttribute('aria-valuetext')).toBe('400 ms');
     expect(toggle('Dark mode').checked).toBe(true);
     expect(toggle('Alternate manual photo method').checked).toBe(true);
   });

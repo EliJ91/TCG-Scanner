@@ -62,12 +62,12 @@ Deleting a stored scan reduces the count and pauses the scanner, including a pre
 
 ## Settings
 
-**Menu → Settings** starts with Dark mode, gallery order, Using Card Slinger, Wait before each photo, and Sounds/Volume. Camera and photo tuning stay inside **Advanced settings**. Selected camera, resolution, zoom, flashlight, focus position and lock, capture mode, stacking, and tuning are saved in browser preferences and restored on entry. A missing remembered camera falls back to the rear camera. **Reset settings** restores defaults and the device's theme preference while keeping photos and the batch. Pause capture before resetting. The previous 220 ms setting migrates to 100 ms. Other custom delays are kept within the supported range.
+**Menu → Settings** starts with Dark mode, gallery order, Using Card Slinger, Wait before each photo, and Sounds/Volume. Camera and photo tuning stay inside **Advanced settings**. Selected camera, resolution, zoom, flashlight, focus position and lock, capture mode, stacking, and tuning are saved in browser preferences and restored on entry. A missing remembered camera falls back to the rear camera. **Reset settings** restores defaults and the device's theme preference while keeping photos and the batch. Pause capture before resetting. The old default of 220 ms migrates to 100 ms. Other previously saved delays round to the nearest slider stop.
 
 | Control | Default | Notes |
 | --- | --- | --- |
 | Capture mode | Auto | Manual takes one snapshot per tap |
-| Wait before each photo | 100 ms | Adjustable from 10 ms to 1 second |
+| Wait before each photo | 100 ms | 10 ms, then 100 ms increments from 100 ms to 1 second |
 | Ignore small movements | 2.5% | The Less to More slider adjusts which movements restart the countdown |
 | Zoom | 1× | Preview slider, 1–3× center crop; capture and motion use identical framing |
 | Photo quality | Best | Choose Lowest, Balanced, or Best |

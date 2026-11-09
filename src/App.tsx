@@ -3,7 +3,7 @@ import { ArrowDownToLine, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, Chev
 import { useScanner } from './useScanner';
 import { useTheme } from './useTheme';
 import { createZip, downloadArchive, rotateScan } from './core/export';
-import { archiveFilename, defaultBatchName, filename, maxBatchTarget, message, validBatchTarget, type Batch, type Scan } from './core/types';
+import { archiveFilename, defaultBatchName, filename, maxBatchTarget, message, photoWaitTimes, validBatchTarget, type Batch, type Scan } from './core/types';
 
 const photoQualities = [
   { value: 0.8, label: 'Lowest' },
@@ -395,7 +395,8 @@ export default function App() {
       <Toggle label="Newest first in gallery and ZIP" hint="Show recent photos at the top and number them first in the ZIP." checked={newestFirst} onChange={galleryNewestFirst => s.setSettings({ ...s.settings, galleryNewestFirst })} />
       <Toggle label="Using Card Slinger" hint="In Auto, place the next card on top. The camera takes a photo when it settles." checked={s.settings.stackCards} onChange={stackCards => s.setSettings({ ...s.settings, stackCards })} />
       <Setting label="Wait before each photo" value={waitLabel} hint="Auto takes a photo once movement stops and the green bar fills.">
-        <input aria-label="Wait before each photo" type="range" min="10" max="1000" step="10" value={s.settings.stabilityMs} onChange={event => s.setSettings({ ...s.settings, stabilityMs: +event.target.value })} />
+        <input aria-label="Wait before each photo" aria-valuetext={waitLabel} type="range" min="0" max={photoWaitTimes.length - 1} step="1" list="photo-wait-stops" value={photoWaitTimes.indexOf(s.settings.stabilityMs)} onChange={event => s.setSettings({ ...s.settings, stabilityMs: photoWaitTimes[event.currentTarget.valueAsNumber] })} />
+        <datalist id="photo-wait-stops">{photoWaitTimes.map((wait, index) => <option key={wait} value={index} />)}</datalist>
       </Setting>
       <Toggle label="Sounds" hint="A ding means the camera took a photo. A low buzz means there’s a problem." checked={!s.settings.muted} onChange={v => s.setSettings({ ...s.settings, muted: !v })} />
       {!s.settings.muted && <>

@@ -12,6 +12,7 @@ export const defaults: Settings = {
   volume: 0.6, muted: false, galleryNewestFirst: false,
   resolution: 2560, useImageCapture: false, batchTarget: 50,
 };
+export const photoWaitTimes: readonly number[] = [10, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
 export interface Batch {
   id: string; number: number; name: string; target: number; createdAt: number;
   status: 'paused' | 'scanning' | 'complete'; nextOrdinal: number;
