@@ -8,7 +8,7 @@ export const cameraErrorName = (error: unknown) => typeof error === 'object' && 
 const embedded = () => { try { return window.self !== window.top; } catch { return true; } };
 
 /** Called directly by the Enable camera gesture, before storage, audio, or OpenCV. */
-export async function requestCameraStream(width: number, deviceId?: string): Promise<MediaStream> {
+export async function requestCameraStream(width: number, deviceId?: string, canRequest = () => true): Promise<MediaStream> {
   if (!window.isSecureContext) throw new CameraAccessError('insecure', 'Camera access needs HTTPS. Open this scanner’s HTTPS link directly in Safari or Chrome.', true);
   const devices = navigator.mediaDevices;
   if (typeof devices?.getUserMedia !== 'function') throw new CameraAccessError('unsupported', 'This browser cannot request camera access. Open this scanner directly in Safari or Chrome.', true);
@@ -25,6 +25,7 @@ export async function requestCameraStream(width: number, deviceId?: string): Pro
     deviceId ? { audio: false, video: { facingMode: { ideal: 'environment' } } } : { audio: false, video: true },
   ];
   for (let i = 0; i < requests.length; i++) {
+    if (!canRequest()) throw new CameraAccessError('cancelled', 'Camera startup interrupted.');
     try { return await devices.getUserMedia(requests[i]); }
     catch (error) {
       const name = cameraErrorName(error);

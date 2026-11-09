@@ -22,7 +22,7 @@ export class Camera {
   private baseConstraints: MediaTrackConstraints = {};
   private zoom = 1;
   setZoom(value: number) { this.zoom = Math.max(1, Math.min(3, Number.isFinite(value) ? value : 1)); }
-  constructor(public video: HTMLVideoElement, private lost: (reason: string) => void) {}
+  constructor(public video: HTMLVideoElement, private lost: (reason: string) => void, private canUseCamera = () => true) {}
   async start(width: number, deviceId?: string) {
     this.stop();
     const generation = this.generation;
@@ -31,8 +31,8 @@ export class Camera {
       if (import.meta.env.DEV && new URLSearchParams(location.search).get('test-camera') === '1') {
         const fixture = (await import('../dev/synthetic-camera')).syntheticCamera();
         acquired = fixture.stream; this.disposeSynthetic = fixture.dispose;
-      } else acquired = await requestCameraStream(width, deviceId);
-      if (generation !== this.generation) {
+      } else acquired = await requestCameraStream(width, deviceId, () => generation === this.generation && this.canUseCamera());
+      if (generation !== this.generation || !this.canUseCamera()) {
         acquired.getTracks().forEach(track => track.stop());
         throw new CameraAccessError('cancelled', 'Camera request cancelled.');
       }
@@ -61,8 +61,9 @@ export class Camera {
         delete this.capabilities.focusDistance;
       }
       try { this.baseConstraints = track.getConstraints?.() ?? {}; } catch { this.baseConstraints = {}; }
-      track.addEventListener('ended', () => this.lost('Camera disconnected. Reconnecting automatically.'));
-      track.addEventListener('mute', () => this.lost('Camera feed interrupted. Reconnecting automatically.'));
+      const reportLost = (reason: string) => { if (generation === this.generation) this.lost(reason); };
+      track.addEventListener('ended', () => reportLost('Camera disconnected. Reconnecting automatically.'));
+      track.addEventListener('mute', () => reportLost('Camera feed interrupted. Reconnecting automatically.'));
       const IC = (window as unknown as { ImageCapture?: new (track: MediaStreamTrack) => FrameGrabber }).ImageCapture;
       if (IC) { try { this.grabber = new IC(track); } catch { /* Video canvas remains available. */ } }
       let settings: MediaTrackSettings = {};

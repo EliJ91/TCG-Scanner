@@ -188,6 +188,21 @@ describe('mobile video preview startup', () => {
     expect(await result).toBeInstanceOf(CameraAccessError); expect((await result).reason).toBe('cancelled');
     expect(fixture.track.stop).toHaveBeenCalled(); expect(preview.play).not.toHaveBeenCalled(); expect(camera.stream).toBeUndefined();
   });
+  it('stops a newly granted stream before attaching it when the page has lost focus', async () => {
+    const fixture = streamFixture();
+    let focused = true;
+    let allow!: (stream: MediaStream) => void;
+    getUserMedia.mockImplementation(() => new Promise(resolve => { allow = resolve; }));
+    const preview = new Preview();
+    const camera = new Camera(preview as unknown as HTMLVideoElement, vi.fn(), () => focused);
+    const opening = camera.start(2560);
+    focused = false;
+    allow(fixture.stream);
+    await expect(opening).rejects.toMatchObject({ reason: 'cancelled' });
+    expect(fixture.track.stop).toHaveBeenCalledOnce();
+    expect(preview.srcObject).toBeNull();
+    expect(preview.play).not.toHaveBeenCalled();
+  });
   it('cancels a hanging preview promptly on stop', async () => {
     const fixture = streamFixture(); getUserMedia.mockResolvedValue(fixture.stream);
     const preview = new Preview(); preview.play.mockImplementation(() => new Promise(() => {}));

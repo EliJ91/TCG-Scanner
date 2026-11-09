@@ -73,6 +73,7 @@ async function input(selector: string, value: string) {
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
+  vi.spyOn(document, 'hasFocus').mockReturnValue(true);
   mocks.capabilities={}; mocks.control.mockResolvedValue(undefined); mocks.lock.mockResolvedValue(undefined); mocks.focus.mockResolvedValue(2);
   mocks.load.mockResolvedValue(loaded); mocks.settings.mockResolvedValue(undefined); mocks.saveBatch.mockResolvedValue(undefined);
   mocks.start.mockResolvedValue({ width: 1280, height: 720 }); mocks.unlock.mockResolvedValue(true);
@@ -232,15 +233,36 @@ describe('automatic camera preview independent from scanner initialization', () 
     await click('Enable camera');
     expect(button('Start scanning').disabled).toBe(false); expect(container.querySelector('.camera-browser-link')).toBeNull();
   });
-  it('does not cancel a grant while the native permission dialog dismisses', async () => {
+  it('lets a pending permission prompt finish after the page returns to focus', async () => {
     let hidden=false, allow!:(info:{width:number;height:number})=>void;
     vi.spyOn(document,'hidden','get').mockImplementation(()=>hidden);
     mocks.start.mockImplementationOnce(()=>new Promise(resolve=>{allow=resolve;}));
     await renderApp();
-    await act(async()=>{hidden=true;document.dispatchEvent(new Event('visibilitychange'));allow({width:720,height:1280});});
+    await act(async()=>{hidden=true;document.dispatchEvent(new Event('visibilitychange'));});
     expect(mocks.stop).not.toHaveBeenCalled(); expect(button('Requesting camera…').disabled).toBe(true);
-    await act(async()=>{hidden=false;document.dispatchEvent(new Event('visibilitychange'));});
+    await act(async()=>{hidden=false;document.dispatchEvent(new Event('visibilitychange'));allow({width:720,height:1280});});
     expect(button('Start scanning').disabled).toBe(false); expect(mocks.stop).not.toHaveBeenCalled();
+  });
+  it('stops a late camera grant in the background and retries only after focus returns', async () => {
+    let allow!: (info: { width: number; height: number }) => void;
+    mocks.start.mockImplementationOnce(() => new Promise(resolve => { allow = resolve; }));
+    await renderApp();
+    await act(async () => {
+      vi.mocked(document.hasFocus).mockReturnValue(false);
+      window.dispatchEvent(new Event('blur'));
+      allow({ width: 720, height: 1280 });
+    });
+    expect(mocks.stop).toHaveBeenCalledOnce();
+    expect(mocks.start).toHaveBeenCalledOnce();
+    expect(button('Enable camera').disabled).toBe(false);
+    await act(async () => document.dispatchEvent(new Event('visibilitychange')));
+    expect(mocks.start).toHaveBeenCalledOnce();
+    await act(async () => {
+      vi.mocked(document.hasFocus).mockReturnValue(true);
+      window.dispatchEvent(new Event('focus'));
+    });
+    expect(mocks.start).toHaveBeenCalledTimes(2);
+    expect(button('Start scanning').disabled).toBe(false);
   });
 });
 
@@ -612,5 +634,25 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await act(async()=>{hidden=true;document.dispatchEvent(new Event('visibilitychange'));});
     await act(async()=>{hidden=false;document.dispatchEvent(new Event('visibilitychange'));});
     expect(button('Pause scanning').disabled).toBe(false); expect(mocks.start).toHaveBeenCalledTimes(2);
+  });
+  it('releases the camera on window blur even when visible and resumes active scanning on focus', async () => {
+    await renderApp(); await click('Start scanning');
+    await act(async () => window.dispatchEvent(new Event('blur')));
+    expect(document.hidden).toBe(false);
+    expect(mocks.stop).toHaveBeenCalledOnce();
+    expect(mocks.start).toHaveBeenCalledOnce();
+    expect(button('Enable camera').disabled).toBe(false);
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    expect(mocks.start).toHaveBeenCalledTimes(2);
+    expect(button('Pause scanning').disabled).toBe(false);
+  });
+  it('releases the camera on pagehide and waits for pageshow before reconnecting', async () => {
+    await renderApp();
+    await act(async () => window.dispatchEvent(new Event('pagehide')));
+    expect(mocks.stop).toHaveBeenCalledOnce();
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    expect(mocks.start).toHaveBeenCalledOnce();
+    await act(async () => window.dispatchEvent(new Event('pageshow')));
+    expect(mocks.start).toHaveBeenCalledTimes(2);
   });
 });

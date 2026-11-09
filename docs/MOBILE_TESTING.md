@@ -59,7 +59,7 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 - [ ] After Download ZIP or the final successful photo share, check that Start a fresh batch? appears. Keep batch should preserve every photo. Delete & start new should clear the batch only after confirmation.
 - [ ] Reload after saved scans; verify recovery and no automatic stationary recapture.
 - [ ] Upgrade an earlier batch with queued originals and check that the original JPEGs are recovered without duplicates.
-- [ ] Background/lock the app or interrupt camera access. Keep saved images/originals intact; on return reconnect the camera and preserve the active scan intent without requiring Resume. Respect a browser permission denial.
+- [ ] Switch apps, switch browser tabs, move focus to another window, and lock the device. Check that camera use stops and the camera indicator clears. On return, check that the scanner reconnects and resumes an active scan with the batch intact. Try again after using Stop camera and after denying permission.
 - [ ] Simulate near-full storage in a disposable profile. Failed storage must not increment count, and raw originals must remain available in session for saving. Do not close the page until saved.
 - [ ] While storage is unavailable, keep the session active but apply capture backpressure. Once storage recovers, retry retained snapshots automatically without taking duplicate photos.
 

@@ -11,15 +11,6 @@ import { zoomRect } from './core/zoom';
 import { defaultBatchName, defaults, message, ordered, validBatchTarget, type AttemptInfo, type Batch, type Scan, type Settings } from './core/types';
 
 export type Session = 'idle' | 'starting' | 'scanning' | 'paused' | 'complete';
-function waitForPermissionDialogToClose() {
-  if (!document.hidden) return Promise.resolve();
-  return new Promise<void>(resolve => {
-    const finish = () => { clearTimeout(timer); document.removeEventListener('visibilitychange', visible); resolve(); };
-    const visible = () => { if (!document.hidden) finish(); };
-    const timer = setTimeout(finish, 2000);
-    document.addEventListener('visibilitychange', visible);
-  });
-}
 export function useScanner() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [batch, setBatch] = useState<Batch>(); const batchRef = useRef<Batch | undefined>(undefined);
@@ -40,6 +31,7 @@ export function useScanner() {
   const [openBrowserSuggested, setOpenBrowserSuggested] = useState(false);
   const cameraRequest = useRef<Promise<void> | undefined>(undefined); const cameraEpoch = useRef(0);
   const previewWanted = useRef(true); const reconnectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const windowBlurred = useRef(false); const pageExited = useRef(false);
   const editedPreferences = useRef(new Set<keyof Settings>()); const zoomAdjusting = useRef(false);
   const [reading, setReading] = useState<MotionReading>();
   const [countdown, setCountdown] = useState<number | 'snapped' | null>(null);
@@ -60,6 +52,7 @@ export function useScanner() {
   const mounted = useRef(true);
   const startToken = useRef(0);
   const editingBatch = useRef(false);
+  const canUseCamera = () => mounted.current && !pageExited.current && !windowBlurred.current && !document.hidden && document.hasFocus();
   const changeSession = (value: Session) => { sessionRef.current = value; if (mounted.current) setSession(value); };
   const changeCameraPhase = (value: 'off' | 'requesting' | 'ready') => { cameraPhaseRef.current = value; if (mounted.current) setCameraPhase(value); };
   const updateAttempts = (items: AttemptInfo[]) => { attemptsRef.current = items; if (mounted.current) setAttempts(items); };
@@ -72,6 +65,20 @@ export function useScanner() {
   function resetMotion(requireRemoval?: boolean) {
     detector.current.reset(requireRemoval);
     setCountdown(null);
+  }
+  function closeCamera() {
+    cameraEpoch.current++;
+    camera.current?.stop();
+    changeCameraPhase('off');
+    setCameraSize({ width: 0, height: 0 });
+  }
+  function suspendCamera() {
+    clearTimeout(reconnectTimer.current);
+    releaseWake();
+    // A pending permission prompt can finish. Camera.start checks focus before attaching its stream.
+    if (cameraPhaseRef.current !== 'ready' && !camera.current?.stream) return;
+    resetMotion();
+    closeCamera();
   }
   const pause = useCallback((reason?: string) => {
     startToken.current++;
@@ -175,24 +182,27 @@ export function useScanner() {
       storageIssueRef.current = `Storage unavailable: ${message(err)}. Camera preview can still open. Enable browser storage or open this page in Safari or Chrome before scanning.`;
       setStorageIssue(storageIssueRef.current); setError(storageIssueRef.current);
     });
-    const onHidden = () => {
-      // A native permission prompt may temporarily hide an iOS WebView. Do not cancel it.
-      if (document.hidden && cameraPhaseRef.current !== 'requesting' && (camera.current?.stream?.active || sessionRef.current === 'scanning' || sessionRef.current === 'starting')) {
-        // Browsers suspend background cameras. Keep scan intent and reconnect on return.
-        resetMotion(); releaseWake();
-        cameraEpoch.current++; camera.current?.stop(); changeCameraPhase('off'); setCameraSize({ width: 0, height: 0 });
-      }
-      if (!document.hidden && previewWanted.current && cameraPhaseRef.current === 'off') void connectCamera(false);
+    const onBlur = () => { windowBlurred.current = true; suspendCamera(); };
+    const onFocus = () => { windowBlurred.current = false; resumeCamera(); };
+    const onVisibility = () => {
+      if (document.hidden) suspendCamera();
+      else if (document.hasFocus()) onFocus();
     };
+    const onPageHide = () => { pageExited.current = true; suspendCamera(); };
+    const onPageShow = () => { pageExited.current = false; onVisibility(); };
     const onRotation = () => resetMotion();
     const preview = videoRef.current;
     const resized = () => { if (camera.current?.stream?.active && preview?.videoWidth) setCameraSize({ width: preview.videoWidth, height: preview.videoHeight }); };
     preview?.addEventListener('resize', resized);
-    document.addEventListener('visibilitychange', onHidden); window.addEventListener('orientationchange', onRotation);
+    document.addEventListener('visibilitychange', onVisibility); window.addEventListener('orientationchange', onRotation);
+    window.addEventListener('blur', onBlur); window.addEventListener('focus', onFocus);
+    window.addEventListener('pagehide', onPageHide); window.addEventListener('pageshow', onPageShow);
     return () => {
       cancelled = true; clearTimeout(storageDeadline); clearTimeout(reconnectTimer.current); mounted.current = false; cameraEpoch.current++; camera.current?.stop(); controller.current?.dispose(); releaseWake();
       preview?.removeEventListener('resize', resized);
-      document.removeEventListener('visibilitychange', onHidden); window.removeEventListener('orientationchange', onRotation);
+      document.removeEventListener('visibilitychange', onVisibility); window.removeEventListener('orientationchange', onRotation);
+      window.removeEventListener('blur', onBlur); window.removeEventListener('focus', onFocus);
+      window.removeEventListener('pagehide', onPageHide); window.removeEventListener('pageshow', onPageShow);
     };
     // The lifetime owns the camera. Mutable settings are kept in refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -226,7 +236,7 @@ export function useScanner() {
 
   const capture = async (automatic = false) => {
     const c = controller.current;
-    if (!c?.hasCapacity || editingBatch.current || captureBusy.current || cameraPhaseRef.current !== 'ready' || storageIssueRef.current) return;
+    if (!c?.hasCapacity || editingBatch.current || captureBusy.current || cameraPhaseRef.current !== 'ready' || storageIssueRef.current || !canUseCamera()) return;
     const { useImageCapture, quality } = settingsRef.current;
     const alternateCapture = !automatic && useImageCapture;
     if (alternateCapture) {
@@ -286,7 +296,7 @@ export function useScanner() {
     function inspect(freshFrame: boolean) {
       const now = performance.now();
       const c = controller.current, motion = detector.current;
-      if (!video || document.hidden || sessionRef.current !== 'scanning' || !c?.running || cameraPhaseRef.current !== 'ready') {
+      if (!video || !canUseCamera() || sessionRef.current !== 'scanning' || !c?.running || cameraPhaseRef.current !== 'ready') {
         schedule(null);
         return;
       }
@@ -327,7 +337,7 @@ export function useScanner() {
     };
     frame = useVideoFrames ? video.requestVideoFrameCallback(presented) : requestAnimationFrame(tick);
     const watchdog = setInterval(() => {
-      if (!document.hidden && cameraPhaseRef.current === 'ready' && performance.now() - lastFrameAt >= 1800) {
+      if (canUseCamera() && cameraPhaseRef.current === 'ready' && performance.now() - lastFrameAt >= 1800) {
         schedule(null);
         recoverCamera('Camera frames stopped. Reconnecting automatically.');
       }
@@ -342,25 +352,25 @@ export function useScanner() {
   }, [session, cameraPhase]);
 
   const enableCamera = (deviceId?: string): Promise<void> => {
+    if (!canUseCamera()) return Promise.reject(new CameraAccessError('cancelled', 'Camera startup interrupted.'));
     if (!videoRef.current) return Promise.reject(new Error('Camera preview is unavailable.'));
     const selectedId = deviceId ?? settingsRef.current.cameraId;
     if (camera.current?.stream?.active && cameraPhaseRef.current === 'ready' && !deviceId && cameraConfig.current?.resolution === settingsRef.current.resolution && cameraConfig.current.id === selectedId) return Promise.resolve();
     if (cameraRequest.current) return cameraRequest.current;
-    if (!camera.current) camera.current = new Camera(videoRef.current, recoverCamera);
+    if (!camera.current) camera.current = new Camera(videoRef.current, recoverCamera, canUseCamera);
     const epoch = ++cameraEpoch.current;
     changeCameraPhase('requesting'); setOpenBrowserSuggested(false);
     const reminder = setTimeout(() => {
-      if (mounted.current && cameraEpoch.current === epoch && cameraPhaseRef.current === 'requesting') {
+      if (canUseCamera() && cameraEpoch.current === epoch && cameraPhaseRef.current === 'requesting') {
         setError('Still waiting for camera access. Choose Allow in the browser prompt. If no prompt appears, open this scanner directly in Safari or Chrome.');
         setOpenBrowserSuggested(true);
       }
     }, 15000);
     // start() reaches getUserMedia synchronously, inside the button's user gesture.
     cameraConfig.current = { resolution: settingsRef.current.resolution, id: selectedId };
+    let interrupted = false;
     const opening = camera.current.start(settingsRef.current.resolution, selectedId || undefined).then(async info => {
-      // Safari may report hidden for one more turn while dismissing its native permission sheet.
-      await waitForPermissionDialogToClose();
-      if (!mounted.current || cameraEpoch.current !== epoch || document.hidden) {
+      if (!canUseCamera() || cameraEpoch.current !== epoch) {
         if (cameraEpoch.current === epoch) camera.current?.stop();
         throw new CameraAccessError('cancelled', 'Camera startup interrupted.');
       }
@@ -382,7 +392,10 @@ export function useScanner() {
           setFocusLocked(true);
         }
       } catch { setNotice('Some saved camera adjustments are unavailable.'); }
-      if (!mounted.current || cameraEpoch.current !== epoch) throw new CameraAccessError('cancelled', 'Camera startup interrupted.');
+      if (!canUseCamera() || cameraEpoch.current !== epoch) {
+        if (cameraEpoch.current === epoch) camera.current?.stop();
+        throw new CameraAccessError('cancelled', 'Camera startup interrupted.');
+      }
       resetMotion();
       changeCameraPhase('ready');
       setError(storageIssueRef.current); setOpenBrowserSuggested(false);
@@ -394,14 +407,20 @@ export function useScanner() {
         }).catch(() => { if (mounted.current && cameraEpoch.current === epoch) setDevices([]); });
       }
     }).catch(err => {
+      interrupted = err instanceof CameraAccessError && err.reason === 'cancelled';
       if (cameraEpoch.current === epoch) { changeCameraPhase('off'); setCameraSize({ width: 0, height: 0 }); }
       throw err;
-    }).finally(() => { clearTimeout(reminder); if (cameraRequest.current === opening) cameraRequest.current = undefined; });
+    }).finally(() => {
+      clearTimeout(reminder);
+      if (cameraRequest.current !== opening) return;
+      cameraRequest.current = undefined;
+      if (interrupted) resumeCamera();
+    });
     cameraRequest.current = opening;
     return opening;
   };
   const connectCamera = async (userGesture = true): Promise<boolean> => {
-    if (!previewWanted.current && !userGesture) return false;
+    if (!canUseCamera() || (!previewWanted.current && !userGesture)) return false;
     previewWanted.current = true;
     setError(storageIssueRef.current);
     try {
@@ -412,30 +431,35 @@ export function useScanner() {
     catch (err) {
       if (!mounted.current || err instanceof CameraAccessError && err.reason === 'cancelled') return false;
       setError(message(err)); setOpenBrowserSuggested(err instanceof CameraAccessError && err.openBrowser);
-      if (sessionRef.current === 'scanning' && !(err instanceof CameraAccessError && ['denied', 'blocked', 'unsupported', 'insecure'].includes(err.reason))) scheduleReconnect();
+      if (err instanceof CameraAccessError && ['denied', 'blocked', 'unsupported', 'insecure'].includes(err.reason)) previewWanted.current = false;
+      else if (sessionRef.current === 'scanning') scheduleReconnect();
       return false;
     }
   };
+  function resumeCamera() {
+    if (canUseCamera() && previewWanted.current && cameraPhaseRef.current === 'off' && !cameraRequest.current) void connectCamera(false);
+  }
   function scheduleReconnect() {
     clearTimeout(reconnectTimer.current);
-    if (!mounted.current || !previewWanted.current || document.hidden) return;
-    reconnectTimer.current = setTimeout(() => { if (mounted.current && previewWanted.current && !document.hidden) void connectCamera(false); }, 2000);
+    if (!canUseCamera() || !previewWanted.current) return;
+    reconnectTimer.current = setTimeout(resumeCamera, 2000);
   }
   function recoverCamera(reason: string) {
     if (!mounted.current) return;
+    if (!canUseCamera()) { suspendCamera(); return; }
     setError(reason); resetMotion();
-    cameraEpoch.current++; camera.current?.stop(); changeCameraPhase('off'); setCameraSize({ width: 0, height: 0 });
+    closeCamera();
     scheduleReconnect();
   }
   useEffect(() => {
     let cancelled = false;
     // Request the preview on entry; a browser that requires a tap keeps the Enable camera fallback.
-    void Promise.resolve().then(() => { if (!cancelled && !document.hidden) void connectCamera(false); });
+    void Promise.resolve().then(() => { if (!cancelled) resumeCamera(); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const start = async (target: number): Promise<boolean> => {
-    if (!loaded || editingBatch.current || sessionRef.current === 'starting' || controller.current?.complete) return false;
+    if (!canUseCamera() || !loaded || editingBatch.current || sessionRef.current === 'starting' || controller.current?.complete) return false;
     if (controller.current?.running) return true;
     const audioReady = audio.current!.unlock(); // Called synchronously within the user's gesture.
     const token = ++startToken.current;
@@ -443,26 +467,30 @@ export function useScanner() {
     changeSession('starting'); setError('');
     try {
       await enableCamera();
-      if (startToken.current !== token || document.hidden) throw new Error('Scanner startup was interrupted. Keep the app open and resume when ready.');
+      if (startToken.current !== token || !canUseCamera()) throw new CameraAccessError('cancelled', 'Camera startup interrupted.');
       if (!batchRef.current) {
         const name = nameRef.current === defaultBatchName(nextBatchNumber.current) ? undefined : nameRef.current;
         const b = await storage.create(target, name);
         batchRef.current = b; setBatch(b); setCurrentBatchName(b.name, b.number); makeController(b, 0);
       }
+      if (startToken.current !== token || !canUseCamera()) throw new CameraAccessError('cancelled', 'Camera startup interrupted.');
       resetMotion();
       controller.current!.start(); changeSession('scanning');
       const awake = navigator as Navigator & { wakeLock?: { request(type: string): Promise<{ release(): Promise<void> }> } };
-      void awake.wakeLock?.request('screen').then(lock => { if (controller.current?.running && mounted.current) wakeLock.current = lock; else void lock.release(); }).catch(() => {});
+      void awake.wakeLock?.request('screen').then(lock => { if (controller.current?.running && canUseCamera()) wakeLock.current = lock; else void lock.release(); }).catch(() => {});
       void audioReady.then(soundOk => { if (mounted.current) setNotice(soundOk ? 'Scanning is active. Errors are reported without pausing.' : 'Tap a sound test in Settings to enable audio.'); });
       void navigator.storage?.persist?.().catch(() => {});
       return true;
     } catch (err) {
-      changeSession(controller.current?.running ? 'scanning' : 'idle'); setError(message(err)); setNotice('');
+      if (startToken.current !== token) return false;
+      changeSession(controller.current?.running ? 'scanning' : batchRef.current ? 'paused' : 'idle');
+      if (err instanceof CameraAccessError && err.reason === 'cancelled') return false;
+      setError(message(err)); setNotice('');
       setOpenBrowserSuggested(err instanceof CameraAccessError && err.openBrowser);
       return false;
     }
   };
-  const stop = () => { previewWanted.current = false; clearTimeout(reconnectTimer.current); pause(); cameraEpoch.current++; camera.current?.stop(); changeCameraPhase('off'); setCameraSize({ width: 0, height: 0 }); setNotice('Camera stopped. Your photos are available in the Gallery.'); };
+  const stop = () => { previewWanted.current = false; clearTimeout(reconnectTimer.current); pause(); closeCamera(); setNotice('Camera stopped. Your photos are available in the Gallery.'); };
   const takePhoto = async (target: number) => {
     void audio.current?.unlock();
     if (!controller.current?.running && !await start(target)) return;
@@ -577,8 +605,8 @@ export function useScanner() {
     for (const key of Object.keys(defaults) as (keyof Settings)[]) editedPreferences.current.add(key);
     updateSettings({ ...defaults }); detector.current.reset(); setReading(undefined); setCountdown(null);
     await storage.settings({ ...defaults });
-    if (open) {
-      cameraEpoch.current++; camera.current?.stop(); changeCameraPhase('off');
+    if (open && canUseCamera()) {
+      closeCamera();
       await enableCamera('');
     }
     setNotice('Settings reset. Your photos and batch are unchanged.');
