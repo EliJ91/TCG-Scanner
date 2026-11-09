@@ -32,7 +32,7 @@ Fonts and app assets are bundled locally. Use `npm ci` for a reproducible instal
 4. Use zoom to frame the photo. If the lightning bolt appears beside the menu, tap it to turn the flashlight on or off. On cameras with manual focus, drag the right-side slider to focus and tap the lock to hold focus or restore autofocus.
 5. The camera dings when it takes a photo. The completion alarm plays after the batch target is saved.
 6. Tap the scan count to open the **Gallery**, rotate any upside-down cards, and choose **Export ZIP** from the menu or gallery. Edit the batch name before downloading or sharing. It defaults to `Batch#001`, `Batch#002`, and so on, and your edit is remembered for later exports. The archive uses the batch name, such as `Batch#001.zip` or `Trade night.zip`. The ZIP numbers photos starting at `Pokemon_0001.jpg` in the selected gallery order, with no gaps from failed or deleted scans.
-7. Tap **Share photos** to send the original photos through your device’s share menu, up to ten at a time. Use **Download ZIP** to send the archive from Files or Downloads. [Web Share API](https://www.w3.org/TR/web-share/)
+7. Tap **Share ZIP** to send the original photos through your device’s share menu, up to ten at a time. Use **Download ZIP** to send the archive from Files or Downloads. [Web Share API](https://www.w3.org/TR/web-share/)
 
 The centered scanner includes an editable batch name, zoom slider, capture mode, scan count, and capture control. The count opens the Gallery. **Menu** also gives access to Batch Settings, Gallery, downloads, settings, and the guide. Opening the menu or gallery keeps the camera mounted and detection running. Thumbnails render only while the gallery is open.
 

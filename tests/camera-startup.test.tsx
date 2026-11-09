@@ -125,15 +125,16 @@ describe('batch file sharing', () => {
       .mockRejectedValueOnce(new DOMException('Canceled', 'AbortError')).mockResolvedValue(undefined);
     await openExport(share, 1, () => true);
     expect(build).toHaveBeenCalledWith(expect.any(Array), expect.any(Function), true);
-    expect(container.textContent).not.toContain('Share ZIP');
+    expect(container.textContent).not.toContain('Share photos');
+    expect(button('Share ZIP').className).toBe(button('Download ZIP').className);
     expect(button('Download ZIP').disabled).toBe(true);
     await input('#export-batch-name', 'Trade night');
     await act(async () => {
-      button('Share photos').click();
+      button('Share ZIP').click();
       expect(share).toHaveBeenCalledOnce();
     });
     expect(mocks.rename).not.toHaveBeenCalled();
-    await click('Share photos');
+    await click('Share ZIP');
     const file = share.mock.calls[1][0].files?.[0];
     expect(file).toMatchObject({ name: 'Pokemon_0001.jpg', type: 'image/jpeg', size: 1 });
     expect(build).toHaveBeenCalledOnce();
@@ -147,7 +148,7 @@ describe('batch file sharing', () => {
     const download = vi.spyOn(exportTools, 'downloadArchive').mockImplementation(() => {});
     const share = vi.fn().mockRejectedValue(new DOMException('Photo sharing is blocked', 'NotAllowedError'));
     await openExport(share);
-    await click('Share photos');
+    await click('Share ZIP');
     expect(container.textContent).toContain('share it from Files or Downloads');
     expect(mocks.rename).not.toHaveBeenCalled();
     await click('Download ZIP');
@@ -162,17 +163,17 @@ describe('batch file sharing', () => {
       .mockRejectedValueOnce(new DOMException('Canceled', 'AbortError'));
     localStorage.setItem('cardslinger-settings', JSON.stringify({ ...defaults, galleryNewestFirst: true }));
     await openExport(share, 12);
-    expect(container.textContent).toContain('Share photos 1–10 of 12.');
-    await click('Share photos');
-    expect(container.textContent).toContain('Share photos 1–10 of 12.');
+    expect(container.textContent).toContain('Photos 1–10 of 12 ready to share.');
+    await click('Share ZIP');
+    expect(container.textContent).toContain('Photos 1–10 of 12 ready to share.');
     await act(async () => {
-      button('Share photos').click();
+      button('Share ZIP').click();
       expect(share).toHaveBeenCalledTimes(2);
     });
     expect(share.mock.calls[1][0].files).toHaveLength(10);
     expect(share.mock.calls[1][0].files?.[0]).toMatchObject({ name: 'Pokemon_0001.jpg', type: 'image/jpeg', size: 12 });
-    expect(container.textContent).toContain('Share photos 11–12 of 12.');
-    await click('Share photos');
+    expect(container.textContent).toContain('Photos 11–12 of 12 ready to share.');
+    await click('Share ZIP');
     expect(share.mock.calls[2][0].files).toMatchObject([{ name: 'Pokemon_0011.jpg', size: 2 }, { name: 'Pokemon_0012.jpg', size: 1 }]);
     expect(container.textContent).toContain('All photo groups opened in the share menu.');
     expect(download).not.toHaveBeenCalled();

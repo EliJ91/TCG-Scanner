@@ -122,8 +122,8 @@ function BatchExport({ batch, scans, newestFirst, disabled, rename, close }: {
       </label>
       <p className="archive-preview">{archiveName}</p>
       <p className="setting-hint">{scans.length} saved photos in this ZIP.</p>
-      {!canSharePhotos && <p className="setting-hint" role="status">Download the ZIP, then share it from Files or Downloads.</p>}
-      {canSharePhotos && photoFiles.length < scans.length && <p className="setting-hint" role="status">{photoOffset === scans.length ? 'All photo groups opened in the share menu. Tap Share photos to start again.' : `Share photos ${photoStart + 1}–${photoStart + photoFiles.length} of ${scans.length}.`}</p>}
+      {canSharePhotos ? <p id="share-photos-hint" className="setting-hint">The share menu sends individual photos.</p> : <p className="setting-hint" role="status">Download the ZIP, then share it from Files or Downloads.</p>}
+      {canSharePhotos && photoFiles.length < scans.length && <p className="setting-hint" role="status">{photoOffset === scans.length ? 'All photo groups opened in the share menu. Tap Share ZIP to start again.' : `Photos ${photoStart + 1}–${photoStart + photoFiles.length} of ${scans.length} ready to share.`}</p>}
       {'progress' in build && <>
         <p className="setting-hint">Preparing ZIP · {build.progress}%</p>
         <div className="progress-track" role="progressbar" aria-label="ZIP export progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={build.progress}><div style={{ width: `${build.progress}%` }} /></div>
@@ -133,7 +133,7 @@ function BatchExport({ batch, scans, newestFirst, disabled, rename, close }: {
     </div>
     <div className="dialog-footer">
       <button type="button" className={`button ${canSharePhotos ? 'outline' : 'dark'}`} disabled={!ready} onClick={download}><ArrowDownToLine size={16} />Download ZIP</button>
-      {canSharePhotos && <button type="button" className="button dark" disabled={disabled || sharing} onClick={() => void share()}><Share2 size={16} />{sharing ? 'Sharing…' : 'Share photos'}</button>}
+      {canSharePhotos && <button type="button" className="button outline" aria-describedby="share-photos-hint" disabled={disabled || sharing} onClick={() => void share()}><Share2 size={16} />{sharing ? 'Sharing…' : 'Share ZIP'}</button>}
     </div>
   </Dialog>;
 }

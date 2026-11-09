@@ -55,7 +55,7 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 - [ ] Download a partial batch, then a completed batch. Unzip and check exact file count, valid JPEG decoding, camera frame dimensions, sequential filenames without gaps, and physical order.
 - [ ] Confirm rotated/deleted images are reflected in the next ZIP. Download never clears saved data.
 - [ ] In Export ZIP, confirm default `Batch#XXX`, edit the batch name, and check the archive name and persisted name on the next export. Names inside remain `Pokemon_0001.jpg` onward.
-- [ ] Use Share photos and verify the original photos arrive in the selected app. Cancel the share sheet and try again. For more than ten photos, share the next group and check that the filenames continue in order. Check that Download ZIP still works for sending the archive from Files or Downloads.
+- [ ] Use Share ZIP and verify the original photos arrive in the selected app. Cancel the share sheet and try again. For more than ten photos, share the next group and check that the filenames continue in order. Check that Download ZIP still works for sending the archive from Files or Downloads.
 - [ ] Reload after saved scans; verify recovery and no automatic stationary recapture.
 - [ ] Upgrade an earlier batch with queued originals and check that the original JPEGs are recovered without duplicates.
 - [ ] Background/lock the app or interrupt camera access. Keep saved images/originals intact; on return reconnect the camera and preserve the active scan intent without requiring Resume. Respect a browser permission denial.
