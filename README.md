@@ -28,17 +28,17 @@ Fonts and app assets are bundled locally. Use `npm ci` for a reproducible instal
 
 1. Mount the phone securely above a plain surface. Use diffuse light from the sides. Center one card with background visible around it. Fill roughly 20–80% of the camera area with the card.
 2. The camera preview opens as soon as the app opens. Choose **Allow** if the browser asks; if it requires a tap, use **Enable camera**. Set the quantity in **Menu → Batch**. Tap the batch name/pencil in the camera's upper-left corner to rename it at any time, including before the first photo.
-3. Choose **Auto** or **Manual**. In Auto, place the first card and tap **Start scanning**. The green bar fills during the stillness delay. Remove the card after the photo and briefly show the bare surface before placing the next card. Set **Wait before each photo** from **10 ms to 1 second** in Settings. In Manual, tap **Take photo**.
+3. Choose **Auto** or **Manual**. In Auto, place the first card and tap **Start scanning**. The green bar fills during the stillness delay. Remove each card and briefly show the bare surface before placing the next one, or turn on **Using Card Slinger** in Settings to place each new card on top. Set **Wait before each photo** from **10 ms to 1 second** in Settings. In Manual, tap **Take photo**.
 4. Use zoom to frame the photo. If the lightning bolt appears beside the menu, tap it to turn the flashlight on or off. On cameras with manual focus, drag the right-side slider to focus and tap the lock to hold focus or restore autofocus.
 5. The camera dings when it takes a photo. The completion alarm plays after the batch target is saved.
 6. Tap the scan count to view **Recent cards**, rotate any upside-down cards, and choose **Export ZIP** from the menu or gallery. Edit the batch name before downloading or sharing. It defaults to `Batch#001`, `Batch#002`, and so on, and your edit is remembered for later exports. The archive uses the batch name, such as `Batch#001.zip` or `Trade night.zip`. The ZIP numbers photos starting at `Pokemon_0001.jpg` in the selected gallery order, with no gaps from failed or deleted scans.
-7. Tap **Share ZIP** to choose an available mail or messaging app from your device’s share sheet. If the browser blocks ZIP sharing, choose **Download ZIP** and share that file from Files or Downloads. [Web Share API](https://www.w3.org/TR/web-share/)
+7. Tap **Share ZIP** to send the archive through your device’s share menu where supported. Tap **Share photos** to send the original photos directly, up to ten at a time. Use **Download ZIP** to send the archive from Files or Downloads when the browser blocks ZIP attachments. [Web Share API](https://www.w3.org/TR/web-share/) · [Chromium’s supported attachments](https://chromium.googlesource.com/chromium/src/%2B/HEAD/third_party/blink/renderer/modules/webshare/FILE_TYPES.md)
 
 The centered scanner includes an editable batch name, zoom slider, capture mode, scan count, and capture control. The count opens Recent cards. **Menu** also gives access to batch quantity, recent cards, downloads, settings, and the guide. Opening the menu or gallery keeps the camera mounted and detection running. Thumbnails render only while the gallery is open.
 
 Toggle dark/light mode under **Menu → Settings → Dark mode**. Dark mode uses a pure black background and neutral gray surfaces, with monochrome controls. The initial theme follows your device preference and your selection is remembered locally.
 
-Turn on **Newest first in gallery** in Settings to see your latest scans at the top of Recent cards.
+Turn on **Newest first in gallery and ZIP** in Settings to see your latest scans at the top of Recent cards and export them first.
 
 ### Mobile camera access
 
@@ -48,7 +48,7 @@ Open the HTTPS app directly in **Safari on iPhone** or **Chrome on Android**. So
 
 The preview is visible during startup, explicitly muted, and marked for inline playback before its stream is attached. Startup listens for metadata/playing events before calling `play()` and also bounds a pending playback promise, avoiding a silent indefinite Safari wait. Preferred resolution constraints fall back to simpler camera requests when unsupported; permission denials are never retried as resolution errors. Device enumeration, capabilities, and settings APIs are optional and cannot tear down a working preview.
 
-Auto checks low-resolution preview frames for printed detail against the surrounding surface. Once a card is visible and still, Auto copies the confirmed preview frame. After a photo, Auto waits for two camera frames showing the bare surface before it can capture another placement. Clear the view when reopening a saved batch. Manual fires on tap. Mode switches keep the camera running. Use **Pause scanning** or **Menu → Stop camera** to pause capture while pending saves finish. The app reconnects on return if the browser suspended the camera.
+Auto checks low-resolution preview frames for printed detail against the surrounding surface. Once a card is visible and still, Auto copies the confirmed preview frame. With **Using Card Slinger** on, movement re-arms Auto for another settled card. With it off, Auto waits for two camera frames showing the bare surface. Manual fires on tap. Mode switches keep the camera running. Use **Pause scanning** or **Menu → Stop camera** to pause capture while pending saves finish. The app reconnects on return if the browser suspended the camera.
 
 Change the current batch size in **Menu → Batch** after pending photos finish saving. The size must cover every saved photo. Increasing a completed batch lets you resume scanning. Starting a new batch still requires clearing the active one. The browser remembers the custom name for the next batch. Clear the name field to return to automatic numbering.
 
@@ -62,7 +62,7 @@ Deleting a stored scan reduces the count and pauses the scanner, including a pre
 
 ## Settings
 
-**Menu → Settings** starts with Dark mode, gallery order, Wait before each photo, and Sounds/Volume. Camera and photo tuning stay inside **Advanced settings**. Selected camera, resolution, zoom, flashlight, focus position and lock, capture mode, and tuning are saved in browser preferences and restored on entry. A missing remembered camera falls back to the rear camera. **Reset settings** restores defaults and the device's theme preference while keeping photos and the batch. Pause capture before resetting. The previous 220 ms setting migrates to 100 ms. Other custom delays are kept within the supported range.
+**Menu → Settings** starts with Dark mode, gallery order, Using Card Slinger, Wait before each photo, and Sounds/Volume. Camera and photo tuning stay inside **Advanced settings**. Selected camera, resolution, zoom, flashlight, focus position and lock, capture mode, stacking, and tuning are saved in browser preferences and restored on entry. A missing remembered camera falls back to the rear camera. **Reset settings** restores defaults and the device's theme preference while keeping photos and the batch. Pause capture before resetting. The previous 220 ms setting migrates to 100 ms. Other custom delays are kept within the supported range.
 
 | Control | Default | Notes |
 | --- | --- | --- |
@@ -85,7 +85,7 @@ The modules have separate responsibilities:
 | --- | --- |
 | `src/core/camera.ts` | Persistent rear-camera stream, controls, snapshot capture |
 | `src/core/card-presence.ts` | Lightweight card presence check on the 160×120 preview |
-| `src/core/motion.ts` | Exposure-compensated motion, timed stillness, and removal before rearming |
+| `src/core/motion.ts` | Exposure-compensated motion, timed stillness, and rearming for removal or stacking |
 | `src/core/batch.ts` | Strict slot reservations, bounded queue, ordered commits, storage failures, exact target |
 | `src/core/pipeline.ts` | Background JPEG writes, batch limits, and storage retries |
 | `src/core/preferences.ts` | Synchronous browser preference cache and capture-default migration |

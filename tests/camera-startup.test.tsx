@@ -99,17 +99,17 @@ afterEach(async () => { await act(async () => root.unmount()); container.remove(
 describe('batch file sharing', () => {
   const zip = new Blob(['batch ZIP'], { type: 'application/zip' });
 
-  async function openExport(share: (data: ShareData) => Promise<void>) {
+  async function openExport(share: (data: ShareData) => Promise<void>, count = 1, canShare = ({ files }: ShareData) => files?.[0].type === 'application/zip') {
     Object.defineProperties(navigator, {
-      canShare: { configurable: true, value: ({ files }: ShareData) => files?.[0].type === 'application/zip' },
+      canShare: { configurable: true, value: canShare },
       share: { configurable: true, value: share },
     });
-    const batch = { id: 'exported', number: 7, name: 'Batch#007', target: 5, createdAt: 1, status: 'paused', nextOrdinal: 1 };
-    const scan = { id: 'photo', batchId: batch.id, ordinal: 0, blob: new Blob(['JPEG']), width: 900, height: 1257 };
-    mocks.load.mockResolvedValueOnce({ ...loaded, batch, scans: [scan] });
+    const batch = { id: 'exported', number: 7, name: 'Batch#007', target: count + 1, createdAt: 1, status: 'paused', nextOrdinal: count };
+    const scans = Array.from({ length: count }, (_, ordinal) => ({ id: `photo-${ordinal}`, batchId: batch.id, ordinal, blob: new Blob(['x'.repeat(ordinal + 1)]), width: 900, height: 1257 }));
+    mocks.load.mockResolvedValueOnce({ ...loaded, batch, scans });
     await renderApp();
     await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
-    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Export ZIP, 1 saved photos"]')!.click());
+    await act(async () => container.querySelector<HTMLButtonElement>(`[aria-label="Export ZIP, ${count} saved photos"]`)!.click());
   }
 
   afterEach(() => {
@@ -151,6 +151,32 @@ describe('batch file sharing', () => {
     await click('Download ZIP');
     expect(download.mock.calls[0][0]).toMatchObject({ name: 'Batch#007.zip', type: 'application/zip', size: zip.size });
     expect(mocks.rename).toHaveBeenCalledWith('exported', 'Batch#007');
+  });
+
+  it('shares ordered photos in groups when the browser rejects ZIP attachments', async () => {
+    vi.spyOn(exportTools, 'createZip').mockResolvedValueOnce(zip);
+    const download = vi.spyOn(exportTools, 'downloadArchive').mockImplementation(() => {});
+    const share = vi.fn<(data: ShareData) => Promise<void>>().mockResolvedValue(undefined)
+      .mockRejectedValueOnce(new DOMException('ZIP sharing is blocked', 'NotAllowedError'))
+      .mockRejectedValueOnce(new DOMException('Canceled', 'AbortError'));
+    localStorage.setItem('cardslinger-settings', JSON.stringify({ ...defaults, galleryNewestFirst: true }));
+    await openExport(share, 12, () => true);
+    await click('Share ZIP');
+    expect(container.textContent).toContain('Tap Share photos to open the share menu.');
+    expect(container.textContent).toContain('Share photos 1–10 of 12.');
+    await click('Share photos');
+    expect(container.textContent).toContain('Share photos 1–10 of 12.');
+    await act(async () => {
+      button('Share photos').click();
+      expect(share).toHaveBeenCalledTimes(3);
+    });
+    expect(share.mock.calls[2][0].files).toHaveLength(10);
+    expect(share.mock.calls[2][0].files?.[0]).toMatchObject({ name: 'Pokemon_0001.jpg', type: 'image/jpeg', size: 12 });
+    expect(container.textContent).toContain('Share photos 11–12 of 12.');
+    await click('Share photos');
+    expect(share.mock.calls[3][0].files).toMatchObject([{ name: 'Pokemon_0011.jpg', size: 2 }, { name: 'Pokemon_0012.jpg', size: 1 }]);
+    expect(container.textContent).toContain('All photo groups opened in the share menu.');
+    expect(download).not.toHaveBeenCalled();
   });
 });
 
@@ -270,6 +296,37 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.accept.mock.calls.map(([scan]) => scan.ordinal)).toEqual([0, 1, 2]);
     expect(mocks.success).toHaveBeenCalledTimes(3);
     expect(container.querySelector('.scan-count')?.textContent).toBe('3 / 50');
+  });
+  it('uses the Card Slinger setting to capture successive cards placed on top during a slow save', async () => {
+    let finishSaving!: () => void;
+    mocks.accept.mockImplementationOnce(() => new Promise<void>(resolve => { finishSaving = resolve; }));
+    const first = printedCard(), second = printedCard(1), third = printedCard(2);
+    const { tick } = await startAutoPreview(100, first);
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
+    await click('Settings');
+    const setting = [...container.querySelectorAll('label')].find(label => label.textContent?.startsWith('Using Card Slinger'))!;
+    expect(setting.querySelector('input')?.checked).toBe(false);
+    await act(async () => setting.querySelector('input')!.click());
+    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!).stackCards).toBe(true);
+    await click('Done');
+    await tick();
+    await tick(33, first);
+    await tick(100);
+    expect(mocks.capture).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('Place the next card on top');
+    await tick(250, first);
+    expect(mocks.capture).toHaveBeenCalledTimes(1);
+    await tick(33, second);
+    await tick(33, second);
+    expect(container.querySelector<HTMLDivElement>('.auto-countdown > div')?.style.animation).toBe('shutter-fill 100ms linear both');
+    await tick(100);
+    await tick(33, third);
+    await tick(33, third);
+    await tick(100);
+    expect(mocks.capture).toHaveBeenCalledTimes(3);
+    expect(mocks.accept).toHaveBeenCalledTimes(1);
+    await act(async () => finishSaving());
+    expect(mocks.accept.mock.calls.map(([scan]) => scan.ordinal)).toEqual([0, 1, 2]);
   });
   it('saves each manual photo and opens those photos from the scan count', async () => {
     vi.stubGlobal('URL', class extends URL {

@@ -4,10 +4,10 @@ import { defaults } from './types';
 export type MotionState = 'waiting' | 'moving' | 'stabilizing' | 'ready';
 export interface MotionReading {
   score: number; noise: number; stability: number; state: MotionState;
-  presence: CardPresence; needsRemoval: boolean; cycle: number;
+  presence: CardPresence; awaitingNextCard: boolean; cycle: number;
 }
 
-/** One quiet interval per placement. Only confirmed empty frames rearm a consumed placement. */
+/** One quiet interval per placement, with optional motion-based rearming for stacks. */
 export class MotionDetector {
   private previous?: Uint8Array;
   private noise = 2;
@@ -18,10 +18,19 @@ export class MotionDetector {
   private lastTime: number | null = null;
   private needsRemoval = false;
   private emptyFrames = 0;
+  private stackCards = defaults.stackCards;
+  private movedSinceCapture = false;
   private cycle = 0;
   constructor(public stabilityMs = defaults.stabilityMs, public sensitivity = defaults.sensitivity) {}
 
   get deadline() { return this.state === 'stabilizing' && this.stableStart !== null ? this.stableStart + this.stabilityMs : null; }
+  private get awaitingNextCard() { return this.needsRemoval && !this.movedSinceCapture; }
+
+  setStackCards(enabled: boolean) {
+    if (enabled === this.stackCards) return;
+    this.stackCards = enabled;
+    this.reset();
+  }
 
   reset(requireRemoval = this.needsRemoval) {
     this.previous = undefined;
@@ -29,10 +38,20 @@ export class MotionDetector {
     this.state = 'waiting';
     this.stableStart = this.lastTime = null;
     this.needsRemoval = requireRemoval;
+    this.movedSinceCapture = false;
     this.emptyFrames = this.score = 0;
   }
 
-  consume() { this.cycle++; this.reset(true); }
+  consume() {
+    this.cycle++;
+    const { previous, lastTime } = this;
+    this.reset(true);
+    if (this.stackCards) {
+      // Compare the next frame to the one just captured, even during JPEG encoding.
+      this.previous = previous;
+      this.lastTime = lastTime;
+    }
+  }
 
   update(gray: Uint8Array, now: number, presence: CardPresence): MotionReading {
     if (this.lastTime !== null && now - this.lastTime > 650) this.reset();
@@ -57,14 +76,16 @@ export class MotionDetector {
       previous.set(gray);
     } else this.previous = gray.slice();
 
+    const moving = this.score >= this.sensitivity;
     if (this.needsRemoval) {
       this.emptyFrames = presence === 'empty' ? this.emptyFrames + 1 : 0;
       if (this.emptyFrames >= 2) this.needsRemoval = false;
+      if (this.stackCards && moving) this.movedSinceCapture = true;
     }
-    if (presence !== 'card' || this.needsRemoval || !previous) {
+    if (presence !== 'card' || this.awaitingNextCard || !previous) {
       this.state = 'waiting';
       this.stableStart = null;
-    } else if (this.score >= this.sensitivity) {
+    } else if (moving) {
       this.state = 'moving';
       this.stableStart = null;
     } else if (this.state !== 'ready') {
@@ -80,7 +101,7 @@ export class MotionDetector {
     const deadline = this.deadline;
     if (deadline !== null && now >= deadline) this.state = 'ready';
     return { score: this.score, noise: this.noise, state: this.state, presence: this.presence,
-      needsRemoval: this.needsRemoval, cycle: this.cycle,
+      awaitingNextCard: this.awaitingNextCard, cycle: this.cycle,
       stability: this.stableStart === null ? 0 : Math.min(1, Math.max(0, (now - this.stableStart) / this.stabilityMs)) };
   }
 }

@@ -146,7 +146,7 @@ export function useScanner() {
         lastComplete.current = data.scans.length >= b.target ? b.id : undefined;
         changeSession(data.scans.length >= b.target ? 'complete' : 'paused');
         makeController(b, data.scans.length);
-        setNotice(data.scans.length >= b.target ? 'Completed batch recovered from this device. Your images are ready to review and download.' : 'Batch recovered. Clear the camera view before placing the next card.');
+        setNotice(data.scans.length >= b.target ? 'Completed batch recovered from this device. Your images are ready to review and download.' : 'Batch recovered. Resume scanning to add more photos.');
       } else {
         const number = data.nextBatchNumber ?? 1;
         nextBatchNumber.current = number;
@@ -184,6 +184,7 @@ export function useScanner() {
   useEffect(() => {
     settingsRef.current = settings; if (loaded) cacheSettings(settings);
     detector.current.stabilityMs = settings.stabilityMs; detector.current.sensitivity = settings.sensitivity;
+    detector.current.setStackCards(settings.stackCards);
     camera.current?.setZoom(settings.zoom);
     if (audio.current) { audio.current.volume = settings.volume; audio.current.muted = settings.muted; }
     if (loaded) void storage.settings(settings).catch(err => setError(`Settings could not be saved: ${message(err)}`));
@@ -191,6 +192,11 @@ export function useScanner() {
 
   const updateSettings = (next: Settings) => {
     for (const key of Object.keys(next) as (keyof Settings)[]) if (next[key] !== settingsRef.current[key]) editedPreferences.current.add(key);
+    if (next.stackCards !== settingsRef.current.stackCards) {
+      detector.current.setStackCards(next.stackCards);
+      setReading(detector.current.advance(performance.now()));
+      setCountdown(null);
+    }
     settingsRef.current = next; cacheSettings(next); setSettings(next);
   };
 

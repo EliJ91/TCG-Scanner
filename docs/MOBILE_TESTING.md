@@ -16,7 +16,7 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 - [ ] Test the 1–3× zoom slider in both modes. Saved framing must match the preview and preserve native pixel quality. Adjusting zoom must not trigger an extra Auto photo.
 - [ ] Tap the visible batch name/pencil, save a new name before the first photo, rename during scanning, and reload. The scanner and ZIP dialog must show the same persisted name.
 - [ ] Toggle light/dark through Menu → Settings; reload to confirm persistence. Dark mode must use pure black and neutral gray surfaces. Check contrast and controls in both modes.
-- [ ] Settings should show Dark mode, Newest first in gallery, Wait before each photo, Sounds, and Volume. Open Advanced settings to find photo/camera controls. Confirm the descriptions are clear and Done is always reachable on a small screen.
+- [ ] Settings should show Dark mode, Newest first in gallery and ZIP, Using Card Slinger, Wait before each photo, Sounds, and Volume. Open Advanced settings to find photo/camera controls. Confirm the descriptions are clear and Done is always reachable on a small screen.
 - [ ] At 320, 375, 390, and 430 px widths, verify the scanner is horizontally centered and its Start/Pause control fits on screen. No sidebar, bottom navigation, batch panel, or recent-card thumbnails should be visible until opened from Menu.
 
 ## Motion and framing
@@ -26,7 +26,8 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 - [ ] Switch Auto/Manual while active. Keep the same preview and batch, with no extra stationary duplicate.
 - [ ] Slide in a card and hold still. Check for one ding and one JPEG with the same framing as the preview.
 - [ ] Leave it stationary for 30 seconds: no duplicate scans.
-- [ ] Slide another card directly over the last with no empty interval: no new scan.
+- [ ] With Using Card Slinger off, slide another card directly over the last. Confirm Auto waits for the bare surface before scanning again.
+- [ ] Turn on Using Card Slinger. Stack successive cards and confirm Auto takes one photo each time the top card settles. Confirm a stationary stack does not repeat and a bare surface does not trigger the shutter.
 - [ ] Remove the card and leave the bare surface visible for at least two camera frames. Check that no photo is taken until a card is placed and held still again.
 - [ ] Repeat with two or more identical-artwork cards. Count physical cards against saved images.
 - [ ] Test yellow, white, silver, and dark borders; textured and holographic cards; slight rotation; mild perspective. Inspect corners at full resolution.
@@ -55,7 +56,7 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 - [ ] Confirm rotated/deleted images are reflected in the next ZIP. Download never clears saved data.
 - [ ] In Export ZIP, confirm default `Batch#XXX`, edit the batch name, and check the archive name and persisted name on the next export. Names inside remain `Pokemon_0001.jpg` onward.
 - [ ] On a device that supports sharing ZIPs, open Share ZIP and check that Mail or a messaging app receives the named archive. Cancel the share sheet and try again.
-- [ ] If the browser blocks ZIP sharing, download the archive and check that it can be shared from Files or Downloads.
+- [ ] If the browser blocks ZIP sharing, use Share photos and verify the original photos arrive in the selected app. For more than ten photos, share the next group and check that the filenames continue in order. Check that Download ZIP still works for sending the archive from Files or Downloads.
 - [ ] Reload after saved scans; verify recovery and no automatic stationary recapture.
 - [ ] Upgrade an earlier batch with queued originals and check that the original JPEGs are recovered without duplicates.
 - [ ] Background/lock the app or interrupt camera access. Keep saved images/originals intact; on return reconnect the camera and preserve the active scan intent without requiring Resume. Respect a browser permission denial.

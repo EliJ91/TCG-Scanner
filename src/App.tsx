@@ -44,7 +44,10 @@ function BatchExport({ batch, scans, newestFirst, disabled, rename, close }: {
 }) {
   const [name, setName] = useState(batch.name);
   const [build, setBuild] = useState<{ progress: number } | { blob: Blob; scans: Scan[]; newestFirst: boolean } | { error: string }>({ progress: 0 });
-  const [shareState, setShareState] = useState<'idle' | 'sharing' | 'unavailable'>('idle');
+  const [sharing, setSharing] = useState<'zip' | 'photos'>();
+  const [zipShareBlocked, setZipShareBlocked] = useState(false);
+  const [photoShareBlocked, setPhotoShareBlocked] = useState(false);
+  const [photoOffset, setPhotoOffset] = useState(0);
   const [downloaded, setDownloaded] = useState('');
   const [actionError, setActionError] = useState('');
 
@@ -65,9 +68,23 @@ function BatchExport({ batch, scans, newestFirst, disabled, rename, close }: {
   const file = 'blob' in build && build.scans === scans && build.newestFirst === newestFirst
     ? new File([build.blob], archiveName, { type: 'application/zip' }) : undefined;
   const nativeShare = typeof navigator.share === 'function' && typeof navigator.canShare === 'function';
-  const canShare = !!file && nativeShare && shareState !== 'unavailable' && navigator.canShare({ files: [file] });
-  const sharing = shareState === 'sharing';
-  const showShare = sharing || canShare || (nativeShare && 'progress' in build);
+  const canShareZip = !!file && nativeShare && !zipShareBlocked && navigator.canShare({ files: [file] });
+  const showZipShare = canShareZip || (nativeShare && !zipShareBlocked && 'progress' in build);
+  const photoStart = photoOffset < scans.length ? photoOffset : 0;
+  const photoFiles = useMemo(() => {
+    const files: File[] = [];
+    if (!nativeShare || photoShareBlocked) return files;
+    let bytes = 0;
+    // Chromium limits a share to 10 files and 50 MiB.
+    for (let index = photoStart; index < scans.length && files.length < 10; index++) {
+      const { blob } = scans[newestFirst ? scans.length - 1 - index : index];
+      if (files.length && bytes + blob.size > 50 * 1024 * 1024) break;
+      files.push(new File([blob], filename(index), { type: 'image/jpeg' }));
+      bytes += blob.size;
+    }
+    return files;
+  }, [nativeShare, photoShareBlocked, photoStart, scans, newestFirst]);
+  const canSharePhotos = photoFiles.length > 0 && navigator.canShare({ files: photoFiles });
   const ready = !!file && !disabled && !sharing;
 
   const rememberName = () => {
@@ -84,29 +101,36 @@ function BatchExport({ batch, scans, newestFirst, disabled, rename, close }: {
       setActionError(`Could not download the ZIP. ${message(error)}`);
     }
   };
-  const share = async () => {
-    if (!file || !ready || !canShare) return;
-    setShareState('sharing');
+  const share = async (format: 'zip' | 'photos') => {
+    const files = format === 'zip' ? file && canShareZip && [file] : canSharePhotos && photoFiles;
+    if (!files || disabled || sharing) return;
+    setSharing(format);
     setActionError('');
     try {
-      // The ZIP is ready before this tap, so sharing can use its user activation.
-      await navigator.share({ files: [file] });
-      setShareState('idle');
+      // Files are prepared before this tap so the share sheet can use its activation.
+      await navigator.share({ files });
+      if (format === 'photos') setPhotoOffset(photoStart + files.length);
       rememberName();
     } catch (error) {
-      setShareState(error instanceof DOMException && error.name === 'AbortError' ? 'idle' : 'unavailable');
-    }
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      if (format === 'zip') setZipShareBlocked(true);
+      else {
+        setPhotoShareBlocked(true);
+        setActionError('Could not open the share menu for these photos.');
+      }
+    } finally { setSharing(undefined); }
   };
 
   return <Dialog title="Export batch" close={close}>
     <div className="confirm-content">
       {downloaded && <div className="export-success" role="status"><strong>{downloaded}</strong><p>Check your browser’s downloads.</p></div>}
       <label className="select-setting batch-name-field" htmlFor="export-batch-name">Batch name
-        <input id="export-batch-name" type="text" maxLength={100} value={name} disabled={sharing} placeholder={defaultBatchName(batch.number)} onChange={event => setName(event.target.value)} />
+        <input id="export-batch-name" type="text" maxLength={100} value={name} disabled={!!sharing} placeholder={defaultBatchName(batch.number)} onChange={event => setName(event.target.value)} />
       </label>
       <p className="archive-preview">{archiveName}</p>
       <p className="setting-hint">{scans.length} saved photos in this ZIP.</p>
-      {(!nativeShare || (file && !showShare)) && <p className="setting-hint" role="status">Download the ZIP, then share it from Files or Downloads.</p>}
+      {!showZipShare && <p className="setting-hint" role="status">{canSharePhotos ? 'ZIP sharing is unavailable here. Tap Share photos to open the share menu.' : 'Download the ZIP, then share it from Files or Downloads.'}</p>}
+      {canSharePhotos && photoFiles.length < scans.length && <p className="setting-hint" role="status">{photoOffset === scans.length ? 'All photo groups opened in the share menu. Tap Share photos to start again.' : `Share photos ${photoStart + 1}–${photoStart + photoFiles.length} of ${scans.length}.`}</p>}
       {'progress' in build && <>
         <p className="setting-hint">Preparing ZIP · {build.progress}%</p>
         <div className="progress-track" role="progressbar" aria-label="ZIP export progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={build.progress}><div style={{ width: `${build.progress}%` }} /></div>
@@ -115,8 +139,9 @@ function BatchExport({ batch, scans, newestFirst, disabled, rename, close }: {
       {actionError && <p className="name-error" role="alert">{actionError}</p>}
     </div>
     <div className="dialog-footer">
-      <button type="button" className={`button ${showShare ? 'outline' : 'dark'}`} disabled={!ready} onClick={download}><ArrowDownToLine size={16} />Download ZIP</button>
-      {showShare && <button type="button" className="button dark" disabled={!ready} onClick={() => void share()}><Share2 size={16} />{sharing ? 'Sharing…' : 'Share ZIP'}</button>}
+      <button type="button" className={`button ${showZipShare || canSharePhotos ? 'outline' : 'dark'}`} disabled={!ready} onClick={download}><ArrowDownToLine size={16} />Download ZIP</button>
+      {showZipShare && <button type="button" className={`button ${canSharePhotos ? 'outline' : 'dark'}`} disabled={!ready || !canShareZip} onClick={() => void share('zip')}><Share2 size={16} />{sharing === 'zip' ? 'Sharing…' : 'Share ZIP'}</button>}
+      {canSharePhotos && <button type="button" className="button dark" disabled={disabled || !!sharing} onClick={() => void share('photos')}><Share2 size={16} />{sharing === 'photos' ? 'Sharing…' : 'Share photos'}</button>}
     </div>
   </Dialog>;
 }
@@ -249,7 +274,7 @@ export default function App() {
   else if (s.session === 'scanning') {
     if (!autoMode) scannerStatus = 'Manual · tap to take a photo';
     else if (showCountdown && !snapped) scannerStatus = 'Hold still';
-    else if (s.reading?.needsRemoval) scannerStatus = 'Remove the card';
+    else if (s.reading?.awaitingNextCard) scannerStatus = s.settings.stackCards ? 'Place the next card on top' : 'Remove the card';
     else if (s.reading?.state === 'moving') scannerStatus = 'Card moving';
     else scannerStatus = s.reading?.presence === 'uncertain' ? 'Center one card' : 'Place a card';
   }
@@ -376,6 +401,7 @@ export default function App() {
       <p className="dialog-intro">Your choices are saved automatically on this device.</p>
       <Toggle label="Dark mode" checked={theme.dark} onChange={theme.setDark} />
       <Toggle label="Newest first in gallery and ZIP" hint="Show recent photos at the top and number them first in the ZIP." checked={newestFirst} onChange={galleryNewestFirst => s.setSettings({ ...s.settings, galleryNewestFirst })} />
+      <Toggle label="Using Card Slinger" hint="In Auto, place the next card on top. The camera takes a photo when it settles." checked={s.settings.stackCards} onChange={stackCards => s.setSettings({ ...s.settings, stackCards })} />
       <Setting label="Wait before each photo" value={waitLabel} hint="Auto takes a photo once movement stops and the green bar fills.">
         <input aria-label="Wait before each photo" type="range" min="10" max="1000" step="10" value={s.settings.stabilityMs} onChange={event => s.setSettings({ ...s.settings, stabilityMs: +event.target.value })} />
       </Setting>
@@ -418,9 +444,9 @@ export default function App() {
     {showHelp && <Dialog title="How to scan" close={() => setShowHelp(false)}><div className="guide-content"><p className="dialog-intro">Use Auto for hands-free photos, or Manual to take each photo yourself.</p>{[
       ['Position your phone', 'Keep your phone steady above one card. Allow camera access when asked. Keep all four card edges visible, with a little space around them. Avoid glare from lights.'],
       ['Choose your batch', 'Open Menu → Batch to choose how many cards to scan. Tap the name at the top of the camera view to change it. Use the zoom slider to bring the card closer.'],
-      ['Take your photos', 'In Auto, place a card and tap Start scanning. The camera takes the photo and dings when the green bar fills. Remove the card before placing the next one. In Manual, tap Take photo.'],
+      ['Take your photos', 'In Auto, place a card and tap Start scanning. The camera dings when the green bar fills and the photo is taken. Remove each card before placing the next, or turn on Using Card Slinger in Settings to stack cards. In Manual, tap Take photo.'],
       ['Check and export', 'Tap the scan count to view your photos. When the batch is full, scanning stops and an alarm plays. Choose Export ZIP to download or share the batch.'],
-    ].map(([title, text], i) => <div className="guide-step" key={title}><span>{String(i + 1).padStart(2,'0')}</span><div><h3>{title}</h3><p>{text}</p></div></div>)}<div className="guide-callout"><ShieldCheck size={18} /><p>Scans stay in this browser’s local storage. Download your batch before clearing browser data. When reopening a saved batch in Auto, clear the camera view before placing a card.</p></div></div><div className="dialog-footer"><button className="button primary" onClick={() => setShowHelp(false)}>Ready to scan <ArrowRight size={16} /></button></div></Dialog>}
+    ].map(([title, text], i) => <div className="guide-step" key={title}><span>{String(i + 1).padStart(2,'0')}</span><div><h3>{title}</h3><p>{text}</p></div></div>)}<div className="guide-callout"><ShieldCheck size={18} /><p>Scans stay in this browser’s local storage. Download your batch before clearing browser data. When resuming a saved batch in Auto with Using Card Slinger off, clear the camera view before placing a card.</p></div></div><div className="dialog-footer"><button className="button primary" onClick={() => setShowHelp(false)}>Ready to scan <ArrowRight size={16} /></button></div></Dialog>}
     {confirmClear && <Dialog title="Start a fresh batch?" close={() => setConfirmClear(false)}><div className="confirm-content"><p>This deletes this batch’s {count} saved images and {s.attempts.length} retained captures from this device. Download your ZIP first if you want to keep them.</p>{exportButton()}<p className="setting-hint">A download does not automatically clear your batch.</p></div><div className="dialog-footer"><button className="button outline" onClick={() => setConfirmClear(false)}>Keep batch</button><button className="button danger" disabled={editingDisabled} onClick={() => void safe(async () => { await s.clear(); setExportOpen(false); setConfirmClear(false); setShowBatch(false); setShowGallery(false); setShowMenu(false); })}><Trash2 size={15} /> Delete & start new</button></div></Dialog>}
     {exportOpen && s.batch && <BatchExport batch={s.batch} scans={s.scans} newestFirst={newestFirst} disabled={editingDisabled} rename={s.renameBatch} close={() => setExportOpen(false)} />}
     {active && <Dialog title={filename(captureIndex(activeIndex))} close={() => setSelected(undefined)} wide>

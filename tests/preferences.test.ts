@@ -5,7 +5,7 @@ import { defaults } from '../src/core/types';
 beforeEach(()=>localStorage.clear());
 describe('browser-cached camera preferences',()=>{
   it('restores the selected camera, zoom, resolution, flashlight and focus before async storage loads',()=>{
-    const saved={...defaults,cameraId:'rear-wide',resolution:3840,zoom:1.8,torch:true,focusLocked:true,stabilityMs:180};
+    const saved={...defaults,cameraId:'rear-wide',resolution:3840,zoom:1.8,torch:true,focusLocked:true,stackCards:true,stabilityMs:180};
     cacheSettings(saved);expect(cachedSettings()).toEqual(saved);
     expect(cachedSettings({...defaults,resolution:1920})).toEqual(saved);
   });
@@ -28,7 +28,7 @@ describe('browser-cached camera preferences',()=>{
     expect(settings).not.toHaveProperty('debug');
   });
   it('reset replaces all camera and capture choices with defaults',()=>{
-    cacheSettings({...defaults,cameraId:'other',torch:true,focusLocked:true,zoom:3,stabilityMs:1100});
+    cacheSettings({...defaults,cameraId:'other',torch:true,focusLocked:true,stackCards:true,zoom:3,stabilityMs:1100});
     cacheSettings({...defaults});expect(cachedSettings()).toEqual(defaults);
   });
 });

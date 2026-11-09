@@ -9,6 +9,7 @@ export function normalizeSettings(saved?: SavedSettings): Settings {
   const version = current.captureVersion ?? 0;
   if (version < 2 || (version === 2 && next.stabilityMs === 220)) next.stabilityMs = defaults.stabilityMs;
   next.captureVersion = defaults.captureVersion;
+  next.stackCards = current.stackCards === true;
   next.zoom = Number.isFinite(next.zoom) ? Math.max(1, Math.min(3, next.zoom)) : defaults.zoom;
   next.stabilityMs = Number.isFinite(next.stabilityMs) ? Math.max(10, Math.min(1000, Math.round(next.stabilityMs))) : defaults.stabilityMs;
   next.quality = Number.isFinite(next.quality)
