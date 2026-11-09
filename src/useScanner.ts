@@ -217,9 +217,12 @@ export function useScanner() {
   }, [settings, loaded]);
 
   const updateSettings = (next: Settings) => {
-    for (const key of Object.keys(next) as (keyof Settings)[]) if (next[key] !== settingsRef.current[key]) editedPreferences.current.add(key);
-    if (next.stackCards !== settingsRef.current.stackCards) {
-      detector.current.setStackCards(next.stackCards);
+    const previous = settingsRef.current;
+    for (const key of Object.keys(next) as (keyof Settings)[]) if (next[key] !== previous[key]) editedPreferences.current.add(key);
+    const stackChanged = next.stackCards !== previous.stackCards;
+    if (stackChanged || next.flipInterface !== previous.flipInterface) {
+      if (stackChanged) detector.current.setStackCards(next.stackCards);
+      else detector.current.reset();
       setReading(detector.current.advance(performance.now()));
       setCountdown(null);
     }
@@ -301,7 +304,8 @@ export function useScanner() {
         return;
       }
       if (freshFrame) lastFrameAt = now;
-      if (settingsRef.current.captureMode !== 'auto' || zoomAdjusting.current || focusApplying.current || video.readyState < 2) {
+      const { captureMode, zoom, flipInterface } = settingsRef.current;
+      if (captureMode !== 'auto' || zoomAdjusting.current || focusApplying.current || video.readyState < 2) {
         schedule(null);
         return;
       }
@@ -311,9 +315,9 @@ export function useScanner() {
         return;
       }
       // Check the current pixels at the deadline too, in case movement just resumed.
-      const crop = zoomRect(video.videoWidth, video.videoHeight, settingsRef.current.zoom);
+      const crop = zoomRect(video.videoWidth, video.videoHeight, zoom);
       ctx.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, canvas.width, canvas.height);
-      toLuma(ctx.getImageData(0, 0, canvas.width, canvas.height).data, gray);
+      toLuma(ctx.getImageData(0, 0, canvas.width, canvas.height).data, gray, flipInterface);
       const next = motion.update(gray, now, card.detect(gray));
       const canCapture = c.hasCapacity && !editingBatch.current && !captureBusy.current && !storageIssueRef.current;
       schedule(canCapture ? motion.deadline : null);

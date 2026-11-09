@@ -21,7 +21,8 @@ export class CardPresenceDetector {
       for (let col = 0; col < columns; col++) {
         let sum = 0, detail = 0, samples = 0;
         for (let y = row * tileHeight + 2; y + 2 < (row + 1) * tileHeight; y += 2) {
-          for (let x = col * tileWidth + 2; x + 2 < (col + 1) * tileWidth; x += 2) {
+          // Sample both column parities so a half-turn preserves the measurements.
+          for (let x = col * tileWidth + 2; x + 2 < (col + 1) * tileWidth; x++) {
             const index = y * previewWidth + x, value = gray[index];
             sum += value;
             detail += localDetail(gray[index - 2], value, gray[index + 2]);

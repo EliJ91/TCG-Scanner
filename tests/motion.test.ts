@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { CardPresenceDetector, previewWidth } from '../src/core/card-presence';
-import { MotionDetector } from '../src/core/motion';
-import { emptyFrame, printedCard } from './card-frame';
+import { MotionDetector, toLuma } from '../src/core/motion';
+import { emptyFrame, printedCard, shadowedSurface } from './card-frame';
 
 const presence = new CardPresenceDetector();
 function sample(d: MotionDetector, frame: Uint8Array, now: number) {
@@ -12,6 +12,18 @@ describe('card-gated motion', () => {
   it.each([248, 45])('distinguishes a silver-bordered card from a plain surface at brightness %i', level => {
     expect(presence.detect(emptyFrame(level))).toBe('empty');
     expect(presence.detect(printedCard(0, level))).toBe('card');
+  });
+
+  it('recognizes a shadowed bare surface in either orientation', () => {
+    const surface = shadowedSurface();
+    expect([presence.detect(surface), presence.detect(surface.slice().reverse())]).toEqual(['empty', 'empty']);
+  });
+
+  it('reads the flipped preview pixels in the same order as the saved photo', () => {
+    const pixels = new Uint8ClampedArray([80, 80, 80, 255, 120, 120, 120, 255, 200, 200, 200, 255]);
+    const gray = new Uint8Array(3);
+    toLuma(pixels, gray, true);
+    expect([...gray]).toEqual([200, 120, 80]);
   });
 
   it('does not mistake a smooth obstruction or an exposure shift for a card', () => {

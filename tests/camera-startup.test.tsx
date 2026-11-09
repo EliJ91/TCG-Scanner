@@ -7,7 +7,7 @@ import { CameraAccessError } from '../src/core/camera-access';
 import * as exportTools from '../src/core/export';
 import { cacheBatchName, cachedBatchName } from '../src/core/preferences';
 import { defaults } from '../src/core/types';
-import { emptyFrame, printedCard } from './card-frame';
+import { emptyFrame, printedCard, shadowedSurface } from './card-frame';
 
 const mocks = vi.hoisted(() => ({
   load: vi.fn(), settings: vi.fn(), saveBatch: vi.fn(), create: vi.fn(), rename: vi.fn(),
@@ -297,7 +297,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.capture).toHaveBeenCalledWith(false, 1, expect.any(Function), true);
     expect(container.querySelector('.auto-countdown.is-snapped')).not.toBeNull();
   });
-  it('animates the bar and keeps taking cards during a slow encode and a slow save', async () => {
+  it.each([false, true])('rearms after card removal during a slow encode and save (flipped %s)', async flipped => {
     const jpeg = { blob: new Blob(['first JPEG'], { type: 'image/jpeg' }), width: 1280, height: 720 };
     let finishEncoding!: (image: typeof jpeg) => void, finishSaving!: () => void;
     mocks.capture.mockImplementationOnce((_alternate, _quality, frameCopied) => {
@@ -305,8 +305,9 @@ describe('manual capture, continuous errors, and batch naming', () => {
       return new Promise(resolve => { finishEncoding = resolve; });
     });
     mocks.accept.mockImplementationOnce(() => new Promise<void>(resolve => { finishSaving = resolve; }));
-    const empty = emptyFrame(), card = printedCard();
-    const { tick } = await startAutoPreview(200, empty);
+    const empty = flipped ? shadowedSurface() : emptyFrame();
+    const card = printedCard();
+    const { tick } = await startAutoPreview(200, empty, flipped);
     await tick();
     await tick(400, empty);
     expect(mocks.capture).not.toHaveBeenCalled();

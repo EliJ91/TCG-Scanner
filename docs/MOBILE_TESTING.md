@@ -29,7 +29,7 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 - [ ] Leave it stationary for 30 seconds: no duplicate scans.
 - [ ] With Using Card Slinger off, slide another card directly over the last. Confirm Auto waits for the bare surface before scanning again.
 - [ ] Turn on Using Card Slinger. Stack successive cards and confirm Auto takes one photo each time the top card settles. Confirm a stationary stack does not repeat and a bare surface does not trigger the shutter.
-- [ ] Remove the card and leave the bare surface visible for at least two camera frames. Check that no photo is taken until a card is placed and held still again.
+- [ ] Remove the card and leave the bare surface visible for at least two camera frames. Check that Auto waits for the next card to settle. Repeat with Flip Interface on and a light shadow on the surface.
 - [ ] Repeat with two or more identical-artwork cards. Count physical cards against saved images.
 - [ ] Test yellow, white, silver, and dark borders; textured and holographic cards; slight rotation; mild perspective. Inspect corners at full resolution.
 - [ ] Move a lamp or trigger autofocus. Small noise/global exposure changes should not add scans. Strong local shadows may require a higher motion threshold.

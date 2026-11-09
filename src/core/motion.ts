@@ -107,6 +107,10 @@ export class MotionDetector {
 }
 
 /** Reused luma buffer for the entire visible camera image, excluding UI overlays. */
-export function toLuma(rgba: Uint8ClampedArray, output: Uint8Array) {
-  for (let i = 0, p = 0; p < output.length; i += 4, p++) output[p] = (rgba[i] * 77 + rgba[i + 1] * 150 + rgba[i + 2] * 29) >> 8;
+export function toLuma(rgba: Uint8ClampedArray, output: Uint8Array, flipped = false) {
+  const step = flipped ? -1 : 1;
+  let pixel = flipped ? output.length - 1 : 0;
+  for (let i = 0; i < output.length * 4; i += 4, pixel += step) {
+    output[pixel] = (rgba[i] * 77 + rgba[i + 1] * 150 + rgba[i + 2] * 29) >> 8;
+  }
 }
