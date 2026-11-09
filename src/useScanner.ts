@@ -583,7 +583,6 @@ export function useScanner() {
     }
     setNotice('Settings reset. Your photos and batch are unchanged.');
   };
-  const explicitCapture = () => { if (controller.current?.hasCapacity) { void audio.current?.unlock(); void capture(); } };
   const renameBatch = async (name: string) => {
     const current = batchRef.current;
     const number = current?.number ?? nextBatchNumber.current;
@@ -619,7 +618,7 @@ export function useScanner() {
   return { videoRef, batch, batchName, scans, attempts: [...attempts.filter(item => !retained.some(photo => photo.id === item.id)), ...retained], settings, setSettings: updateSettings, resetSettings, setCaptureMode, setZoom, zoomGesture, session, error, setError, notice, loaded, pending, capturing, queueFull: controller.current?.queueFull ?? false, storageIssue,
     cameraPhase, connectCamera, openBrowserSuggested,
     reading, countdown, cameraSize, capabilities, focusPosition, focusLocked, focusBusy, setFocus, devices, start, takePhoto, pause: () => pause(), stop,
-    keepOriginal, resizeBatch, remove, discard, clear, switchCamera, control, explicitCapture, renameBatch,
+    keepOriginal, resizeBatch, remove, discard, clear, switchCamera, control, renameBatch,
     original,
     updateScan: async (scan: Scan) => { await storage.accept(scan); setScans(items => ordered(items.map(s => s.id === scan.id ? scan : s))); },
     testSound: async () => { await audio.current?.unlock(); audio.current?.success(); },

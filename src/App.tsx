@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Aperture, ArrowDownToLine, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Focus, Images, Layers3, Lock, LockOpen, Menu, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, Share2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X, Zap } from 'lucide-react';
+import { ArrowDownToLine, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Focus, Images, Layers3, Lock, LockOpen, Menu, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, Share2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X, Zap } from 'lucide-react';
 import { useScanner } from './useScanner';
 import { useTheme } from './useTheme';
 import { createZip, downloadArchive, rotateScan } from './core/export';
@@ -359,7 +359,6 @@ export default function App() {
         {s.cameraSize.width > 0 && <>
           <div className="menu-divider" />
           {!autoMode && s.session === 'scanning' && <button onClick={() => openFromMenu(s.pause)}><Pause size={18} /><span>Pause scanning</span><ChevronRight size={17} /></button>}
-          <button disabled={s.session !== 'scanning' || !!s.storageIssue || batchReserved || s.queueFull || s.capturing} onClick={() => openFromMenu(s.explicitCapture)}><Aperture size={20} /><span>Capture current card</span><ChevronRight size={17} /></button>
           <button onClick={() => openFromMenu(s.stop)}><Square size={18} /><span>Stop camera</span><ChevronRight size={17} /></button>
         </>}
       </nav>
@@ -430,7 +429,7 @@ export default function App() {
           </select>
           <small>Sets the requested camera frame width. Use Menu → Stop camera before changing it.</small>
         </label>
-        <Toggle label="Alternate manual photo method" hint="Try this if the Take photo button fails on your phone." checked={s.settings.useImageCapture} disabled={busy} onChange={v => s.setSettings({ ...s.settings, useImageCapture: v })} />
+        <Toggle label="Alternate manual photo method" hint="Turn this on if Take photo fails in Manual mode. It uses a different way to take the photo." checked={s.settings.useImageCapture} disabled={busy} onChange={v => s.setSettings({ ...s.settings, useImageCapture: v })} />
         <h3><ArrowDownToLine size={16} /> Add to your home screen</h3><p className="setting-hint">On iPhone, open Safari → Share → Add to Home Screen. On Android, choose Install app in the browser menu.</p>{installPrompt && <button className="button outline install-scanner" onClick={() => { void installPrompt.prompt(); setInstallPrompt(undefined); }}>Install app</button>}
       </div></details>
     </div><div className="dialog-footer"><button className="button outline" disabled={!s.loaded || busy || s.capturing || working || s.cameraPhase === 'requesting'} title={busy ? 'Pause scanning to reset settings' : 'Restore defaults and keep your photos'} onClick={() => void safe(async () => { await s.resetSettings(); theme.setDark(window.matchMedia('(prefers-color-scheme: dark)').matches); })}>Reset settings</button><button className="button dark" onClick={() => setShowSettings(false)}>Done</button></div></Dialog>}
