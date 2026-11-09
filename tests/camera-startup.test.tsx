@@ -358,10 +358,13 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.accept.mock.calls.map(([scan]) => scan.ordinal)).toEqual([0, 1, 2]);
   });
   it('saves each manual photo and opens those photos from the scan count', async () => {
+    let urlNumber = 0;
     vi.stubGlobal('URL', class extends URL {
-      static createObjectURL = vi.fn(() => 'blob:scan');
+      static createObjectURL = vi.fn(() => `blob:scan-${++urlNumber}`);
       static revokeObjectURL = vi.fn();
     });
+    const decode = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    vi.stubGlobal('Image', class { decode = decode; });
     await renderApp();
     await click('Manual');
     for (let i = 0; i < 5; i++) await click('Take photo');
@@ -402,13 +405,26 @@ describe('manual capture, continuous errors, and batch naming', () => {
       touch('pointermove', 1, to, 160);
       touch('pointerup', 1, to, 160);
     });
+    const frame = viewer();
+    const dialog = frame.closest('dialog');
+    const image = frame.querySelector('img')!;
+    const currentUrl = image.src;
+    let finishDecode!: () => void;
+    decode.mockImplementationOnce(() => new Promise(resolve => { finishDecode = resolve; }));
     await swipe(220, 120);
+    expect(title()).toBe('0004');
+    expect(image.src).toBe(currentUrl);
+    expect(dialog?.open).toBe(true);
+    await act(async () => finishDecode());
     expect(title()).toBe('0003');
+    expect(viewer()).toBe(frame);
+    expect(viewer().closest('dialog')).toBe(dialog);
+    expect(viewer().querySelector('img')).toBe(image);
+    expect(image.src).not.toBe(currentUrl);
     await swipe(120, 220);
     expect(title()).toBe('0004');
 
     vi.spyOn(viewer(), 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 300, 300));
-    const image = viewer().querySelector('img')!;
     Object.defineProperties(image, { offsetWidth: { value: 240 }, offsetHeight: { value: 260 } });
     await act(async () => {
       touch('pointerdown', 1, 100, 150);

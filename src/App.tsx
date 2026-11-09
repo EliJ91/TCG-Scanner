@@ -2,7 +2,7 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Reac
 import { ArrowDownToLine, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Focus, Images, Layers3, Lock, LockOpen, Menu, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, Share2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X, Zap } from 'lucide-react';
 import { useScanner } from './useScanner';
 import { useTheme } from './useTheme';
-import { BlobImage, PhotoViewer } from './PhotoViewer';
+import { BlobImage, PhotoViewer, useReviewPhoto } from './PhotoViewer';
 import { createZip, downloadArchive, rotateScan } from './core/export';
 import { archiveFilename, defaultBatchName, filename, maxBatchTarget, message, photoNumber, photoWaitTimes, validBatchTarget, type Batch, type Scan } from './core/types';
 
@@ -172,7 +172,10 @@ export default function App() {
   const newestFirst = s.settings.galleryNewestFirst;
   const galleryScans = useMemo(() => newestFirst ? [...s.scans].reverse() : s.scans, [newestFirst, s.scans]);
   const activeIndex = selected ? galleryScans.findIndex(scan => scan.id === selected) : -1;
-  const active = galleryScans[activeIndex];
+  const requestedPhoto = galleryScans[activeIndex];
+  const reviewedPhoto = useReviewPhoto(requestedPhoto);
+  const active = reviewedPhoto?.scan ?? requestedPhoto;
+  const displayedIndex = active?.id === selected ? activeIndex : galleryScans.findIndex(scan => scan.id === active?.id);
   const captureIndex = (index: number) => newestFirst ? count - 1 - index : index;
   const movePhoto = (direction: -1 | 1) => {
     const next = galleryScans[activeIndex + direction];
@@ -460,13 +463,13 @@ export default function App() {
       </div>
     </Dialog>}
     {exportOpen && s.batch && <BatchExport batch={s.batch} scans={s.scans} newestFirst={newestFirst} disabled={editingDisabled} rename={s.renameBatch} close={() => setExportOpen(false)} completed={result => { setExportOpen(false); setClearPrompt(result); }} />}
-    {active && <Dialog title={photoNumber(captureIndex(activeIndex))} close={() => setSelected(undefined)} wide>
-      <PhotoViewer key={active.id} blob={active.blob} onSwipe={movePhoto} />
+    {active && <Dialog title={photoNumber(captureIndex(displayedIndex < 0 ? activeIndex : displayedIndex))} close={() => setSelected(undefined)} wide>
+      <PhotoViewer photoId={active.id} src={reviewedPhoto?.url} onSwipe={movePhoto} />
       <div className="review-meta"><span>{active.width && active.height ? `${active.width} × ${active.height} · JPEG` : 'JPEG'}</span></div>
       <div className="dialog-footer review-actions">
         <button className="icon-button" aria-label="Previous card" disabled={activeIndex === 0} onClick={() => movePhoto(-1)}><ArrowLeft size={20} /></button>
-        <button className="button outline" disabled={editingDisabled} onClick={() => void safe(async () => s.updateScan(await rotateScan(active)))}><RotateCw size={16} /> Rotate 180°</button>
-        <button className="button danger-outline" disabled={editingDisabled} onClick={() => setDeleteId(active.id)}><Trash2 size={16} /> Delete</button>
+        <button className="button outline" disabled={editingDisabled || active !== requestedPhoto} onClick={() => void safe(async () => s.updateScan(await rotateScan(active)))}><RotateCw size={16} /> Rotate 180°</button>
+        <button className="button danger-outline" disabled={editingDisabled || active !== requestedPhoto} onClick={() => setDeleteId(active.id)}><Trash2 size={16} /> Delete</button>
         <button className="icon-button" aria-label="Next card" disabled={activeIndex === count - 1} onClick={() => movePhoto(1)}><ArrowRight size={20} /></button>
       </div>
     </Dialog>}
