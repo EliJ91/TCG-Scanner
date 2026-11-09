@@ -289,7 +289,7 @@ export default function App() {
     setWorking(true);
     void s.renameBatch(nameDraft).then(() => setShowName(false)).catch(err => { setNameError(message(err)); s.setError(message(err)); }).finally(() => setWorking(false));
   };
-  return <>
+  return <div className={s.settings.flipInterface ? 'interface-flipped' : undefined}>
     <main className="scanner-screen" aria-label="Card scanner">
       <section className="scanner" aria-label="Scanner">
         <div className="preview-shell">
@@ -403,6 +403,7 @@ export default function App() {
     {showSettings && <Dialog title="Settings" close={() => setShowSettings(false)}><div className="settings-content simple-settings">
       <p className="dialog-intro">Your choices are saved automatically on this device.</p>
       <Toggle label="Dark mode" checked={theme.dark} onChange={theme.setDark} />
+      <Toggle label="Flip Interface" hint="Use this when your phone is mounted upside down." checked={s.settings.flipInterface} onChange={flipInterface => s.setSettings({ ...s.settings, flipInterface })} />
       <Toggle label="Newest first in gallery and ZIP" hint="Show recent photos at the top and number them first in the ZIP." checked={newestFirst} onChange={galleryNewestFirst => s.setSettings({ ...s.settings, galleryNewestFirst })} />
       <Toggle label="Using Card Slinger" hint="In Auto, place the next card on top. The camera takes a photo when it settles." checked={s.settings.stackCards} onChange={stackCards => s.setSettings({ ...s.settings, stackCards })} />
       <Setting label="Wait before each photo" value={waitLabel} hint="Auto takes a photo once movement stops and the green bar fills.">
@@ -464,7 +465,7 @@ export default function App() {
     </Dialog>}
     {exportOpen && s.batch && <BatchExport batch={s.batch} scans={s.scans} newestFirst={newestFirst} disabled={editingDisabled} rename={s.renameBatch} close={() => setExportOpen(false)} completed={result => { setExportOpen(false); setClearPrompt(result); }} />}
     {active && <Dialog title={photoNumber(captureIndex(displayedIndex < 0 ? activeIndex : displayedIndex))} close={() => setSelected(undefined)} wide>
-      <PhotoViewer photoId={active.id} src={reviewedPhoto?.url} onSwipe={movePhoto} />
+      <PhotoViewer photoId={active.id} src={reviewedPhoto?.url} flipped={s.settings.flipInterface} onSwipe={movePhoto} />
       <div className="review-meta"><span>{active.width && active.height ? `${active.width} × ${active.height} · JPEG` : 'JPEG'}</span></div>
       <div className="dialog-footer review-actions">
         <button className="icon-button" aria-label="Previous card" disabled={activeIndex === 0} onClick={() => movePhoto(-1)}><ArrowLeft size={20} /></button>
@@ -474,7 +475,7 @@ export default function App() {
       </div>
     </Dialog>}
     {deleteId && <Dialog title="Delete this scan?" close={() => setDeleteId(undefined)}><div className="confirm-content"><p>The image will be removed and exported filenames will stay sequential. Scanning stays paused until you explicitly resume.</p></div><div className="dialog-footer"><button className="button outline" onClick={() => setDeleteId(undefined)}>Keep image</button><button className="button danger" disabled={editingDisabled} onClick={() => void safe(async () => { const scan = s.scans.find(a => a.id === deleteId); if (scan) await s.remove(scan); setSelected(undefined); setDeleteId(undefined); })}>Delete image</button></div></Dialog>}
-  </>;
+  </div>;
 }
 function Setting({ label, value, hint, children }: { label: string; value?: string; hint?: string; children: ReactNode }) {
   return <div className="setting"><div><label>{label}</label>{value && <span>{value}</span>}</div>{children}{hint && <p className="setting-hint">{hint}</p>}</div>;

@@ -16,6 +16,7 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 - [ ] Test the 1–3× zoom slider in both modes. Saved framing must match the preview and preserve native pixel quality. Adjusting zoom must not trigger an extra Auto photo.
 - [ ] Tap the visible batch name/pencil, save a new name before the first photo, rename during scanning, and reload. The scanner and ZIP dialog must show the same persisted name.
 - [ ] Toggle light/dark through Menu → Settings; reload to confirm persistence. Dark mode must use pure black and neutral gray surfaces. Check contrast and controls in both modes.
+- [ ] Turn on Flip Interface and hold the phone upside down. Use the scanner controls, scroll Settings, and try swiping and panning in the Gallery. Reload and turn the setting off again.
 - [ ] Settings should show Dark mode, Newest first in gallery and ZIP, Using Card Slinger, Wait before each photo, Sounds, and Volume. Open Advanced settings to find photo/camera controls. Confirm the descriptions are clear and Done is always reachable on a small screen.
 - [ ] At 320, 375, 390, and 430 px widths, verify the scanner is horizontally centered and its Start/Pause control fits on screen. No sidebar, bottom navigation, batch panel, or recent-card thumbnails should be visible until opened from Menu.
 

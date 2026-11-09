@@ -51,21 +51,22 @@ type Point = { x: number; y: number };
 type View = Point & { scale: number };
 const initialView: View = { x: 0, y: 0, scale: 1 };
 const clamp = (value: number, limit: number) => Math.min(limit, Math.max(-limit, value));
-const pointOf = (event: PointerEvent): Point => ({ x: event.clientX, y: event.clientY });
 
-export function PhotoViewer({ photoId, src, onSwipe }: { photoId: string; src?: string; onSwipe(direction: -1 | 1): void }) {
+export function PhotoViewer({ photoId, src, flipped, onSwipe }: { photoId: string; src?: string; flipped: boolean; onSwipe(direction: -1 | 1): void }) {
   const image = useRef<HTMLImageElement>(null);
   const pointers = useRef(new Map<number, Point>());
   const swipeStart = useRef<Point | undefined>(undefined);
   const currentView = useRef(initialView);
   const [view, setView] = useState(initialView);
+  const axisSign = flipped ? -1 : 1;
+  const pointOf = (event: PointerEvent): Point => ({ x: event.clientX * axisSign, y: event.clientY * axisSign });
 
   useLayoutEffect(() => {
     pointers.current.clear();
     swipeStart.current = undefined;
     currentView.current = initialView;
     setView(initialView);
-  }, [photoId]);
+  }, [photoId, flipped]);
 
   const start = (event: PointerEvent<HTMLDivElement>) => {
     const contacts = pointers.current;
@@ -95,8 +96,8 @@ export function PhotoViewer({ photoId, src, onSwipe }: { photoId: string; src?: 
       const distance = Math.hypot(point.x - other.x, point.y - other.y);
       scale = Math.min(5, Math.max(1, current.scale * distance / oldDistance));
       const ratio = scale / current.scale;
-      const oldCenterX = (previous.x + other.x - bounds.width) / 2 - bounds.left;
-      const oldCenterY = (previous.y + other.y - bounds.height) / 2 - bounds.top;
+      const oldCenterX = (previous.x + other.x) / 2 - (bounds.left + bounds.width / 2) * axisSign;
+      const oldCenterY = (previous.y + other.y) / 2 - (bounds.top + bounds.height / 2) * axisSign;
       // Keep the same part of the photo under the midpoint of the pinch.
       x = oldCenterX + (point.x - previous.x) / 2 - (oldCenterX - x) * ratio;
       y = oldCenterY + (point.y - previous.y) / 2 - (oldCenterY - y) * ratio;
@@ -118,8 +119,9 @@ export function PhotoViewer({ photoId, src, onSwipe }: { photoId: string; src?: 
     const from = swipeStart.current;
     swipeStart.current = undefined;
     if (!released || !from || currentView.current.scale !== 1) return;
-    const dx = event.clientX - from.x;
-    const dy = event.clientY - from.y;
+    const point = pointOf(event);
+    const dx = point.x - from.x;
+    const dy = point.y - from.y;
     if (Math.abs(dx) >= 45 && Math.abs(dx) > 1.5 * Math.abs(dy)) onSwipe(dx < 0 ? 1 : -1);
   };
 
