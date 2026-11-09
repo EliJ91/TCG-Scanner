@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CapturePipeline } from './core/pipeline';
-import { cacheBatchName, cacheSettings, cachedBatchName, cachedSettings } from './core/preferences';
+import { cacheBatchName, cacheSettings, cachedBatchName, normalizeSettings, readCachedSettings } from './core/preferences';
 import { Camera, type CameraCapabilities } from './core/camera';
 import { CameraAccessError } from './core/camera-access';
 import { CardPresenceDetector, previewHeight, previewWidth } from './core/card-presence';
@@ -28,7 +28,8 @@ export function useScanner() {
   const [scans, setScans] = useState<Scan[]>([]);
   const [attempts, setAttempts] = useState<AttemptInfo[]>([]); const attemptsRef = useRef<AttemptInfo[]>([]);
   const [retained, setRetained] = useState<AttemptInfo[]>([]);
-  const [settings, setSettings] = useState<Settings>(cachedSettings); const settingsRef = useRef(settings);
+  const [initialPreferences] = useState(readCachedSettings);
+  const [settings, setSettings] = useState(() => normalizeSettings(initialPreferences)); const settingsRef = useRef(settings);
   const cameraConfig = useRef<{ resolution: number; id: string } | undefined>(undefined);
   const [session, setSession] = useState<Session>('idle'); const sessionRef = useRef<Session>('idle');
   const [error, updateError] = useState(''); const [notice, setNotice] = useState('');
@@ -130,11 +131,27 @@ export function useScanner() {
       clearTimeout(storageDeadline);
       if (cancelled) return;
       if (storageIssueRef.current) { setError(''); setStorageIssue(''); storageIssueRef.current = ''; }
-      const config = cachedSettings(data.settings);
-      for (const key of editedPreferences.current) Object.assign(config, { [key]: settingsRef.current[key] });
-      settingsRef.current = config; setSettings(config);
-      if (cameraConfig.current && (cameraConfig.current.resolution !== config.resolution || cameraConfig.current.id !== config.cameraId)) {
-        void (cameraRequest.current ?? Promise.resolve()).then(() => { if (mounted.current) void enableCamera(config.cameraId); }).catch(() => {});
+      const config = normalizeSettings({ ...data.settings, ...initialPreferences });
+      const previous = settingsRef.current;
+      for (const key of editedPreferences.current) Object.assign(config, { [key]: previous[key] });
+      settingsRef.current = config; cacheSettings(config); setSettings(config);
+      if (cameraConfig.current) {
+        const cameraChanged = cameraConfig.current.resolution !== config.resolution || cameraConfig.current.id !== config.cameraId;
+        const torchChanged = previous.torch !== config.torch;
+        const focusChanged = previous.focusLocked !== config.focusLocked || previous.focusDistance !== config.focusDistance;
+        if (cameraChanged || torchChanged || focusChanged) {
+          void (cameraRequest.current ?? Promise.resolve()).then(async () => {
+            if (!mounted.current || !previewWanted.current) return;
+            if (cameraChanged) { await enableCamera(settingsRef.current.cameraId); return; }
+            if (cameraPhaseRef.current !== 'ready') return;
+            const caps = camera.current?.capabilities;
+            const prefs = settingsRef.current;
+            if (torchChanged && caps?.torch) void control({ torch: prefs.torch });
+            if (focusChanged && (caps?.focusMode?.includes('manual') || caps?.focusDistance)) {
+              void setFocus(prefs.focusLocked, prefs.focusDistance ?? undefined);
+            }
+          }).catch(() => {});
+        }
       }
       if (data.batch) {
         const maxOrdinal = Math.max(-1, ...data.scans.map(s => s.ordinal), ...data.attempts.map(a => a.ordinal));
@@ -182,7 +199,6 @@ export function useScanner() {
   }, []);
 
   useEffect(() => {
-    settingsRef.current = settings; if (loaded) cacheSettings(settings);
     detector.current.stabilityMs = settings.stabilityMs; detector.current.sensitivity = settings.sensitivity;
     detector.current.setStackCards(settings.stackCards);
     camera.current?.setZoom(settings.zoom);
@@ -197,7 +213,15 @@ export function useScanner() {
       setReading(detector.current.advance(performance.now()));
       setCountdown(null);
     }
-    settingsRef.current = next; cacheSettings(next); setSettings(next);
+    if (loaded) cacheSettings(next);
+    else {
+      // Preserve settings we have yet to read from IndexedDB, even on a quick reload.
+      const cached = readCachedSettings() ?? {};
+      for (const key of editedPreferences.current) Object.assign(cached, { [key]: next[key] });
+      if (editedPreferences.current.has('stabilityMs')) cached.captureVersion = next.captureVersion;
+      cacheSettings(cached);
+    }
+    settingsRef.current = next; setSettings(next);
   };
 
   const capture = async (automatic = false) => {
@@ -438,7 +462,7 @@ export function useScanner() {
       return false;
     }
   };
-  const stop = () => { previewWanted.current = false; clearTimeout(reconnectTimer.current); pause(); cameraEpoch.current++; camera.current?.stop(); changeCameraPhase('off'); setCameraSize({ width: 0, height: 0 }); setNotice('Camera stopped. Your photos are available in Recent cards.'); };
+  const stop = () => { previewWanted.current = false; clearTimeout(reconnectTimer.current); pause(); cameraEpoch.current++; camera.current?.stop(); changeCameraPhase('off'); setCameraSize({ width: 0, height: 0 }); setNotice('Camera stopped. Your photos are available in the Gallery.'); };
   const takePhoto = async (target: number) => {
     void audio.current?.unlock();
     if (!controller.current?.running && !await start(target)) return;
@@ -456,7 +480,10 @@ export function useScanner() {
       throw new Error('Wait for the current photos to save before changing the batch size.');
     }
     if (!validBatchTarget(target, pipeline.count)) throw new Error('The batch needs room for its saved photos.');
-    if (target === current.target) return;
+    if (target === current.target) {
+      if (target !== settingsRef.current.batchTarget) updateSettings({ ...settingsRef.current, batchTarget: target });
+      return;
+    }
     editingBatch.current = true;
     try {
       await storage.resizeBatch(current.id, target);
@@ -465,6 +492,7 @@ export function useScanner() {
       batchRef.current = { ...batchRef.current!, target };
       setBatch(batchRef.current);
       pipeline.resize(target);
+      updateSettings({ ...settingsRef.current, batchTarget: target });
       if (wasComplete && !pipeline.complete) {
         lastComplete.current = undefined;
         resetMotion();

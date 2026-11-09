@@ -40,7 +40,7 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 
 - [ ] Select 50 and feed 50 valid cards. Verify exactly 50 stored images and 50 success dings.
 - [ ] Check that the ding plays when the green bar fills and the camera takes the photo. The completion alarm follows the final saved photo.
-- [ ] Tap the scan count and open a saved image from Recent cards.
+- [ ] Tap the scan count and open a saved image from the Gallery.
 - [ ] Force the final image to fail. Batch remains incomplete; no completion alarm until the valid replacement fills its slot.
 - [ ] Feed one card per second and compare the physical count with the saved photos.
 - [ ] Slow a storage write and replace the card while it is pending. Confirm capture continues and queued JPEGs save in order.
@@ -55,8 +55,7 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 - [ ] Download a partial batch, then a completed batch. Unzip and check exact file count, valid JPEG decoding, camera frame dimensions, sequential filenames without gaps, and physical order.
 - [ ] Confirm rotated/deleted images are reflected in the next ZIP. Download never clears saved data.
 - [ ] In Export ZIP, confirm default `Batch#XXX`, edit the batch name, and check the archive name and persisted name on the next export. Names inside remain `Pokemon_0001.jpg` onward.
-- [ ] On a device that supports sharing ZIPs, open Share ZIP and check that Mail or a messaging app receives the named archive. Cancel the share sheet and try again.
-- [ ] If the browser blocks ZIP sharing, use Share photos and verify the original photos arrive in the selected app. For more than ten photos, share the next group and check that the filenames continue in order. Check that Download ZIP still works for sending the archive from Files or Downloads.
+- [ ] Use Share photos and verify the original photos arrive in the selected app. Cancel the share sheet and try again. For more than ten photos, share the next group and check that the filenames continue in order. Check that Download ZIP still works for sending the archive from Files or Downloads.
 - [ ] Reload after saved scans; verify recovery and no automatic stationary recapture.
 - [ ] Upgrade an earlier batch with queued originals and check that the original JPEGs are recovered without duplicates.
 - [ ] Background/lock the app or interrupt camera access. Keep saved images/originals intact; on return reconnect the camera and preserve the active scan intent without requiring Resume. Respect a browser permission denial.

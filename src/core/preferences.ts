@@ -1,4 +1,4 @@
-import { defaults, type Settings } from './types';
+import { defaults, validBatchTarget, type Settings } from './types';
 const key = 'cardslinger-settings';
 const batchNameKey = 'cardslinger-custom-batch-name';
 type SavedSettings = Partial<Settings> & { lockCamera?: boolean; debug?: boolean };
@@ -10,6 +10,7 @@ export function normalizeSettings(saved?: SavedSettings): Settings {
   if (version < 2 || (version === 2 && next.stabilityMs === 220)) next.stabilityMs = defaults.stabilityMs;
   next.captureVersion = defaults.captureVersion;
   next.stackCards = current.stackCards === true;
+  if (!validBatchTarget(next.batchTarget)) next.batchTarget = defaults.batchTarget;
   next.zoom = Number.isFinite(next.zoom) ? Math.max(1, Math.min(3, next.zoom)) : defaults.zoom;
   next.stabilityMs = Number.isFinite(next.stabilityMs) ? Math.max(10, Math.min(1000, Math.round(next.stabilityMs))) : defaults.stabilityMs;
   next.quality = Number.isFinite(next.quality)
@@ -20,11 +21,13 @@ export function normalizeSettings(saved?: SavedSettings): Settings {
   next.cameraId = typeof next.cameraId === 'string' ? next.cameraId : '';
   return next;
 }
-export function cachedSettings(fallback?: SavedSettings): Settings {
-  try { return normalizeSettings(JSON.parse(localStorage.getItem(key) || 'null') || fallback); }
-  catch { return normalizeSettings(fallback); }
+export function readCachedSettings(): SavedSettings | undefined {
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) || 'null');
+    return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : undefined;
+  } catch { return undefined; }
 }
-export function cacheSettings(settings: Settings) {
+export function cacheSettings(settings: SavedSettings) {
   try { localStorage.setItem(key, JSON.stringify(settings)); } catch { /* IndexedDB remains the persistent fallback. */ }
 }
 export function cachedBatchName() {

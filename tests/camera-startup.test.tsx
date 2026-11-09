@@ -99,7 +99,7 @@ afterEach(async () => { await act(async () => root.unmount()); container.remove(
 describe('batch file sharing', () => {
   const zip = new Blob(['batch ZIP'], { type: 'application/zip' });
 
-  async function openExport(share: (data: ShareData) => Promise<void>, count = 1, canShare = ({ files }: ShareData) => files?.[0].type === 'application/zip') {
+  async function openExport(share: (data: ShareData) => Promise<void>, count = 1, canShare = ({ files }: ShareData) => files?.[0].type === 'image/jpeg') {
     Object.defineProperties(navigator, {
       canShare: { configurable: true, value: canShare },
       share: { configurable: true, value: share },
@@ -117,35 +117,37 @@ describe('batch file sharing', () => {
     Reflect.deleteProperty(navigator, 'share');
   });
 
-  it('shares the ready archive on tap and leaves it available after canceling', async () => {
+  it('offers only photo sharing and can share before the ZIP is ready', async () => {
     let finishZip!: (blob: Blob) => void;
     const build = vi.spyOn(exportTools, 'createZip').mockImplementationOnce(() => new Promise(resolve => { finishZip = resolve; }));
     localStorage.setItem('cardslinger-settings', JSON.stringify({ ...defaults, galleryNewestFirst: true }));
     const share = vi.fn<(data: ShareData) => Promise<void>>()
       .mockRejectedValueOnce(new DOMException('Canceled', 'AbortError')).mockResolvedValue(undefined);
-    await openExport(share);
+    await openExport(share, 1, () => true);
     expect(build).toHaveBeenCalledWith(expect.any(Array), expect.any(Function), true);
-    expect(button('Share ZIP').disabled).toBe(true);
+    expect(container.textContent).not.toContain('Share ZIP');
+    expect(button('Download ZIP').disabled).toBe(true);
     await input('#export-batch-name', 'Trade night');
-    await act(async () => finishZip(zip));
     await act(async () => {
-      button('Share ZIP').click();
+      button('Share photos').click();
       expect(share).toHaveBeenCalledOnce();
     });
     expect(mocks.rename).not.toHaveBeenCalled();
-    await click('Share ZIP');
+    await click('Share photos');
     const file = share.mock.calls[1][0].files?.[0];
-    expect(file).toMatchObject({ name: 'Trade night.zip', type: 'application/zip', size: zip.size });
+    expect(file).toMatchObject({ name: 'Pokemon_0001.jpg', type: 'image/jpeg', size: 1 });
     expect(build).toHaveBeenCalledOnce();
     expect(mocks.rename).toHaveBeenCalledWith('exported', 'Trade night');
+    await act(async () => finishZip(zip));
+    expect(button('Download ZIP').disabled).toBe(false);
   });
 
-  it('offers the same ZIP for download when native sharing rejects it', async () => {
+  it('offers the ZIP for download when native photo sharing fails', async () => {
     vi.spyOn(exportTools, 'createZip').mockResolvedValueOnce(zip);
     const download = vi.spyOn(exportTools, 'downloadArchive').mockImplementation(() => {});
-    const share = vi.fn().mockRejectedValue(new DOMException('ZIP sharing is blocked', 'NotAllowedError'));
+    const share = vi.fn().mockRejectedValue(new DOMException('Photo sharing is blocked', 'NotAllowedError'));
     await openExport(share);
-    await click('Share ZIP');
+    await click('Share photos');
     expect(container.textContent).toContain('share it from Files or Downloads');
     expect(mocks.rename).not.toHaveBeenCalled();
     await click('Download ZIP');
@@ -153,28 +155,25 @@ describe('batch file sharing', () => {
     expect(mocks.rename).toHaveBeenCalledWith('exported', 'Batch#007');
   });
 
-  it('shares ordered photos in groups when the browser rejects ZIP attachments', async () => {
+  it('shares ordered photos in groups and keeps the group after cancellation', async () => {
     vi.spyOn(exportTools, 'createZip').mockResolvedValueOnce(zip);
     const download = vi.spyOn(exportTools, 'downloadArchive').mockImplementation(() => {});
     const share = vi.fn<(data: ShareData) => Promise<void>>().mockResolvedValue(undefined)
-      .mockRejectedValueOnce(new DOMException('ZIP sharing is blocked', 'NotAllowedError'))
       .mockRejectedValueOnce(new DOMException('Canceled', 'AbortError'));
     localStorage.setItem('cardslinger-settings', JSON.stringify({ ...defaults, galleryNewestFirst: true }));
-    await openExport(share, 12, () => true);
-    await click('Share ZIP');
-    expect(container.textContent).toContain('Tap Share photos to open the share menu.');
+    await openExport(share, 12);
     expect(container.textContent).toContain('Share photos 1–10 of 12.');
     await click('Share photos');
     expect(container.textContent).toContain('Share photos 1–10 of 12.');
     await act(async () => {
       button('Share photos').click();
-      expect(share).toHaveBeenCalledTimes(3);
+      expect(share).toHaveBeenCalledTimes(2);
     });
-    expect(share.mock.calls[2][0].files).toHaveLength(10);
-    expect(share.mock.calls[2][0].files?.[0]).toMatchObject({ name: 'Pokemon_0001.jpg', type: 'image/jpeg', size: 12 });
+    expect(share.mock.calls[1][0].files).toHaveLength(10);
+    expect(share.mock.calls[1][0].files?.[0]).toMatchObject({ name: 'Pokemon_0001.jpg', type: 'image/jpeg', size: 12 });
     expect(container.textContent).toContain('Share photos 11–12 of 12.');
     await click('Share photos');
-    expect(share.mock.calls[3][0].files).toMatchObject([{ name: 'Pokemon_0011.jpg', size: 2 }, { name: 'Pokemon_0012.jpg', size: 1 }]);
+    expect(share.mock.calls[2][0].files).toMatchObject([{ name: 'Pokemon_0011.jpg', size: 2 }, { name: 'Pokemon_0012.jpg', size: 1 }]);
     expect(container.textContent).toContain('All photo groups opened in the share menu.');
     expect(download).not.toHaveBeenCalled();
   });
@@ -185,6 +184,25 @@ describe('automatic camera preview independent from scanner initialization', () 
     mocks.load.mockReturnValue(new Promise(() => {})); await renderApp();
     expect(mocks.start).toHaveBeenCalledTimes(1); expect(button('Loading saved scans…').disabled).toBe(true);
     expect(mocks.unlock).not.toHaveBeenCalled();
+  });
+  it('merges a setting changed during startup with the saved preferences and restores camera controls', async () => {
+    let finish!: (data: Omit<typeof loaded, 'settings'> & { settings: typeof defaults }) => void;
+    mocks.load.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    mocks.capabilities = { torch: true, focusMode: ['manual', 'continuous'] };
+    await renderApp();
+    expect(mocks.control).toHaveBeenLastCalledWith({ torch: false });
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
+    await click('Settings');
+    const stacking = [...container.querySelectorAll('label')].find(label => label.textContent?.startsWith('Using Card Slinger'))!;
+    await act(async () => stacking.querySelector('input')!.click());
+    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!)).toEqual({ stackCards: true });
+    const saved = { ...defaults, torch: true, focusLocked: true, focusDistance: 2, zoom: 2, batchTarget: 25 };
+    await act(async () => finish({ ...loaded, settings: saved }));
+    expect(mocks.start).toHaveBeenCalledTimes(1);
+    expect(mocks.control).toHaveBeenLastCalledWith({ torch: true });
+    expect(mocks.focus).toHaveBeenCalledWith(true, 2);
+    expect(mocks.zoom).toHaveBeenLastCalledWith(2);
+    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!)).toEqual({ ...saved, stackCards: true });
   });
   it('still requests the camera after storage initialization fails', async () => {
     mocks.load.mockRejectedValue(new Error('Storage blocked')); await renderApp();
@@ -344,7 +362,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.success).toHaveBeenCalledTimes(5);
     await click('5 / 50');
     const gallery = container.querySelector('dialog[open]');
-    expect(gallery?.querySelector('h2')?.textContent).toBe('Recent cards');
+    expect(gallery?.querySelector('h2')?.textContent).toBe('Gallery');
     expect(gallery?.querySelectorAll('img')).toHaveLength(5);
     expect(gallery?.querySelector('.scan-name')?.textContent).toBe('Pokemon_0001.jpg');
     await act(async () => gallery?.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')?.click());
@@ -390,6 +408,31 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(container.querySelector('.batch-name-trigger')?.textContent).toContain('Keep these photos');
     expect(mocks.create).not.toHaveBeenCalled();
   });
+  it('remembers the batch size, manual photo method and theme after reopening', async () => {
+    await renderApp();
+    const openMenu = () => act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
+    await openMenu();
+    await click('Batch Settings0 / 50 cards scanned');
+    expect(container.querySelector('dialog h2')?.textContent).toBe('Batch Settings');
+    await input('#batch-quantity', '73');
+    await click('Save size');
+    await act(async () => container.querySelector<HTMLButtonElement>('dialog [aria-label="Close dialog"]')!.click());
+    await openMenu();
+    await click('Settings');
+    const toggle = (name: string) => [...container.querySelectorAll('label')].find(label => label.textContent?.startsWith(name))!.querySelector('input')!;
+    await act(async () => toggle('Dark mode').click());
+    await act(async () => toggle('Alternate manual photo method').click());
+    expect(mocks.settings).toHaveBeenLastCalledWith(expect.objectContaining({ batchTarget: 73, useImageCapture: true }));
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await renderApp();
+    expect(container.querySelector('.scan-count')?.textContent).toBe('0 / 73');
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    await openMenu();
+    await click('Settings');
+    expect(toggle('Dark mode').checked).toBe(true);
+    expect(toggle('Alternate manual photo method').checked).toBe(true);
+  });
   it('manual mode captures only on tap and keeps working after a camera encoding error', async () => {
     await renderApp(); await click('Manual'); expect(mocks.capture).not.toHaveBeenCalled();
     mocks.capture.mockRejectedValueOnce(new Error('Camera encoding failed')); await click('Take photo');
@@ -423,7 +466,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.rename).toHaveBeenCalledWith('test-batch','Binder Saturday'); expect(mocks.create).toHaveBeenCalledTimes(1);
     await click('Auto'); await click('Pause scanning');
     await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
-    await click('Batch1 / 50 cards scanned');
+    await click('Batch Settings1 / 50 cards scanned');
     await click('New batch'); await click('Delete & start new');
     expect(mocks.clear).toHaveBeenCalledWith('test-batch');
     expect(container.querySelector('.batch-name-trigger')?.textContent).toBe('Binder Saturday');
@@ -439,13 +482,14 @@ describe('manual capture, continuous errors, and batch naming', () => {
     mocks.load.mockResolvedValueOnce({ ...loaded, batch, scans });
     await renderApp();
     await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
-    await click('Batch2 / 2 cards scanned');
+    await click('Batch Settings2 / 2 cards scanned');
     await input('#batch-quantity', '1'); await click('Save size');
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('from 2 to');
     expect(mocks.resize).not.toHaveBeenCalled();
     await input('#batch-quantity', '3'); await click('Save size');
     expect(mocks.resize).toHaveBeenCalledWith('full', 3);
     expect(container.querySelector('.scan-count')?.textContent).toBe('2 / 3');
+    expect(mocks.settings).toHaveBeenLastCalledWith(expect.objectContaining({ batchTarget: 3 }));
     expect(button('Resume scanning').disabled).toBe(false);
     await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')!.click());
     await click('Manual'); await click('Take photo');
