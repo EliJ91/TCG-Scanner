@@ -2,8 +2,9 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Reac
 import { ArrowDownToLine, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Focus, Images, Layers3, Lock, LockOpen, Menu, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, Share2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X, Zap } from 'lucide-react';
 import { useScanner } from './useScanner';
 import { useTheme } from './useTheme';
+import { BlobImage, PhotoViewer } from './PhotoViewer';
 import { createZip, downloadArchive, rotateScan } from './core/export';
-import { archiveFilename, defaultBatchName, filename, maxBatchTarget, message, photoWaitTimes, validBatchTarget, type Batch, type Scan } from './core/types';
+import { archiveFilename, defaultBatchName, filename, maxBatchTarget, message, photoNumber, photoWaitTimes, validBatchTarget, type Batch, type Scan } from './core/types';
 
 const photoQualities = [
   { value: 0.8, label: 'Lowest' },
@@ -11,11 +12,6 @@ const photoQualities = [
   { value: 1, label: 'Best' },
 ];
 
-function BlobImage({ blob, alt, ...props }: { blob: Blob; alt: string } & React.ImgHTMLAttributes<HTMLImageElement>) {
-  const [url, setUrl] = useState('');
-  useEffect(() => { const u = URL.createObjectURL(blob); setUrl(u); return () => URL.revokeObjectURL(u); }, [blob]);
-  return <img src={url || undefined} alt={alt} {...props} />;
-}
 function Dialog({ title, children, close, wide = false }: { title: string; children: ReactNode; close: () => void; wide?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -34,21 +30,26 @@ function OriginalPhoto({ id, load }: { id: string; load(id: string): Promise<Blo
   return blob ? <BlobImage blob={blob} alt="Retained original photo" /> : <div className="original-placeholder" aria-label="Original photo saved"><Camera size={20} /></div>;
 }
 
-function BatchExport({ batch, scans, newestFirst, disabled, rename, close }: {
+type ExportResult = { method: 'download' | 'share'; nameError?: string };
+
+function BatchExport({ batch, scans, newestFirst, disabled, rename, close, completed }: {
   batch: Batch;
   scans: Scan[];
   newestFirst: boolean;
   disabled: boolean;
   rename(name: string): Promise<void>;
   close(): void;
+  completed(result: ExportResult): void;
 }) {
   const [name, setName] = useState(batch.name);
   const [build, setBuild] = useState<{ progress: number } | { blob: Blob; scans: Scan[]; newestFirst: boolean } | { error: string }>({ progress: 0 });
-  const [sharing, setSharing] = useState(false);
+  const [exporting, setExporting] = useState<ExportResult['method']>();
   const [photoShareBlocked, setPhotoShareBlocked] = useState(false);
-  const [photoOffset, setPhotoOffset] = useState(0);
-  const [downloaded, setDownloaded] = useState('');
+  const [photoStart, setPhotoStart] = useState(0);
   const [actionError, setActionError] = useState('');
+  const [result, setResult] = useState<ExportResult>();
+
+  useEffect(() => { if (result) completed(result); }, [result, completed]);
 
   useEffect(() => {
     let current = true;
@@ -67,7 +68,6 @@ function BatchExport({ batch, scans, newestFirst, disabled, rename, close }: {
   const file = 'blob' in build && build.scans === scans && build.newestFirst === newestFirst
     ? new File([build.blob], archiveName, { type: 'application/zip' }) : undefined;
   const nativeShare = typeof navigator.share === 'function' && typeof navigator.canShare === 'function';
-  const photoStart = photoOffset < scans.length ? photoOffset : 0;
   const photoFiles = useMemo(() => {
     const files: File[] = [];
     if (!nativeShare || photoShareBlocked) return files;
@@ -82,48 +82,52 @@ function BatchExport({ batch, scans, newestFirst, disabled, rename, close }: {
     return files;
   }, [nativeShare, photoShareBlocked, photoStart, scans, newestFirst]);
   const canSharePhotos = photoFiles.length > 0 && navigator.canShare({ files: photoFiles });
-  const ready = !!file && !disabled && !sharing;
+  const ready = !!file && !disabled && !exporting;
 
-  const rememberName = () => {
-    void rename(name).catch(() => setActionError('Could not remember the batch name.'));
+  const finishExport = async (method?: ExportResult['method']) => {
+    let nameError: string | undefined;
+    try { await rename(name); }
+    catch { nameError = 'Could not remember the batch name.'; }
+    if (method) setResult({ method, nameError });
+    else if (nameError) setActionError(nameError);
   };
-  const download = () => {
+  const download = async () => {
     if (!file || !ready) return;
+    setExporting('download');
     setActionError('');
     try {
       downloadArchive(file);
-      setDownloaded(file.name);
-      rememberName();
+      await finishExport('download');
     } catch (error) {
       setActionError(`Could not download the ZIP. ${message(error)}`);
-    }
+    } finally { setExporting(undefined); }
   };
   const share = async () => {
-    if (!canSharePhotos || disabled || sharing) return;
-    setSharing(true);
+    if (!canSharePhotos || disabled || exporting) return;
+    setExporting('share');
     setActionError('');
     try {
       // Files are prepared before this tap so the share sheet can use its activation.
       await navigator.share({ files: photoFiles });
-      setPhotoOffset(photoStart + photoFiles.length);
-      rememberName();
+      const shared = photoStart + photoFiles.length;
+      setPhotoStart(shared);
+      await finishExport(shared === scans.length ? 'share' : undefined);
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
       setPhotoShareBlocked(true);
       setActionError('Could not open the share menu for these photos.');
-    } finally { setSharing(false); }
+    } finally { setExporting(undefined); }
   };
 
   return <Dialog title="Export batch" close={close}>
     <div className="confirm-content">
-      {downloaded && <div className="export-success" role="status"><strong>{downloaded}</strong><p>Check your browser’s downloads.</p></div>}
       <label className="select-setting batch-name-field" htmlFor="export-batch-name">Batch name
-        <input id="export-batch-name" type="text" maxLength={100} value={name} disabled={sharing} placeholder={defaultBatchName(batch.number)} onChange={event => setName(event.target.value)} />
+        <input id="export-batch-name" type="text" maxLength={100} value={name} disabled={!!exporting} placeholder={defaultBatchName(batch.number)} onChange={event => setName(event.target.value)} />
       </label>
       <p className="archive-preview">{archiveName}</p>
       <p className="setting-hint">{scans.length} saved photos in this ZIP.</p>
       {canSharePhotos ? <p id="share-photos-hint" className="setting-hint">The share menu sends individual photos.</p> : <p className="setting-hint" role="status">Download the ZIP, then share it from Files or Downloads.</p>}
-      {canSharePhotos && photoFiles.length < scans.length && <p className="setting-hint" role="status">{photoOffset === scans.length ? 'All photo groups opened in the share menu. Tap Share ZIP to start again.' : `Photos ${photoStart + 1}–${photoStart + photoFiles.length} of ${scans.length} ready to share.`}</p>}
+      {canSharePhotos && photoFiles.length < scans.length && <p className="setting-hint" role="status">Photos {photoStart + 1}–{photoStart + photoFiles.length} of {scans.length} ready to share.</p>}
       {'progress' in build && <>
         <p className="setting-hint">Preparing ZIP · {build.progress}%</p>
         <div className="progress-track" role="progressbar" aria-label="ZIP export progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={build.progress}><div style={{ width: `${build.progress}%` }} /></div>
@@ -132,8 +136,8 @@ function BatchExport({ batch, scans, newestFirst, disabled, rename, close }: {
       {actionError && <p className="name-error" role="alert">{actionError}</p>}
     </div>
     <div className="dialog-footer">
-      <button type="button" className={`button ${canSharePhotos ? 'outline' : 'dark'}`} disabled={!ready} onClick={download}><ArrowDownToLine size={16} />Download ZIP</button>
-      {canSharePhotos && <button type="button" className="button outline" aria-describedby="share-photos-hint" disabled={disabled || sharing} onClick={() => void share()}><Share2 size={16} />{sharing ? 'Sharing…' : 'Share ZIP'}</button>}
+      <button type="button" className={`button ${canSharePhotos ? 'outline' : 'dark'}`} disabled={!ready} onClick={() => void download()}><ArrowDownToLine size={16} />Download ZIP</button>
+      {canSharePhotos && <button type="button" className="button outline" aria-describedby="share-photos-hint" disabled={disabled || !!exporting} onClick={() => void share()}><Share2 size={16} />{exporting === 'share' ? 'Sharing…' : 'Share ZIP'}</button>}
     </div>
   </Dialog>;
 }
@@ -148,7 +152,7 @@ export default function App() {
   const [showGallery, setShowGallery] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false); const [selected, setSelected] = useState<string>();
-  const [confirmClear, setConfirmClear] = useState(false); const [deleteId, setDeleteId] = useState<string>();
+  const [clearPrompt, setClearPrompt] = useState<'manual' | ExportResult>(); const [deleteId, setDeleteId] = useState<string>();
   const [working, setWorking] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [showName, setShowName] = useState(false); const [nameDraft, setNameDraft] = useState(''); const [nameError, setNameError] = useState('');
@@ -170,6 +174,10 @@ export default function App() {
   const activeIndex = selected ? galleryScans.findIndex(scan => scan.id === selected) : -1;
   const active = galleryScans[activeIndex];
   const captureIndex = (index: number) => newestFirst ? count - 1 - index : index;
+  const movePhoto = (direction: -1 | 1) => {
+    const next = galleryScans[activeIndex + direction];
+    if (next) setSelected(next.id);
+  };
   const openBatch = () => { setQuantityDraft(String(quantity)); setQuantityError(''); setShowBatch(true); };
   const changeBatchSize = async (next: number) => {
     if (sizeDisabled) return;
@@ -198,7 +206,7 @@ export default function App() {
       const imageIndex = captureIndex(index);
       return <button className="scan-tile" key={scan.id} onClick={() => setSelected(scan.id)}>
         <div className="scan-image"><BlobImage blob={scan.thumbnail ?? scan.blob} alt={`Scanned card ${imageIndex + 1}`} loading="lazy" /><span><Check size={12} /></span></div>
-        <span className="scan-name">{filename(imageIndex)}</span><span className="scan-meta">{scan.width && scan.height ? `${scan.width} × ${scan.height}` : 'JPEG'}</span>
+        <span className="scan-name">{photoNumber(imageIndex)}</span><span className="scan-meta">{scan.width && scan.height ? `${scan.width} × ${scan.height}` : 'JPEG'}</span>
       </button>;
     })}</div> : <div className="gallery-empty"><div className="empty-icon"><Images size={26} strokeWidth={1.5} /></div><strong>Your collection starts here</strong><p>Saved photos appear here.</p></div>}
     {s.attempts.length > 0 && <div className="attempts">
@@ -216,7 +224,7 @@ export default function App() {
               const url = URL.createObjectURL(raw);
               const anchor = document.createElement('a');
               anchor.href = url;
-              anchor.download = `Original_${photo.ordinal + 1}.jpg`;
+              anchor.download = filename(photo.ordinal);
               anchor.click();
               setTimeout(() => URL.revokeObjectURL(url), 60000);
             })}>Save original</button>
@@ -381,7 +389,7 @@ export default function App() {
         {s.pending > 0 && <p className="setting-hint batch-hint">Wait for the current photos to save before changing the size.</p>}
         {s.notice && <p className="setting-hint batch-hint">{s.notice}</p>}
       </div>
-      <div className="dialog-footer batch-actions">{s.batch && <button className="button danger-outline" disabled={busy || s.pending > 0} onClick={() => setConfirmClear(true)}>New batch</button>}{exportButton()}</div>
+      <div className="dialog-footer batch-actions">{s.batch && <button className="button danger-outline" disabled={busy || s.pending > 0} onClick={() => setClearPrompt('manual')}>New batch</button>}{exportButton()}</div>
     </Dialog>}
 
     {showGallery && <Dialog title="Gallery" close={() => setShowGallery(false)} wide>
@@ -430,7 +438,7 @@ export default function App() {
           </select>
           <small>Sets the requested camera frame width. Use Menu → Stop camera before changing it.</small>
         </label>
-        <Toggle label="Alternate manual photo method" hint="Turn this on if Take photo fails in Manual mode. It uses a different way to take the photo." checked={s.settings.useImageCapture} disabled={busy} onChange={v => s.setSettings({ ...s.settings, useImageCapture: v })} />
+        <Toggle label="Alternate manual photo method" hint="Turn this on if Take photo fails in Manual mode." checked={s.settings.useImageCapture} disabled={busy} onChange={v => s.setSettings({ ...s.settings, useImageCapture: v })} />
         <h3><ArrowDownToLine size={16} /> Add to your home screen</h3><p className="setting-hint">On iPhone, open Safari → Share → Add to Home Screen. On Android, choose Install app in the browser menu.</p>{installPrompt && <button className="button outline install-scanner" onClick={() => { void installPrompt.prompt(); setInstallPrompt(undefined); }}>Install app</button>}
       </div></details>
     </div><div className="dialog-footer"><button className="button outline" disabled={!s.loaded || busy || s.capturing || working || s.cameraPhase === 'requesting'} title={busy ? 'Pause scanning to reset settings' : 'Restore defaults and keep your photos'} onClick={() => void safe(async () => { await s.resetSettings(); theme.setDark(window.matchMedia('(prefers-color-scheme: dark)').matches); })}>Reset settings</button><button className="button dark" onClick={() => setShowSettings(false)}>Done</button></div></Dialog>}
@@ -440,16 +448,26 @@ export default function App() {
       ['Take your photos', 'In Auto, place a card and tap Start scanning. The camera dings when the green bar fills and the photo is taken. Remove each card before placing the next, or turn on Using Card Slinger in Settings to stack cards. In Manual, tap Take photo.'],
       ['Check and export', 'Tap the scan count to view your photos. When the batch is full, scanning stops and an alarm plays. Choose Export ZIP to download or share the batch.'],
     ].map(([title, text], i) => <div className="guide-step" key={title}><span>{String(i + 1).padStart(2,'0')}</span><div><h3>{title}</h3><p>{text}</p></div></div>)}<div className="guide-callout"><ShieldCheck size={18} /><p>Scans stay in this browser’s local storage. Download your batch before clearing browser data. When resuming a saved batch in Auto with Using Card Slinger off, clear the camera view before placing a card.</p></div></div><div className="dialog-footer"><button className="button primary" onClick={() => setShowHelp(false)}>Ready to scan <ArrowRight size={16} /></button></div></Dialog>}
-    {confirmClear && <Dialog title="Start a fresh batch?" close={() => setConfirmClear(false)}><div className="confirm-content"><p>This deletes this batch’s {count} saved images and {s.attempts.length} retained captures from this device. Download your ZIP first if you want to keep them.</p>{exportButton()}<p className="setting-hint">A download does not automatically clear your batch.</p></div><div className="dialog-footer"><button className="button outline" onClick={() => setConfirmClear(false)}>Keep batch</button><button className="button danger" disabled={editingDisabled} onClick={() => void safe(async () => { await s.clear(); setExportOpen(false); setConfirmClear(false); setShowBatch(false); setShowGallery(false); setShowMenu(false); })}><Trash2 size={15} /> Delete & start new</button></div></Dialog>}
-    {exportOpen && s.batch && <BatchExport batch={s.batch} scans={s.scans} newestFirst={newestFirst} disabled={editingDisabled} rename={s.renameBatch} close={() => setExportOpen(false)} />}
-    {active && <Dialog title={filename(captureIndex(activeIndex))} close={() => setSelected(undefined)} wide>
-      <div className="review-image"><BlobImage blob={active.blob} alt="Full-resolution scanned card" /></div>
+    {clearPrompt && <Dialog key={clearPrompt === 'manual' ? 'manual' : clearPrompt.method} title="Start a fresh batch?" close={() => setClearPrompt(undefined)}>
+      <div className="confirm-content">
+        {clearPrompt === 'manual' ? <p>Download your ZIP first if you want to keep these photos.</p> : <p>{clearPrompt.method === 'download' ? 'Check that your ZIP finished downloading before clearing the batch.' : 'Check that your photos reached the app you shared to before clearing the batch.'}</p>}
+        <p>Starting fresh deletes this batch’s {count} saved images and {s.attempts.length} retained captures from this device.</p>
+        {clearPrompt === 'manual' ? exportButton() : clearPrompt.nameError && <p className="name-error" role="alert">{clearPrompt.nameError}</p>}
+      </div>
+      <div className="dialog-footer">
+        <button className="button outline" onClick={() => setClearPrompt(undefined)}>Keep batch</button>
+        <button className="button danger" disabled={editingDisabled} onClick={() => void safe(async () => { await s.clear(); setExportOpen(false); setClearPrompt(undefined); setShowBatch(false); setShowGallery(false); setShowMenu(false); })}><Trash2 size={15} /> Delete & start new</button>
+      </div>
+    </Dialog>}
+    {exportOpen && s.batch && <BatchExport batch={s.batch} scans={s.scans} newestFirst={newestFirst} disabled={editingDisabled} rename={s.renameBatch} close={() => setExportOpen(false)} completed={result => { setExportOpen(false); setClearPrompt(result); }} />}
+    {active && <Dialog title={photoNumber(captureIndex(activeIndex))} close={() => setSelected(undefined)} wide>
+      <PhotoViewer key={active.id} blob={active.blob} onSwipe={movePhoto} />
       <div className="review-meta"><span>{active.width && active.height ? `${active.width} × ${active.height} · JPEG` : 'JPEG'}</span></div>
       <div className="dialog-footer review-actions">
-        <button className="icon-button" aria-label="Previous card" disabled={activeIndex === 0} onClick={() => setSelected(galleryScans[activeIndex - 1]?.id)}><ArrowLeft size={20} /></button>
+        <button className="icon-button" aria-label="Previous card" disabled={activeIndex === 0} onClick={() => movePhoto(-1)}><ArrowLeft size={20} /></button>
         <button className="button outline" disabled={editingDisabled} onClick={() => void safe(async () => s.updateScan(await rotateScan(active)))}><RotateCw size={16} /> Rotate 180°</button>
         <button className="button danger-outline" disabled={editingDisabled} onClick={() => setDeleteId(active.id)}><Trash2 size={16} /> Delete</button>
-        <button className="icon-button" aria-label="Next card" disabled={activeIndex === count - 1} onClick={() => setSelected(galleryScans[activeIndex + 1]?.id)}><ArrowRight size={20} /></button>
+        <button className="icon-button" aria-label="Next card" disabled={activeIndex === count - 1} onClick={() => movePhoto(1)}><ArrowRight size={20} /></button>
       </div>
     </Dialog>}
     {deleteId && <Dialog title="Delete this scan?" close={() => setDeleteId(undefined)}><div className="confirm-content"><p>The image will be removed and exported filenames will stay sequential. Scanning stays paused until you explicitly resume.</p></div><div className="dialog-footer"><button className="button outline" onClick={() => setDeleteId(undefined)}>Keep image</button><button className="button danger" disabled={editingDisabled} onClick={() => void safe(async () => { const scan = s.scans.find(a => a.id === deleteId); if (scan) await s.remove(scan); setSelected(undefined); setDeleteId(undefined); })}>Delete image</button></div></Dialog>}

@@ -162,11 +162,8 @@ input[type='range'] { width: 100%; margin: 16px 0 7px; }
 .batch-name-field { margin: 22px 0 10px; }
 .batch-name-field input { font-size: 14px; }
 .archive-preview { padding: 10px 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--soft); overflow-wrap: anywhere; font: 12px/1.6 monospace; margin-bottom: 15px; }
-.export-success { padding-bottom: 12px; }
-.export-success strong { display: block; font-size: 14px; overflow-wrap: anywhere; }
-.export-success p { font-size: 12px; line-height: 1.8; color: var(--muted); margin: 8px 0 14px; }
-.review-image { display: flex; justify-content: center; padding: 20px; background: var(--soft); }
-.review-image img { max-width: 100%; max-height: 55dvh; object-fit: contain; }
+.review-image { display: flex; justify-content: center; overflow: hidden; touch-action: none; user-select: none; padding: 20px; background: var(--soft); }
+.review-image img { max-width: 100%; max-height: 55dvh; object-fit: contain; pointer-events: none; }
 .review-meta { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 15px 22px; font-size: 10px; color: var(--muted); }
 .review-actions { justify-content: space-between; align-items: center; flex-wrap: nowrap; }
 .review-actions .button { padding: 10px; font-size: 11px; }

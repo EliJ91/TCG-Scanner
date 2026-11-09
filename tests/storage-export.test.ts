@@ -31,8 +31,8 @@ describe('storage, recovery, filenames, ZIP', () => {
     expect(archiveFilename('CON', 1)).toBe('_CON.zip');
   });
   it('generates gap-free names including numbers above 9999', () => {
-    expect([0,1,9,99].map(filename)).toEqual(['Pokemon_0001.jpg','Pokemon_0002.jpg','Pokemon_0010.jpg','Pokemon_0100.jpg']);
-    expect(filename(9999)).toBe('Pokemon_10000.jpg');
+    expect([0,1,9,99].map(filename)).toEqual(['0001.jpg','0002.jpg','0010.jpg','0100.jpg']);
+    expect(filename(9999)).toBe('10000.jpg');
   });
   it('persists a photo directly and recovers the unfinished batch', async () => {
     const b = await storage.create(3), a = scan(b.id, 2);
@@ -61,16 +61,16 @@ describe('storage, recovery, filenames, ZIP', () => {
     const progress: number[] = [];
     const blob = await createZip(data, p => progress.push(p));
     const zip = await JSZip.loadAsync(await blob.arrayBuffer());
-    expect(Object.keys(zip.files)).toEqual(['Pokemon_0001.jpg','Pokemon_0002.jpg','Pokemon_0003.jpg']);
-    expect(await zip.file('Pokemon_0001.jpg')!.async('string')).toBe('image-1');
-    expect(await zip.file('Pokemon_0003.jpg')!.async('string')).toBe('image-9');
+    expect(Object.keys(zip.files)).toEqual(['0001.jpg','0002.jpg','0003.jpg']);
+    expect(await zip.file('0001.jpg')!.async('string')).toBe('image-1');
+    expect(await zip.file('0003.jpg')!.async('string')).toBe('image-9');
     expect(progress.at(-1)).toBe(100);
   });
   it('numbers the newest photos first in a newest-first ZIP', async () => {
     const scans = [scan('test', 4), scan('test', 1), scan('test', 9)];
     const blob = await createZip(scans, () => {}, true);
     const zip = await JSZip.loadAsync(await blob.arrayBuffer());
-    expect(Object.keys(zip.files)).toEqual(['Pokemon_0001.jpg', 'Pokemon_0002.jpg', 'Pokemon_0003.jpg']);
+    expect(Object.keys(zip.files)).toEqual(['0001.jpg', '0002.jpg', '0003.jpg']);
     expect(await Promise.all(Object.values(zip.files).map(file => file.async('string'))))
       .toEqual(['image-9', 'image-4', 'image-1']);
   });

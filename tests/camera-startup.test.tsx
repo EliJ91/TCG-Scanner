@@ -134,13 +134,17 @@ describe('batch file sharing', () => {
       expect(share).toHaveBeenCalledOnce();
     });
     expect(mocks.rename).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain('Start a fresh batch?');
     await click('Share ZIP');
     const file = share.mock.calls[1][0].files?.[0];
-    expect(file).toMatchObject({ name: 'Pokemon_0001.jpg', type: 'image/jpeg', size: 1 });
+    expect(file).toMatchObject({ name: '0001.jpg', type: 'image/jpeg', size: 1 });
     expect(build).toHaveBeenCalledOnce();
     expect(mocks.rename).toHaveBeenCalledWith('exported', 'Trade night');
+    expect(container.textContent).toContain('Start a fresh batch?');
+    expect(mocks.clear).not.toHaveBeenCalled();
+    await click('Keep batch');
+    expect(container.querySelector('.scan-count')?.textContent).toBe('1 / 2');
     await act(async () => finishZip(zip));
-    expect(button('Download ZIP').disabled).toBe(false);
   });
 
   it('offers the ZIP for download when native photo sharing fails', async () => {
@@ -150,10 +154,15 @@ describe('batch file sharing', () => {
     await openExport(share);
     await click('Share ZIP');
     expect(container.textContent).toContain('share it from Files or Downloads');
+    expect(container.textContent).not.toContain('Start a fresh batch?');
     expect(mocks.rename).not.toHaveBeenCalled();
     await click('Download ZIP');
     expect(download.mock.calls[0][0]).toMatchObject({ name: 'Batch#007.zip', type: 'application/zip', size: zip.size });
     expect(mocks.rename).toHaveBeenCalledWith('exported', 'Batch#007');
+    expect(container.textContent).toContain('Check that your ZIP finished downloading');
+    expect(mocks.clear).not.toHaveBeenCalled();
+    await click('Delete & start new');
+    expect(mocks.clear).toHaveBeenCalledWith('exported');
   });
 
   it('shares ordered photos in groups and keeps the group after cancellation', async () => {
@@ -171,11 +180,12 @@ describe('batch file sharing', () => {
       expect(share).toHaveBeenCalledTimes(2);
     });
     expect(share.mock.calls[1][0].files).toHaveLength(10);
-    expect(share.mock.calls[1][0].files?.[0]).toMatchObject({ name: 'Pokemon_0001.jpg', type: 'image/jpeg', size: 12 });
+    expect(share.mock.calls[1][0].files?.[0]).toMatchObject({ name: '0001.jpg', type: 'image/jpeg', size: 12 });
     expect(container.textContent).toContain('Photos 11–12 of 12 ready to share.');
+    expect(container.textContent).not.toContain('Start a fresh batch?');
     await click('Share ZIP');
-    expect(share.mock.calls[2][0].files).toMatchObject([{ name: 'Pokemon_0011.jpg', size: 2 }, { name: 'Pokemon_0012.jpg', size: 1 }]);
-    expect(container.textContent).toContain('All photo groups opened in the share menu.');
+    expect(share.mock.calls[2][0].files).toMatchObject([{ name: '0011.jpg', size: 2 }, { name: '0012.jpg', size: 1 }]);
+    expect(container.textContent).toContain('Start a fresh batch?');
     expect(download).not.toHaveBeenCalled();
   });
 });
@@ -365,7 +375,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     const gallery = container.querySelector('dialog[open]');
     expect(gallery?.querySelector('h2')?.textContent).toBe('Gallery');
     expect(gallery?.querySelectorAll('img')).toHaveLength(5);
-    expect(gallery?.querySelector('.scan-name')?.textContent).toBe('Pokemon_0001.jpg');
+    expect(gallery?.querySelector('.scan-name')?.textContent).toBe('0001');
     await act(async () => gallery?.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')?.click());
     await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
     await click('Settings');
@@ -374,11 +384,57 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(JSON.parse(localStorage.getItem('cardslinger-settings')!).galleryNewestFirst).toBe(true);
     await click('Done');
     await click('5 / 50');
-    expect(container.querySelector('.scan-name')?.textContent).toBe('Pokemon_0005.jpg');
+    expect(container.querySelector('.scan-name')?.textContent).toBe('0005');
     await act(async () => container.querySelector<HTMLButtonElement>('.scan-tile')!.click());
     expect(container.querySelector('dialog[open] img[alt="Full-resolution scanned card"]')).not.toBeNull();
     await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Next card"]')!.click());
-    expect(container.querySelector('.review-image')?.closest('dialog')?.querySelector('h2')?.textContent).toBe('Pokemon_0004.jpg');
+    const viewer = () => container.querySelector<HTMLDivElement>('.review-image')!;
+    const title = () => viewer().closest('dialog')?.querySelector('h2')?.textContent;
+    expect(title()).toBe('0004');
+
+    const touch = (type: string, id: number, x: number, y: number) => {
+      const event = new MouseEvent(type, { bubbles: true, clientX: x, clientY: y });
+      Object.defineProperties(event, { pointerId: { value: id }, pointerType: { value: 'touch' } });
+      viewer().dispatchEvent(event);
+    };
+    const swipe = (from: number, to: number) => act(async () => {
+      touch('pointerdown', 1, from, 160);
+      touch('pointermove', 1, to, 160);
+      touch('pointerup', 1, to, 160);
+    });
+    await swipe(220, 120);
+    expect(title()).toBe('0003');
+    await swipe(120, 220);
+    expect(title()).toBe('0004');
+
+    vi.spyOn(viewer(), 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 300, 300));
+    const image = viewer().querySelector('img')!;
+    Object.defineProperties(image, { offsetWidth: { value: 240 }, offsetHeight: { value: 260 } });
+    await act(async () => {
+      touch('pointerdown', 1, 100, 150);
+      touch('pointerdown', 2, 175, 150);
+      touch('pointermove', 2, 250, 150);
+      touch('pointerup', 1, 100, 150);
+      touch('pointerup', 2, 250, 150);
+    });
+    const zoomed = image.style.transform;
+    expect(zoomed).toContain('scale(2)');
+    await swipe(220, 120);
+    expect(title()).toBe('0004');
+    expect(image.style.transform).toContain('scale(2)');
+    expect(image.style.transform).not.toBe(zoomed);
+
+    await act(async () => {
+      touch('pointerdown', 1, 100, 150);
+      touch('pointerdown', 2, 250, 150);
+      touch('pointermove', 2, 175, 150);
+      touch('pointerup', 1, 100, 150);
+      touch('pointerup', 2, 175, 150);
+    });
+    expect(image.style.transform).toBe('translate(0px, 0px) scale(1)');
+    expect(title()).toBe('0004');
+    await swipe(220, 120);
+    expect(title()).toBe('0003');
   });
   it('restores cached camera controls and resets settings without deleting the saved batch', async () => {
     mocks.capabilities={torch:true,exposureMode:['manual','continuous'],focusMode:['manual','continuous']};
