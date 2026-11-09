@@ -127,21 +127,33 @@ describe('mobile video preview startup', () => {
       width: { ideal: 1920 }, advanced: [{ focusMode: 'continuous', torch: true }],
     });
   });
-  it('uses the same centered zoom crop for the saved full-resolution snapshot', async () => {
+  it.each([false, true])('uses the centered zoom crop and resets the flip after capture (alternate method %s)', async alternate => {
     const fixture=streamFixture();getUserMedia.mockResolvedValue(fixture.stream);
     const drawImage = vi.fn();
+    const setTransform = vi.fn(), resetTransform = vi.fn();
+    const bitmap = { width: 1280, height: 720, close: vi.fn() };
+    vi.stubGlobal('window', { ...window, ImageCapture: class { async grabFrame() { return bitmap; } } });
     let finishEncoding!: (blob: Blob) => void;
-    const canvas = { width: 0, height: 0, getContext: () => ({ drawImage }), toBlob: (done: (blob: Blob) => void) => { finishEncoding = done; } };
+    const canvas = { width: 0, height: 0, getContext: () => ({ drawImage, setTransform, resetTransform }), toBlob: (done: (blob: Blob) => void) => { finishEncoding = done; } };
     vi.stubGlobal('document',{createElement:()=>canvas});
     const preview=new Preview(), camera=new Camera(preview as unknown as HTMLVideoElement,vi.fn());
     await camera.start(2560); camera.setZoom(2);
     const frameCopied = vi.fn();
-    const snapshot = camera.capture(false, 1, frameCopied);
-    expect(drawImage).toHaveBeenCalledWith(preview,320,180,640,360,0,0,640,360);
+    const snapshot = camera.capture(alternate, 1, frameCopied, true);
+    if (alternate) await Promise.resolve();
+    expect(drawImage).toHaveBeenCalledWith(alternate ? bitmap : preview,320,180,640,360,0,0,640,360);
+    expect(setTransform).toHaveBeenCalledWith(-1,0,0,-1,640,360);
+    expect(setTransform.mock.invocationCallOrder[0]).toBeLessThan(drawImage.mock.invocationCallOrder[0]);
+    expect(resetTransform.mock.invocationCallOrder[0]).toBeGreaterThan(drawImage.mock.invocationCallOrder[0]);
     expect(frameCopied).toHaveBeenCalledOnce();
     const jpeg = new Blob(['jpeg']);
     finishEncoding(jpeg);
     expect(await snapshot).toEqual({ blob: jpeg, width: 640, height: 360 });
+    const upright = camera.capture(false, 1, frameCopied);
+    expect(drawImage).toHaveBeenLastCalledWith(preview,320,180,640,360,0,0,640,360);
+    expect(setTransform).toHaveBeenCalledOnce();
+    finishEncoding(jpeg);
+    await upright;
     camera.stop();
   });
   it('sets Safari inline/muted properties before play and uses actual portrait frame dimensions', async () => {

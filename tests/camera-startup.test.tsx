@@ -41,7 +41,7 @@ function button(label: string) {
 }
 async function renderApp() { await act(async () => root.render(<App />)); }
 async function click(label: string) { await act(async () => button(label).click()); }
-async function startAutoPreview(stabilityMs: number, initial: Uint8Array) {
+async function startAutoPreview(stabilityMs: number, initial: Uint8Array, flipInterface = false) {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
   let frame!: FrameRequestCallback;
   vi.stubGlobal('requestAnimationFrame', vi.fn(callback => { frame = callback; return 1; }));
@@ -51,7 +51,7 @@ async function startAutoPreview(stabilityMs: number, initial: Uint8Array) {
   }
   scene(initial);
   vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue({ drawImage: vi.fn(), getImageData: () => ({ data: pixels }) } as unknown as CanvasRenderingContext2D);
-  localStorage.setItem('cardslinger-settings', JSON.stringify({ ...defaults, stabilityMs }));
+  localStorage.setItem('cardslinger-settings', JSON.stringify({ ...defaults, stabilityMs, flipInterface }));
   await renderApp();
   const video = container.querySelector('video')!;
   Object.defineProperties(video, { videoWidth: { value: 1280 }, videoHeight: { value: 720 }, readyState: { value: 4 } });
@@ -279,7 +279,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.focus).toHaveBeenLastCalledWith(false, undefined);
   });
   it('starts a 10 ms countdown on confirmed stillness and cancels it when a fresh frame shows movement', async () => {
-    const { tick, scene, video } = await startAutoPreview(10, printedCard());
+    const { tick, scene, video } = await startAutoPreview(10, printedCard(), true);
     await tick();
     expect(container.querySelector('.auto-countdown:not([hidden])')).toBeNull();
     await tick(33, printedCard());
@@ -294,6 +294,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await tick(23, printedCard(1));
     await tick(10);
     expect(mocks.capture).toHaveBeenCalledTimes(1);
+    expect(mocks.capture).toHaveBeenCalledWith(false, 1, expect.any(Function), true);
     expect(container.querySelector('.auto-countdown.is-snapped')).not.toBeNull();
   });
   it('animates the bar and keeps taking cards during a slow encode and a slow save', async () => {
@@ -487,6 +488,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(title()).toBe('0005');
     await swipe(120, 220);
     expect(title()).toBe('0004');
+    expect(viewer().querySelector('img')?.style.transform).toContain('rotate(180deg)');
   });
   it('restores cached camera controls and resets settings without deleting the saved batch', async () => {
     mocks.capabilities={torch:true,exposureMode:['manual','continuous'],focusMode:['manual','continuous']};
@@ -562,6 +564,12 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.error).toHaveBeenCalled(); await click('Take photo');
     expect(mocks.accept).toHaveBeenCalledTimes(1); expect(container.querySelector('.scan-count')?.textContent).toBe('1 / 50');
     expect(mocks.create).toHaveBeenCalledTimes(1); expect(mocks.stop).not.toHaveBeenCalled();
+  });
+  it('uses the flipped orientation for an alternate manual photo', async () => {
+    localStorage.setItem('cardslinger-settings', JSON.stringify({ ...defaults, flipInterface: true, useImageCapture: true }));
+    await renderApp(); await click('Manual'); await click('Take photo');
+    expect(mocks.capture).toHaveBeenCalledWith(true, 1, expect.any(Function), true);
+    expect(mocks.accept).toHaveBeenCalledOnce();
   });
   it('switches mode without restarting the camera and persists the selection', async () => {
     await renderApp(); await click('Manual'); await click('Take photo'); await click('Auto');

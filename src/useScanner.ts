@@ -237,7 +237,7 @@ export function useScanner() {
   const capture = async (automatic = false) => {
     const c = controller.current;
     if (!c?.hasCapacity || editingBatch.current || captureBusy.current || cameraPhaseRef.current !== 'ready' || storageIssueRef.current || !canUseCamera()) return;
-    const { useImageCapture, quality } = settingsRef.current;
+    const { useImageCapture, quality, flipInterface } = settingsRef.current;
     const alternateCapture = !automatic && useImageCapture;
     if (alternateCapture) {
       captureBusy.current = true;
@@ -260,7 +260,7 @@ export function useScanner() {
         if (!mounted.current) return;
         if (automatic) setCountdown('snapped');
         audio.current?.success();
-      }));
+      }, flipInterface));
     }
     catch (err) { setError(`Photo could not be taken: ${message(err)}. Try again.`); }
     finally { finishWaitingForFrame(); }
