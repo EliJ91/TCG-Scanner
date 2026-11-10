@@ -4,7 +4,7 @@ import { useScanner } from './useScanner';
 import { useTheme } from './useTheme';
 import { BlobImage, PhotoViewer, useReviewPhoto } from './PhotoViewer';
 import { createZip, downloadArchive, rotateScan } from './core/export';
-import { archiveFilename, defaultBatchName, filename, maxBatchTarget, message, photoNumber, photoWaitTimes, validBatchTarget, type Batch, type Scan } from './core/types';
+import { archiveFilename, defaultBatchName, filename, maxBatchTarget, message, motionSensitivityRange, photoNumber, photoWaitTimes, validBatchTarget, type Batch, type Scan } from './core/types';
 
 const photoQualities = [
   { value: 0.8, label: 'Lowest' },
@@ -381,7 +381,7 @@ export default function App() {
         <Setting label="Ignore small movements" hint="Turn this up if small vibrations keep restarting the countdown.">
           <div className="range-with-labels">
             <span aria-hidden="true">Less</span>
-            <input aria-label="Ignore small movements" disabled={busy} type="range" min="0.02" max="0.2" step="0.005" value={s.settings.sensitivity} onChange={e => s.setSettings({ ...s.settings, sensitivity: +e.target.value })} />
+            <input aria-label="Ignore small movements" disabled={busy} type="range" {...motionSensitivityRange} value={s.settings.sensitivity} onChange={e => s.setSettings({ ...s.settings, sensitivity: +e.target.value })} />
             <span aria-hidden="true">More</span>
           </div>
         </Setting>

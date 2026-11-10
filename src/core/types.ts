@@ -8,10 +8,11 @@ export interface Settings {
 }
 export const defaults: Settings = {
   captureVersion: 3, cameraId: '', torch: false, focusLocked: false, focusDistance: null,
-  captureMode: 'auto', stackCards: false, zoom: 1, stabilityMs: 100, sensitivity: 0.025, quality: 1,
+  captureMode: 'auto', stackCards: false, zoom: 1, stabilityMs: 100, sensitivity: 0.035, quality: 1,
   volume: 0.6, muted: false, galleryNewestFirst: false, flipInterface: false,
   resolution: 2560, useImageCapture: false, batchTarget: 50,
 };
+export const motionSensitivityRange = { min: 0.03, max: 0.22, step: 0.005 } as const;
 export const photoWaitTimes: readonly number[] = [10, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
 export interface Batch {
   id: string; number: number; name: string; target: number; createdAt: number;

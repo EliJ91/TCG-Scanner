@@ -1,4 +1,4 @@
-import { defaults, photoWaitTimes, validBatchTarget, type Settings } from './types';
+import { defaults, motionSensitivityRange, photoWaitTimes, validBatchTarget, type Settings } from './types';
 const key = 'cardslinger-settings';
 const batchNameKey = 'cardslinger-custom-batch-name';
 type SavedSettings = Partial<Settings> & { lockCamera?: boolean; debug?: boolean };
@@ -17,6 +17,9 @@ export function normalizeSettings(saved?: SavedSettings): Settings {
   next.stabilityMs = Number.isFinite(savedWait)
     ? photoWaitTimes.reduce((closest, wait) => Math.abs(wait - savedWait) < Math.abs(closest - savedWait) ? wait : closest)
     : defaults.stabilityMs;
+  next.sensitivity = Number.isFinite(next.sensitivity)
+    ? Math.max(motionSensitivityRange.min, Math.min(motionSensitivityRange.max, next.sensitivity))
+    : defaults.sensitivity;
   next.quality = Number.isFinite(next.quality)
     ? Math.max(8, Math.min(10, Math.round(next.quality * 10))) / 10
     : defaults.quality;
