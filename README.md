@@ -108,6 +108,8 @@ The controller reserves one slot during capture and storage. The count advances 
 
 The build is a static site. GitHub Actions tests, builds, verifies offline support, and publishes `main` automatically to **GitHub Pages** using `.github/workflows/deploy-pages.yml`. The workflow gets the deployment base path from GitHub Pages. Icons, app scope, and offline caches follow that path. No account or sign-in is needed to use the hosted app. GitHub Pages must have **GitHub Actions** selected as its publishing source.
 
+Online visits to the GitHub Pages deployment are counted with a GoatCounter tracking pixel. The dashboard requires sign-in, and photos stay on the device.
+
 To deploy elsewhere, upload the **contents of `dist/`** to an HTTPS static host (Cloudflare Pages, Netlify, Vercel static hosting, or an HTTPS server). The default build uses the origin root `/`. For a subpath, set `VITE_BASE_PATH=/TCG-Scanner/` before `npm run build`, or run `npm run build -- --base=/TCG-Scanner/`. Run `npm run verify:build` after either build; it checks the actual deployment prefix, PWA paths, and offline cache behavior. Set the base back to `/` for a custom root domain. No server APIs or runtime secrets are needed.
 
 Recommended headers:
@@ -120,7 +122,7 @@ Cache-Control: public, max-age=31536000, immutable # hashed /assets/*
 Permissions-Policy: camera=(self), microphone=()
 ```
 
-If you add a CSP, allow same-origin scripts, inline styles used by React, and `blob:` images.
+If you add a CSP, allow same-origin scripts, inline styles used by React, and `blob:` images. The GitHub Pages deployment also uses `https://jernitcg.goatcounter.com/count` as an image source for analytics.
 
 For LAN development, terminate HTTPS using a certificate trusted by your phone (for example a local HTTPS reverse proxy with a trusted development certificate). Set its upstream to Vite at `http://127.0.0.1:5173`. A trusted HTTPS tunnel is another option. Do not bypass certificate warnings and expect camera permissions to work. Production hosting supplies the simplest trusted HTTPS address.
 
