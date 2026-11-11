@@ -11,9 +11,6 @@ import { zoomRect } from './core/zoom';
 import { defaultBatchName, defaults, message, ordered, validBatchTarget, type AttemptInfo, type Batch, type Scan, type Settings } from './core/types';
 
 export type Session = 'idle' | 'starting' | 'scanning' | 'paused' | 'complete';
-const autoZoomDelayMs = 200;
-const autoZoomStep = 0.1;
-
 export function useScanner() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [batch, setBatch] = useState<Batch>(); const batchRef = useRef<Batch | undefined>(undefined);
@@ -271,13 +268,11 @@ export function useScanner() {
     canvas.height = previewHeight;
     const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
     const gray = new Uint8Array(canvas.width * canvas.height);
-    const wideGray = new Uint8Array(gray.length);
     const card = new CardPresenceDetector();
     const useVideoFrames = typeof video.requestVideoFrameCallback === 'function';
     let frame = 0, lastFrameAt = performance.now(), lastVideoTime = -1, lastUI = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let scheduledDeadline: number | null = null;
-    let centering: { zoom: number; since: number } | undefined;
 
     function schedule(deadline: number | null) {
       if (deadline === scheduledDeadline && (deadline === null || timer !== undefined)) return;
@@ -295,16 +290,13 @@ export function useScanner() {
     function inspect(freshFrame: boolean) {
       const now = performance.now();
       const c = controller.current, motion = detector.current;
-      const { captureMode, zoom, flipInterface, autoAdjustZoom } = settingsRef.current;
+      const { captureMode, zoom, flipInterface } = settingsRef.current;
       if (!video || !canUseCamera() || sessionRef.current !== 'scanning' || !c?.running || cameraPhaseRef.current !== 'ready') {
-        centering = undefined;
         schedule(null);
         return;
       }
-      if (now - lastFrameAt > 650) centering = undefined;
       if (freshFrame) lastFrameAt = now;
       if (captureMode !== 'auto' || zoomAdjusting.current || video.readyState < 2) {
-        centering = undefined;
         schedule(null);
         return;
       }
@@ -317,30 +309,12 @@ export function useScanner() {
       const crop = zoomRect(video.videoWidth, video.videoHeight, zoom);
       ctx.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, canvas.width, canvas.height);
       toLuma(ctx.getImageData(0, 0, canvas.width, canvas.height).data, gray, flipInterface);
-      let presence = card.detect(gray, autoAdjustZoom);
-      if (autoAdjustZoom && zoom > 1 && presence === 'empty') {
-        // A tight crop can miss the card even though the camera sees it at 1×.
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        toLuma(ctx.getImageData(0, 0, canvas.width, canvas.height).data, wideGray, flipInterface);
-        const widerPresence = card.detect(wideGray, true);
-        if (widerPresence === 'card' || widerPresence === 'clipped') presence = 'clipped';
-      }
-      const next = motion.update(gray, now, presence);
+      const next = motion.update(gray, now, card.detect(gray));
       const canCapture = c.hasCapacity && !editingBatch.current && !captureBusy.current && !storageIssueRef.current;
       schedule(canCapture ? motion.deadline : null);
       if (now - lastUI > 100) {
         setReading(next);
         lastUI = now;
-      }
-      const needsMoreRoom = next.presence === 'clipped' || (next.presence === 'uncertain' && !next.awaitingNextCard);
-      if (!autoAdjustZoom || zoom <= 1 || !canCapture || !needsMoreRoom || next.score >= motion.sensitivity) {
-        centering = undefined;
-      } else if (freshFrame) {
-        if (centering?.zoom !== zoom) centering = { zoom, since: now };
-        if (now - centering.since >= autoZoomDelayMs) {
-          centering = undefined;
-          setZoom(Math.round((zoom - autoZoomStep) * 100) / 100, true);
-        }
       }
       if (next.state === 'ready' && canCapture) void capture(true);
     }
@@ -621,15 +595,12 @@ export function useScanner() {
     resetMotion();
     void audio.current?.unlock();
   };
-  const setZoom = (zoom: number, automatic = false) => {
+  const setZoom = (zoom: number) => {
     zoom = Number.isFinite(zoom) ? Math.max(1, Math.min(3, zoom)) : 1;
     if (zoom === settingsRef.current.zoom) return;
     editedPreferences.current.add('zoom');
     camera.current?.setZoom(zoom); updateSettings({ ...settingsRef.current, zoom });
-    if (automatic) {
-      detector.current.reframe();
-      setCountdown(null);
-    } else resetMotion();
+    resetMotion();
   };
   const zoomGesture = (active: boolean) => {
     zoomAdjusting.current = active;

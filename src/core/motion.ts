@@ -4,7 +4,7 @@ import { defaults } from './types';
 export type MotionState = 'waiting' | 'moving' | 'stabilizing' | 'ready';
 export interface MotionReading {
   score: number; noise: number; stability: number; state: MotionState;
-  presence: CardPresence; awaitingNextCard: boolean; cycle: number;
+  awaitingNextCard: boolean; cycle: number;
 }
 
 /** One quiet interval per placement, with optional motion-based rearming for stacks. */
@@ -12,7 +12,6 @@ export class MotionDetector {
   private previous?: Uint8Array;
   private noise = 2;
   private score = 0;
-  private presence: CardPresence = 'uncertain';
   private state: MotionState = 'waiting';
   private stableStart: number | null = null;
   private lastTime: number | null = null;
@@ -34,7 +33,6 @@ export class MotionDetector {
 
   reset(requireRemoval = this.needsRemoval) {
     this.previous = undefined;
-    this.presence = 'uncertain';
     this.state = 'waiting';
     this.stableStart = this.lastTime = null;
     this.needsRemoval = requireRemoval;
@@ -53,18 +51,10 @@ export class MotionDetector {
     }
   }
 
-  reframe() {
-    // The new crop needs a fresh comparison, but any detected card placement still counts.
-    const moved = this.movedSinceCapture;
-    this.reset();
-    this.movedSinceCapture = moved;
-  }
-
   update(gray: Uint8Array, now: number, presence: CardPresence): MotionReading {
     if (this.lastTime !== null && now - this.lastTime > 650) this.reset();
     const previous = this.previous;
     this.lastTime = now;
-    this.presence = presence;
     this.score = 0;
     if (previous) {
       // Remove a uniform exposure shift before counting changed pixels.
@@ -107,7 +97,7 @@ export class MotionDetector {
     if (this.lastTime !== null && now - this.lastTime > 650) this.reset();
     const deadline = this.deadline;
     if (deadline !== null && now >= deadline) this.state = 'ready';
-    return { score: this.score, noise: this.noise, state: this.state, presence: this.presence,
+    return { score: this.score, noise: this.noise, state: this.state,
       awaitingNextCard: this.awaitingNextCard, cycle: this.cycle,
       stability: this.stableStart === null ? 0 : Math.min(1, Math.max(0, (now - this.stableStart) / this.stabilityMs)) };
   }

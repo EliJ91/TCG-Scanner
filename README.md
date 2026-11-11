@@ -64,7 +64,7 @@ Deleting a stored scan reduces the count and pauses the scanner, including a pre
 
 ## Settings
 
-**Menu → Settings** starts with Dark mode, gallery order, Using Card Slinger, Auto-Adjust Zoom, Wait before each photo, and Sounds/Volume. Camera and photo tuning stay inside **Advanced settings**. Selected camera, resolution, zoom, flashlight, capture mode, stacking, and tuning are saved in browser preferences and restored on entry. Old manual focus preferences are cleared so autofocus can operate. A missing remembered camera falls back to the rear camera. **Reset settings** restores defaults and the device's theme preference while keeping photos and the batch. Pause capture before resetting. The old default of 220 ms migrates to 100 ms. Other previously saved delays round to the nearest slider stop.
+**Menu → Settings** starts with Dark mode, gallery order, Using Card Slinger, Wait before each photo, and Sounds/Volume. Camera and photo tuning stay inside **Advanced settings**. Selected camera, resolution, zoom, flashlight, capture mode, stacking, and tuning are saved in browser preferences and restored on entry. Old manual focus preferences are cleared so autofocus can operate. A missing remembered camera falls back to the rear camera. **Reset settings** restores defaults and the device's theme preference while keeping photos and the batch. Pause capture before resetting. The old default of 220 ms migrates to 100 ms. Other previously saved delays round to the nearest slider stop.
 
 | Control | Default | Notes |
 | --- | --- | --- |
@@ -72,7 +72,6 @@ Deleting a stored scan reduces the count and pauses the scanner, including a pre
 | Wait before each photo | 100 ms | 10 ms, then 100 ms increments from 100 ms to 1 second |
 | Ignore small movements | 3.5% | Adjustable from 3% to 22% of the frame changing before the countdown restarts |
 | Zoom | 1× | Pinch the preview for a 1–3× center crop; capture and motion use identical framing |
-| Auto-Adjust Zoom | Off | Zooms out in Auto when the card reaches the edge of the preview or needs centering. At 1×, reposition the card if it still reaches an edge. |
 | Photo quality | Best | Choose Lowest, Balanced, or Best |
 
 | Camera resolution | High (2560 px wide) | Requests a camera frame width. The phone chooses the closest supported size |

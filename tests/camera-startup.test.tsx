@@ -297,61 +297,22 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await tick(100);
     expect(mocks.capture).toHaveBeenCalledOnce();
   });
-  it('zooms out for a clipped stacked card and captures once the full card fits', async () => {
-    const first = printedCard(), next = printedCard(1);
-    const clipped = printedCard(1, 248, 241, { left: 50, top: -8, right: 110, bottom: 96 });
-    const { tick } = await startAutoPreview(100, first, true, { settings: { stackCards: true, autoAdjustZoom: true, zoom: 1.2 } });
-    await tick();
-    await tick(33, first);
-    await tick(100);
-    expect(mocks.capture).toHaveBeenCalledOnce();
-
-    await tick(33, clipped);
-    await tick(33, clipped);
-    await tick(199, clipped);
-    expect(mocks.zoom).toHaveBeenLastCalledWith(1.2);
-    expect(mocks.capture).toHaveBeenCalledOnce();
-    await tick(1, clipped);
-    expect(mocks.zoom).toHaveBeenLastCalledWith(1.1);
-    expect(container.querySelector('video')?.style.transform).toBe('scale(1.1) rotate(180deg)');
-    expect(container.textContent).toContain('Adjust card centering');
-
-    await tick(33, next);
-    await tick(33, next);
-    await tick(100);
-    expect(mocks.capture).toHaveBeenCalledTimes(2);
-    await tick(33, next);
-    await tick(220, next);
-    expect(mocks.capture).toHaveBeenCalledTimes(2);
-  });
-  it('cancels the shutter when the card becomes clipped at minimum zoom', async () => {
-    const card = printedCard();
-    const clipped = printedCard(0, 248, 241, { left: 50, top: -8, right: 110, bottom: 96 });
-    const { tick, scene, video } = await startAutoPreview(100, card, false, { settings: { autoAdjustZoom: true } });
-    await tick();
-    await tick(33, card);
-    expect(container.querySelector('.auto-countdown:not([hidden])')).not.toBeNull();
-    scene(clipped);
-    video.currentTime += 0.033;
-    await tick(100);
-    await tick(250, clipped);
-    expect(container.textContent).toContain('Adjust card centering');
-    expect(mocks.capture).not.toHaveBeenCalled();
-    expect(mocks.zoom).toHaveBeenLastCalledWith(1);
-    await tick(33, card);
-    await tick(33, card);
-    await tick(100);
-    expect(mocks.capture).toHaveBeenCalledOnce();
-  });
-  it.each([[false, 1.5, 1.5], [true, 1, 1], [true, 1.05, 1]])('shows centering guidance with auto zoom %s at %sx', async (autoAdjustZoom, zoom, expectedZoom) => {
+  it('keeps the saved zoom and captures an off-center card after ignoring the retired auto zoom setting', async () => {
     const obstructed = obstructedFrame();
-    const { tick } = await startAutoPreview(100, obstructed, false, { settings: { autoAdjustZoom, zoom } });
+    const savedSettings = { autoAdjustZoom: true, zoom: 1.5 };
+    const { tick } = await startAutoPreview(100, obstructed, false, { settings: savedSettings });
     await tick();
     await tick(220, obstructed);
     await tick(220, obstructed);
-    expect(container.textContent).toContain('Adjust card centering');
-    expect(mocks.zoom).toHaveBeenLastCalledWith(expectedZoom);
+    expect(container.querySelector('.session-state')?.textContent).toBe('Place a card');
+    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!)).not.toHaveProperty('autoAdjustZoom');
     expect(mocks.capture).not.toHaveBeenCalled();
+    const offCenter = printedCard(0, 248, 241, { left: 0, top: 0, right: 30, bottom: 55 });
+    await tick(33, offCenter);
+    await tick(33, offCenter);
+    await tick(100);
+    expect(mocks.capture).toHaveBeenCalledOnce();
+    expect(container.querySelector('video')?.style.transform).toBe('scale(1.5)');
   });
   it('pauses Auto when the scan count opens the gallery and waits for an explicit resume', async () => {
     const card = printedCard();
@@ -704,12 +665,10 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(container.querySelector('.interface-flipped dialog[open]')).not.toBeNull();
     expect(container.querySelector('dialog')?.textContent).not.toContain('Flip Interface');
     await act(async () => toggle('Alternate manual photo method').click());
-    expect(toggle('Auto-Adjust Zoom').checked).toBe(false);
-    await act(async () => toggle('Auto-Adjust Zoom').click());
     const waitSlider = '[aria-label="Wait before each photo"]';
     await input(waitSlider, '4');
     expect(container.querySelector(waitSlider)?.getAttribute('aria-valuetext')).toBe('400 ms');
-    expect(mocks.settings).toHaveBeenLastCalledWith(expect.objectContaining({ batchTarget: 73, useImageCapture: true, stabilityMs: 400, flipInterface: true, autoAdjustZoom: true }));
+    expect(mocks.settings).toHaveBeenLastCalledWith(expect.objectContaining({ batchTarget: 73, useImageCapture: true, stabilityMs: 400, flipInterface: true }));
     await act(async () => root.unmount());
     root = createRoot(container);
     await renderApp();
@@ -722,7 +681,6 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(toggle('Dark mode').checked).toBe(true);
     expect(flipButton().getAttribute('aria-pressed')).toBe('true');
     expect(toggle('Alternate manual photo method').checked).toBe(true);
-    expect(toggle('Auto-Adjust Zoom').checked).toBe(true);
     await click('Done');
     await act(async () => flipButton().click());
     expect(container.querySelector('.interface-flipped')).toBeNull();

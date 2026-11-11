@@ -1,16 +1,15 @@
 import { defaults, motionSensitivityRange, photoWaitTimes, validBatchTarget, type Settings } from './types';
 const key = 'cardslinger-settings';
 const batchNameKey = 'cardslinger-custom-batch-name';
-type SavedSettings = Partial<Settings> & { lockCamera?: boolean; debug?: boolean; focusLocked?: boolean; focusDistance?: number | null };
+type SavedSettings = Partial<Settings> & { lockCamera?: boolean; debug?: boolean; focusLocked?: boolean; focusDistance?: number | null; autoAdjustZoom?: boolean };
 /** Migrate saved settings to the current controls. */
 export function normalizeSettings(saved?: SavedSettings): Settings {
-  const { lockCamera: _lockCamera, debug: _debug, focusLocked: _focusLocked, focusDistance: _focusDistance, ...current } = saved ?? {};
+  const { lockCamera: _lockCamera, debug: _debug, focusLocked: _focusLocked, focusDistance: _focusDistance, autoAdjustZoom: _autoAdjustZoom, ...current } = saved ?? {};
   const next = { ...defaults, ...current };
   const version = current.captureVersion ?? 0;
   if (version < 2 || (version === 2 && next.stabilityMs === 220)) next.stabilityMs = defaults.stabilityMs;
   next.captureVersion = defaults.captureVersion;
   next.stackCards = current.stackCards === true;
-  next.autoAdjustZoom = current.autoAdjustZoom === true;
   next.flipInterface = current.flipInterface === true;
   if (!validBatchTarget(next.batchTarget)) next.batchTarget = defaults.batchTarget;
   next.zoom = Number.isFinite(next.zoom) ? Math.max(1, Math.min(3, next.zoom)) : defaults.zoom;
