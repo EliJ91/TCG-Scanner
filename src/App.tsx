@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
-import { ArrowDownToLine, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Focus, Images, Layers3, Menu, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X, Zap } from 'lucide-react';
+import { ArrowDownToLine, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Coffee, Focus, Images, Layers3, Menu, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X, Zap } from 'lucide-react';
 import { useScanner } from './useScanner';
 import { useTheme } from './useTheme';
 import { BlobImage, PhotoViewer, useReviewPhoto } from './PhotoViewer';
@@ -283,31 +283,29 @@ export default function App() {
   return <div className={s.settings.flipInterface ? 'interface-flipped' : undefined}>
     <main className="scanner-screen" aria-label="Card scanner">
       <section className="scanner" aria-label="Scanner">
-        <div className="preview-shell">
-          <div className={`viewfinder ${s.cameraSize.width ? 'has-camera' : ''}`}>
-            <div className="camera-feed" style={{ width: `${Math.min(1, ratio / .75) * 100}%`, height: `${Math.min(1, .75 / ratio) * 100}%` }}
-              onPointerDown={beginZoom} onPointerMove={moveZoom} onPointerUp={finishZoom}
-              onPointerCancel={finishZoom} onLostPointerCapture={finishZoom}>
-              <video ref={s.videoRef} style={{ transform: `scale(${s.settings.zoom})${s.settings.flipInterface ? ' rotate(180deg)' : ''}` }} playsInline muted autoPlay aria-label="Live camera preview" />
-            </div>
-            <div className="viewfinder-toolbar">
-              <button className="batch-name-trigger" aria-label="Edit batch name" title="Edit batch name" onClick={editName}><span>{s.batchName}</span><Pencil size={13} /></button>
-              <div className="viewfinder-actions">
-                {s.cameraPhase === 'ready' && s.capabilities.torch && (
-                  <button type="button" className="viewfinder-button flashlight-trigger" aria-label="Flashlight" aria-pressed={s.settings.torch} title="Flashlight" onClick={() => void s.control({ torch: !s.settings.torch })}>
-                    <Zap size={21} />
-                  </button>
-                )}
-                <button className="viewfinder-button" aria-label="Open menu" aria-haspopup="dialog" aria-expanded={showMenu} onClick={() => setShowMenu(true)}>
-                  <Menu size={22} />{failedCount > 0 && <span className="menu-attention" aria-label={`${failedCount} scan${failedCount === 1 ? '' : 's'} need review`} />}
-                </button>
-              </div>
-            </div>
-            {!s.cameraSize.width && <div className="camera-placeholder"><ScanLine size={35} strokeWidth={1.25} /><p>{s.cameraPhase === 'requesting' ? 'Choose Allow to use your camera' : 'Enable your camera to begin'}</p></div>}
-            <div className={`auto-countdown${snapped ? ' is-snapped' : ''}`} hidden={!showCountdown} aria-hidden="true">
-              <div ref={countdownFill} />
-            </div>
+        <div className="scanner-toolbar">
+          <button type="button" className="batch-name-trigger" aria-label="Edit batch name" title="Edit batch name" onClick={editName}><span>{s.batchName}</span><Pencil size={13} /></button>
+          <div className="scanner-toolbar-actions">
+            {s.cameraPhase === 'ready' && s.capabilities.torch && (
+              <button type="button" className="scanner-toolbar-button flashlight-trigger" aria-label="Flashlight" aria-pressed={s.settings.torch} title="Flashlight" onClick={() => void s.control({ torch: !s.settings.torch })}>
+                <Zap size={21} />
+              </button>
+            )}
+            <button type="button" className="scanner-toolbar-button" aria-label="Open menu" aria-haspopup="dialog" aria-expanded={showMenu} onClick={() => setShowMenu(true)}>
+              <Menu size={22} />{failedCount > 0 && <span className="menu-attention" aria-label={`${failedCount} scan${failedCount === 1 ? '' : 's'} need review`} />}
+            </button>
           </div>
+        </div>
+        <div className={`viewfinder ${s.cameraSize.width ? 'has-camera' : ''}`}>
+          <div className="camera-feed" style={{ width: `${Math.min(1, ratio / .75) * 100}%`, height: `${Math.min(1, .75 / ratio) * 100}%` }}
+            onPointerDown={beginZoom} onPointerMove={moveZoom} onPointerUp={finishZoom}
+            onPointerCancel={finishZoom} onLostPointerCapture={finishZoom}>
+            <video ref={s.videoRef} style={{ transform: `scale(${s.settings.zoom})${s.settings.flipInterface ? ' rotate(180deg)' : ''}` }} playsInline muted autoPlay aria-label="Live camera preview" />
+          </div>
+          {!s.cameraSize.width && <div className="camera-placeholder"><ScanLine size={35} strokeWidth={1.25} /><p>{s.cameraPhase === 'requesting' ? 'Choose Allow to use your camera' : 'Enable your camera to begin'}</p></div>}
+        </div>
+        <div className={`auto-countdown${snapped ? ' is-snapped' : ''}`} hidden={!showCountdown} aria-hidden="true">
+          <div ref={countdownFill} />
         </div>
         <div className="scanner-status">
           <span className={`session-state ${s.session === 'scanning' ? 'is-live' : ''} ${failedCount ? 'needs-attention' : ''}`} role="status"><i /><span>{scannerStatus}</span></span>
@@ -340,7 +338,13 @@ export default function App() {
           <button onClick={() => openFromMenu(s.stop)}><Square size={18} /><span>Stop camera</span><ChevronRight size={17} /></button>
         </>}
       </nav>
-      <div className="menu-footer">{exportButton()}{busy && <p className="setting-hint">Pause scanning to export or edit images.</p>}</div>
+      <div className="menu-footer">
+        {exportButton()}
+        <a className="button outline kofi-button" href="https://ko-fi.com/jernitcg" target="_blank" rel="noopener noreferrer">
+          <Coffee size={16} aria-hidden="true" />Support on Ko-fi
+        </a>
+        {busy && <p className="setting-hint">Pause scanning to export or edit images.</p>}
+      </div>
     </Dialog>}
 
     {showBatch && <Dialog title="Batch Settings" close={() => setShowBatch(false)}>
@@ -415,7 +419,7 @@ export default function App() {
     </div><div className="dialog-footer"><button className="button outline" disabled={!s.loaded || busy || s.capturing || working || s.cameraPhase === 'requesting'} title={busy ? 'Pause scanning to reset settings' : 'Restore defaults and keep your photos'} onClick={() => void safe(async () => { await s.resetSettings(); theme.setDark(window.matchMedia('(prefers-color-scheme: dark)').matches); })}>Reset settings</button><button className="button dark" onClick={() => setShowSettings(false)}>Done</button></div></Dialog>}
     {showHelp && <Dialog title="How to scan" close={() => setShowHelp(false)}><div className="guide-content"><p className="dialog-intro">Use Auto for hands-free photos, or Manual to take each photo yourself.</p>{[
       ['Position your phone', 'Keep your phone steady above one card. Allow camera access when asked. Keep all four card edges visible, with a little space around them. Avoid glare from lights.'],
-      ['Choose your batch', 'Open Menu → Batch Settings to choose how many cards to scan. Tap the name at the top of the camera view to change it. Pinch the camera view to zoom in or out.'],
+      ['Choose your batch', 'Open Menu → Batch Settings to choose how many cards to scan. Tap the name above the camera view to change it. Pinch the camera view to zoom in or out.'],
       ['Take your photos', 'In Auto, place a card and tap Start scanning. The camera dings when the green bar fills and the photo is taken. Remove each card before placing the next, or turn on Using Card Slinger in Settings to stack cards. In Manual, tap Take photo.'],
       ['Check and export', 'Tap the scan count to view your photos. When the batch is full, scanning stops and an alarm plays. Choose Export ZIP to download the batch.'],
     ].map(([title, text], i) => <div className="guide-step" key={title}><span>{String(i + 1).padStart(2,'0')}</span><div><h3>{title}</h3><p>{text}</p></div></div>)}<div className="guide-callout"><ShieldCheck size={18} /><p>Scans stay in this browser’s local storage. Download your batch before clearing browser data. When resuming a saved batch in Auto with Using Card Slinger off, clear the camera view before placing a card.</p></div></div><div className="dialog-footer"><button className="button primary" onClick={() => setShowHelp(false)}>Ready to scan <ArrowRight size={16} /></button></div></Dialog>}

@@ -515,7 +515,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await renderApp();expect(mocks.start).toHaveBeenCalledWith(3840,'rear-wide');
     expect(mocks.control).toHaveBeenCalledWith({torch:true});expect(mocks.focus).not.toHaveBeenCalled();
     expect(mocks.lock).not.toHaveBeenCalled();
-    const flashlight = container.querySelector<HTMLButtonElement>('main .viewfinder button[aria-label="Flashlight"]')!;
+    const flashlight = container.querySelector<HTMLButtonElement>('.scanner-toolbar button[aria-label="Flashlight"]')!;
     expect(flashlight.getAttribute('aria-pressed')).toBe('true');
     await act(async () => flashlight.click());
     expect(mocks.control).toHaveBeenLastCalledWith({ torch: false });

@@ -27,7 +27,7 @@ Fonts and app assets are bundled locally. Use `npm ci` for a reproducible instal
 ## Use the scanner
 
 1. Mount the phone securely above a plain surface. Use diffuse light from the sides. Center one card with background visible around it. Fill roughly 20–80% of the camera area with the card.
-2. The camera preview opens as soon as the app opens. Choose **Allow** if the browser asks. If it requires a tap, use **Enable camera**. Set the quantity in **Menu → Batch Settings**. Tap the batch name/pencil in the camera's upper-left corner to rename it at any time, including before the first photo.
+2. The camera preview opens as soon as the app opens. Choose **Allow** if the browser asks. If it requires a tap, use **Enable camera**. Set the quantity in **Menu → Batch Settings**. Tap the batch name above the camera view to rename it at any time, including before the first photo.
 3. Choose **Auto** or **Manual**. In Auto, place the first card and tap **Start scanning**. The green bar fills during the stillness delay. Remove each card and briefly show the bare surface before placing the next one, or turn on **Using Card Slinger** in Settings to place each new card on top. Set **Wait before each photo** from **10 ms to 1 second** in Settings. In Manual, tap **Take photo**.
 4. Pinch the camera view to zoom in or out and frame the photo. The camera focuses automatically. If the lightning bolt appears beside the menu, tap it to turn the flashlight on or off.
 5. The camera dings when it takes a photo. The completion alarm plays after the batch target is saved.
