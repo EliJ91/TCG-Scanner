@@ -103,13 +103,13 @@ function BatchExport({ batch, scans, newestFirst, disabled, rename, close, compl
 }
 
 export default function App() {
-  const [showGallery, setShowGallery] = useState(false);
-  const s = useScanner(showGallery);
+  const s = useScanner();
   const theme = useTheme();
   const [showMenu, setShowMenu] = useState(false);
   const [showBatch, setShowBatch] = useState(false);
   const [quantityDraft, setQuantityDraft] = useState('');
   const [quantityError, setQuantityError] = useState('');
+  const [showGallery, setShowGallery] = useState(false);
   const [gallerySelection, setGallerySelection] = useState<Set<string>>();
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false); const [selected, setSelected] = useState<string>();
@@ -235,9 +235,16 @@ export default function App() {
     </div>}
 
   </>;
-  const openMenu = () => {
+  const pauseAuto = () => {
     if (autoMode && busy) s.pause();
+  };
+  const openMenu = () => {
+    pauseAuto();
     setShowMenu(true);
+  };
+  const openGallery = () => {
+    pauseAuto();
+    setShowGallery(true);
   };
   const openFromMenu = (open: () => void) => { setShowMenu(false); open(); };
   const failedCount = s.attempts.length;
@@ -353,7 +360,7 @@ export default function App() {
         </div>
         <div className="scanner-status">
           <span className={`session-state ${s.session === 'scanning' ? 'is-live' : ''} ${failedCount ? 'needs-attention' : ''}`} role="status"><i /><span>{scannerStatus}</span></span>
-          <button type="button" className="scan-count" aria-haspopup="dialog" aria-expanded={showGallery} aria-label={`Open gallery, ${count} saved photos out of ${quantity}`} onClick={() => setShowGallery(true)}>
+          <button type="button" className="scan-count" aria-haspopup="dialog" aria-expanded={showGallery} aria-label={`Open gallery, ${count} saved photos out of ${quantity}`} onClick={openGallery}>
             <Images size={14} aria-hidden="true" /><span>{count}<span> / {quantity}</span></span>
           </button>
         </div>
@@ -373,7 +380,7 @@ export default function App() {
     {showMenu && <Dialog title="Menu" close={() => setShowMenu(false)}>
       <nav className="menu-list" aria-label="Scanner menu">
         <button onClick={() => openFromMenu(openBatch)}><Layers3 size={20} /><span>Batch Settings<small>{count} / {quantity} cards scanned</small></span><ChevronRight size={17} /></button>
-        <button onClick={() => openFromMenu(() => setShowGallery(true))}><Images size={20} /><span>Gallery<small>{failedCount ? `${failedCount} need review` : `${count} saved`}</small></span><ChevronRight size={17} /></button>
+        <button onClick={() => openFromMenu(openGallery)}><Images size={20} /><span>Gallery<small>{failedCount ? `${failedCount} need review` : `${count} saved`}</small></span><ChevronRight size={17} /></button>
         <button onClick={() => openFromMenu(() => setShowSettings(true))}><Settings2 size={20} /><span>Settings</span><ChevronRight size={17} /></button>
         <button onClick={() => openFromMenu(() => setShowHelp(true))}><CircleHelp size={20} /><span>Scanning guide</span><ChevronRight size={17} /></button>
         {s.cameraSize.width > 0 && <>

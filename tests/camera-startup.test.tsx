@@ -43,7 +43,6 @@ async function renderApp() { await act(async () => root.render(<App />)); }
 async function click(label: string) { await act(async () => button(label).click()); }
 async function startAutoPreview(stabilityMs: number, initial: Uint8Array, flipInterface = false, options: {
   settings?: Partial<Settings>;
-  configureVideo?: (video: HTMLVideoElement) => void;
 } = {}) {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
   let frame!: FrameRequestCallback;
@@ -58,7 +57,6 @@ async function startAutoPreview(stabilityMs: number, initial: Uint8Array, flipIn
   await renderApp();
   const video = container.querySelector('video')!;
   Object.defineProperties(video, { videoWidth: { value: 1280 }, videoHeight: { value: 720 }, readyState: { value: 4 } });
-  options.configureVideo?.(video);
   await click('Start scanning');
   const tick = (ms = 0, values?: Uint8Array) => act(async () => {
     await vi.advanceTimersByTimeAsync(ms);
@@ -335,31 +333,28 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.zoom).toHaveBeenLastCalledWith(expectedZoom);
     expect(mocks.capture).not.toHaveBeenCalled();
   });
-  it('keeps Auto scanning in the scan-count gallery while video presentation callbacks are suspended', async () => {
-    vi.stubGlobal('URL', class extends URL {
-      static createObjectURL = vi.fn(() => 'blob:gallery-scan');
-      static revokeObjectURL = vi.fn();
-    });
-    const requestVideoFrame = vi.fn(() => 1), cancelVideoFrame = vi.fn();
+  it('pauses Auto when the scan count opens the gallery and waits for an explicit resume', async () => {
     const card = printedCard();
-    const { tick } = await startAutoPreview(100, card, false, {
-      configureVideo: video => Object.defineProperties(video, {
-        requestVideoFrameCallback: { value: requestVideoFrame },
-        cancelVideoFrameCallback: { value: cancelVideoFrame },
-      }),
-    });
-    expect(requestVideoFrame).toHaveBeenCalledOnce();
-    await click('0 / 50');
-    expect(cancelVideoFrame).toHaveBeenCalledWith(1);
+    const { tick } = await startAutoPreview(100, card);
+    await tick();
     await tick(33, card);
+    expect(container.querySelector('.auto-countdown:not([hidden])')).not.toBeNull();
+    await click('0 / 50');
+    expect(container.querySelector('dialog[open] h2')?.textContent).toBe('Gallery');
+    expect(container.textContent).toContain('Scanning paused');
+    expect(container.querySelector('.auto-countdown:not([hidden])')).toBeNull();
+    await tick(150, card);
+    expect(mocks.capture).not.toHaveBeenCalled();
+    expect(mocks.stop).not.toHaveBeenCalled();
+    await act(async () => container.querySelector<HTMLButtonElement>('dialog[open] [aria-label="Close dialog"]')!.click());
+    await tick(150, card);
+    expect(mocks.capture).not.toHaveBeenCalled();
+    await click('Resume scanning');
+    await tick();
     await tick(33, card);
     await tick(100);
     expect(mocks.capture).toHaveBeenCalledOnce();
-    expect(container.querySelector('dialog[open] .scan-tile')).not.toBeNull();
-    expect(mocks.stop).not.toHaveBeenCalled();
-    await act(async () => container.querySelector<HTMLButtonElement>('dialog[open] [aria-label="Close dialog"]')!.click());
-    expect(requestVideoFrame).toHaveBeenCalledTimes(2);
-    expect(button('Pause scanning').disabled).toBe(false);
+    expect(mocks.start).toHaveBeenCalledOnce();
   });
   it('starts a 10 ms countdown on confirmed stillness and cancels it when a fresh frame shows movement', async () => {
     const { tick, scene, video } = await startAutoPreview(10, printedCard(), true);

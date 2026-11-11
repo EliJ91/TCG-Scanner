@@ -14,7 +14,7 @@ export type Session = 'idle' | 'starting' | 'scanning' | 'paused' | 'complete';
 const autoZoomDelayMs = 200;
 const autoZoomStep = 0.1;
 
-export function useScanner(galleryOpen: boolean) {
+export function useScanner() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [batch, setBatch] = useState<Batch>(); const batchRef = useRef<Batch | undefined>(undefined);
   const [batchName, setBatchName] = useState(() => cachedBatchName() ?? defaultBatchName(1));
@@ -272,12 +272,10 @@ export function useScanner(galleryOpen: boolean) {
     const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
     const gray = new Uint8Array(canvas.width * canvas.height);
     const card = new CardPresenceDetector();
-    // An open gallery can cover the video and stop presentation callbacks while playback continues.
-    const useVideoFrames = !galleryOpen && typeof video.requestVideoFrameCallback === 'function';
-    let frame = 0, lastFrameAt = performance.now(), lastUI = 0;
-    let lastVideoTime = galleryOpen ? video.currentTime : -1;
+    const useVideoFrames = typeof video.requestVideoFrameCallback === 'function';
+    let frame = 0, lastFrameAt = performance.now(), lastVideoTime = -1, lastUI = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let scheduledDeadline: number | null | undefined;
+    let scheduledDeadline: number | null = null;
     let centering: { zoom: number; since: number } | undefined;
 
     function schedule(deadline: number | null) {
@@ -363,7 +361,7 @@ export function useScanner(galleryOpen: boolean) {
       clearInterval(watchdog);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, cameraPhase, galleryOpen]);
+  }, [session, cameraPhase]);
 
   const enableCamera = (deviceId?: string): Promise<void> => {
     if (!canUseCamera()) return Promise.reject(new CameraAccessError('cancelled', 'Camera startup interrupted.'));
