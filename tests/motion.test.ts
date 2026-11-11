@@ -12,6 +12,19 @@ describe('card-gated motion', () => {
   it.each([248, 45])('distinguishes a silver-bordered card from a plain surface at brightness %i', level => {
     expect(presence.detect(emptyFrame(level))).toBe('empty');
     expect(presence.detect(printedCard(0, level))).toBe('card');
+    expect(presence.detect(printedCard(0, level), true)).toBe('card');
+  });
+
+  it.each([
+    { left: 50, top: -8, right: 110, bottom: 96 },
+    { left: 50, top: 24, right: 110, bottom: 128 },
+    { left: -8, top: 24, right: 110, bottom: 96 },
+    { left: 50, top: 24, right: 168, bottom: 96 },
+  ])('recognizes clipping even with enough printed detail to detect a card', bounds => {
+    const frame = printedCard(0, 248, 241, bounds);
+    expect(presence.detect(frame)).toBe('card');
+    expect(presence.detect(frame, true)).toBe('clipped');
+    expect(presence.detect(frame.slice().reverse(), true)).toBe('clipped');
   });
 
   it('recognizes a shadowed bare surface in either orientation', () => {

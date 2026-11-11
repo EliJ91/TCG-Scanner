@@ -21,11 +21,12 @@ export function obstructedFrame() {
   return frame;
 }
 
-export function printedCard(seed = 0, background = 248, border = 241) {
+export function printedCard(seed = 0, background = 248, border = 241, bounds = { left: 50, top: 24, right: 110, bottom: 96 }) {
+  const { left, top, right, bottom } = bounds;
   const frame = emptyFrame(background);
-  for (let y = 24; y < 96; y++) {
-    for (let x = 50; x < 110; x++) {
-      const artwork = x >= 53 && x < 107 && y >= 28 && y < 92;
+  for (let y = Math.max(0, top); y < Math.min(previewHeight, bottom); y++) {
+    for (let x = Math.max(0, left); x < Math.min(previewWidth, right); x++) {
+      const artwork = x >= left + 3 && x < right - 3 && y >= top + 4 && y < bottom - 4;
       frame[y * previewWidth + x] = artwork ? 25 + (x * 23 + y * 17 + seed * 37) % 163 : border;
     }
   }

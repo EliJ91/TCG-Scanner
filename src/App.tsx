@@ -11,6 +11,8 @@ const photoQualities = [
   { value: 0.9, label: 'Balanced' },
   { value: 1, label: 'Best' },
 ];
+const photoHoldMs = 450;
+const photoHoldSlop = 10;
 
 function Dialog({ title, children, close, wide = false }: { title: string; children: ReactNode; close: () => void; wide?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -111,6 +113,8 @@ export default function App() {
   const [quantityError, setQuantityError] = useState('');
   const [showGallery, setShowGallery] = useState(false);
   const [gallerySelection, setGallerySelection] = useState<Set<string>>();
+  const galleryHold = useRef<{ pointerId: number; x: number; y: number; timer: ReturnType<typeof setTimeout> } | undefined>(undefined);
+  const heldPhoto = useRef<string | undefined>(undefined);
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false); const [selected, setSelected] = useState<string>();
   const [clearPrompt, setClearPrompt] = useState<'manual' | DownloadResult>();
@@ -124,6 +128,7 @@ export default function App() {
     const handler = (e: Event) => { e.preventDefault(); setInstallPrompt(e as Event & { prompt(): Promise<void> }); };
     window.addEventListener('beforeinstallprompt', handler); return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
+  useEffect(() => () => clearTimeout(galleryHold.current?.timer), []);
   const busy = s.session === 'starting' || s.session === 'scanning';
   const autoMode = s.settings.captureMode === 'auto';
   const editingDisabled = busy || s.pending > 0 || working;
@@ -169,12 +174,46 @@ export default function App() {
   };
   const safe = async (action: () => Promise<unknown>) => { setWorking(true); try { await action(); } catch (err) { s.setError(message(err)); } finally { setWorking(false); } };
   const exportButton = () => <button className="button dark" aria-label={`Export ZIP, ${count} saved photos`} disabled={!count || editingDisabled} onClick={() => setExportOpen(true)}><ArrowDownToLine size={17} />Export ZIP<span className="button-count">{count}</span></button>;
-  const closeGallery = () => { setShowGallery(false); setGallerySelection(undefined); };
-  const selectPhotos = () => {
-    if (busy) s.pause();
-    setGallerySelection(new Set());
+  const cancelPhotoHold = (pointerId?: number) => {
+    const hold = galleryHold.current;
+    if (hold && (pointerId === undefined || hold.pointerId === pointerId)) {
+      clearTimeout(hold.timer);
+      galleryHold.current = undefined;
+    }
   };
+  const closeGallery = () => {
+    cancelPhotoHold();
+    heldPhoto.current = undefined;
+    setShowGallery(false);
+    setGallerySelection(undefined);
+  };
+  const selectPhoto = (id: string) => {
+    cancelPhotoHold();
+    heldPhoto.current = id;
+    if (busy) s.pause();
+    setGallerySelection(new Set([id]));
+  };
+  const beginPhotoHold = (event: PointerEvent<HTMLButtonElement>, id: string) => {
+    cancelPhotoHold();
+    if (event.button !== 0 || !event.isPrimary) return;
+    heldPhoto.current = undefined;
+    if (gallerySelection) return;
+    galleryHold.current = {
+      pointerId: event.pointerId, x: event.clientX, y: event.clientY,
+      timer: setTimeout(() => selectPhoto(id), photoHoldMs),
+    };
+  };
+  const movePhotoHold = (event: PointerEvent<HTMLButtonElement>) => {
+    const hold = galleryHold.current;
+    if (hold?.pointerId === event.pointerId && Math.hypot(event.clientX - hold.x, event.clientY - hold.y) > photoHoldSlop) {
+      cancelPhotoHold(event.pointerId);
+    }
+  };
+  const endPhotoHold = (event: PointerEvent<HTMLButtonElement>) => cancelPhotoHold(event.pointerId);
   const openScan = (id: string) => {
+    const held = heldPhoto.current === id;
+    heldPhoto.current = undefined;
+    if (held) return;
     if (!gallerySelection) { setSelected(id); return; }
     setGallerySelection(previous => {
       const next = new Set(previous);
@@ -204,8 +243,13 @@ export default function App() {
     {count ? <div className="gallery-grid">{galleryScans.map((scan, index) => {
       const imageIndex = captureIndex(index);
       const picked = gallerySelection?.has(scan.id);
-      return <button type="button" className="scan-tile" key={scan.id} aria-pressed={picked} onClick={() => openScan(scan.id)}>
-        <div className="scan-image"><BlobImage blob={scan.thumbnail ?? scan.blob} alt={`Scanned card ${imageIndex + 1}`} loading="lazy" /><span aria-hidden="true">{picked !== false && <Check size={12} />}</span></div>
+      return <button type="button" className="scan-tile" key={scan.id} aria-pressed={picked}
+        onPointerDown={event => beginPhotoHold(event, scan.id)} onPointerMove={movePhotoHold}
+        onPointerUp={endPhotoHold} onPointerCancel={endPhotoHold} onPointerLeave={endPhotoHold}
+        onContextMenu={event => { event.preventDefault(); if (!gallerySelection) selectPhoto(scan.id); }}
+        onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') heldPhoto.current = undefined; }}
+        onClick={() => openScan(scan.id)}>
+        <div className="scan-image"><BlobImage blob={scan.thumbnail ?? scan.blob} alt={`Scanned card ${imageIndex + 1}`} loading="lazy" draggable={false} /><span aria-hidden="true">{picked !== false && <Check size={12} />}</span></div>
         <span className="scan-name">{photoNumber(imageIndex)}</span><span className="scan-meta">{scan.width && scan.height ? `${scan.width} × ${scan.height}` : 'JPEG'}</span>
       </button>;
     })}</div> : <div className="gallery-empty"><div className="empty-icon"><Images size={26} strokeWidth={1.5} /></div><strong>Your collection starts here</strong><p>Saved photos appear here.</p></div>}
@@ -316,6 +360,7 @@ export default function App() {
   else if (s.session === 'scanning') {
     if (!autoMode) scannerStatus = 'Manual · tap to take a photo';
     else if (showCountdown && !snapped) scannerStatus = 'Hold still';
+    else if (s.reading?.presence === 'clipped') scannerStatus = 'Adjust card centering';
     else if (s.reading?.awaitingNextCard) scannerStatus = s.settings.stackCards ? 'Place the next card on top' : 'Remove the card';
     else if (s.reading?.state === 'moving') scannerStatus = 'Card moving';
     else scannerStatus = s.reading?.presence === 'uncertain' ? 'Adjust card centering' : 'Place a card';
@@ -419,11 +464,11 @@ export default function App() {
 
     {showGallery && <Dialog title="Gallery" close={closeGallery} wide>
       <div className="gallery-heading">
-        <p>{count} saved{busy ? ' · pause to edit' : ''}</p>
+        <p>{count} saved{busy ? ' · pause to edit' : ''}{!gallerySelection && count > 0 && <small>Touch and hold a photo to select it.</small>}</p>
         <div className="gallery-actions">
           {gallerySelection
             ? <button type="button" className="button outline" onClick={() => setGallerySelection(undefined)}>Done</button>
-            : <>{count > 0 && <button type="button" className="button outline" onClick={selectPhotos}>Select</button>}{exportButton()}</>}
+            : exportButton()}
         </div>
       </div>
       {gallery()}
@@ -445,7 +490,7 @@ export default function App() {
       <Toggle label="Dark mode" checked={theme.dark} onChange={theme.setDark} />
       <Toggle label="Newest first in gallery and ZIP" hint="Show recent photos at the top and number them first in the ZIP." checked={newestFirst} onChange={galleryNewestFirst => s.setSettings({ ...s.settings, galleryNewestFirst })} />
       <Toggle label="Using Card Slinger" hint="In Auto, place the next card on top. The camera takes a photo when it settles." checked={s.settings.stackCards} onChange={stackCards => s.setSettings({ ...s.settings, stackCards })} />
-      <Toggle label="Auto-Adjust Zoom" hint="Zoom out a little in Auto when the card needs centering." checked={s.settings.autoAdjustZoom} onChange={autoAdjustZoom => s.setSettings({ ...s.settings, autoAdjustZoom })} />
+      <Toggle label="Auto-Adjust Zoom" hint="Keep the whole card in view before taking a photo in Auto." checked={s.settings.autoAdjustZoom} onChange={autoAdjustZoom => s.setSettings({ ...s.settings, autoAdjustZoom })} />
       <Setting label="Wait before each photo" value={waitLabel} hint="Auto takes a photo once movement stops and the green bar fills.">
         <input aria-label="Wait before each photo" aria-valuetext={waitLabel} type="range" min="0" max={photoWaitTimes.length - 1} step="1" list="photo-wait-stops" value={photoWaitTimes.indexOf(s.settings.stabilityMs)} onChange={event => s.setSettings({ ...s.settings, stabilityMs: photoWaitTimes[event.currentTarget.valueAsNumber] })} />
         <datalist id="photo-wait-stops">{photoWaitTimes.map((wait, index) => <option key={wait} value={index} />)}</datalist>

@@ -34,7 +34,7 @@ Fonts and app assets are bundled locally. Use `npm ci` for a reproducible instal
 6. Tap the scan count to open the **Gallery**. Open a photo to rotate it or swipe left or right to browse. Pinch to zoom, then drag to pan. Choose **Export ZIP** from the menu or gallery and edit the batch name before downloading. It defaults to `Batch#001`, `Batch#002`, and so on, and your edit is remembered for later exports. The archive uses that name, such as `Batch#001.zip` or `Trade night.zip`. Photos are numbered `0001.jpg`, `0002.jpg`, and so on in the selected gallery order.
 7. Tap **Download ZIP** to save the archive. The app offers to start a fresh batch after requesting the download. Check your archive before confirming.
 
-The centered scanner includes an editable batch name, camera view with pinch zoom, capture mode, scan count, and capture control. Tap the count to open the Gallery. Tap **Select** to mark photos, then **Delete selected** to remove them together. **Menu** gives access to Batch Settings, Gallery, downloads, settings, and the guide. Opening the Gallery or Menu pauses Auto until you tap **Resume scanning**. The camera stays open. Thumbnails render only while the gallery is open.
+The centered scanner includes an editable batch name, camera view with pinch zoom, capture mode, scan count, and capture control. Tap the count to open the Gallery. Touch and hold a photo to select it, then tap other photos to add them. Choose **Delete selected** to remove them together. **Menu** gives access to Batch Settings, Gallery, downloads, settings, and the guide. Opening the Gallery or Menu pauses Auto until you tap **Resume scanning**. The camera stays open. Thumbnails render only while the gallery is open.
 
 Toggle dark/light mode under **Menu → Settings → Dark mode**. Dark mode uses a pure black background and neutral gray surfaces, with monochrome controls. The initial theme follows your device preference and your selection is remembered locally.
 
@@ -72,7 +72,7 @@ Deleting a stored scan reduces the count and pauses the scanner, including a pre
 | Wait before each photo | 100 ms | 10 ms, then 100 ms increments from 100 ms to 1 second |
 | Ignore small movements | 3.5% | Adjustable from 3% to 22% of the frame changing before the countdown restarts |
 | Zoom | 1× | Pinch the preview for a 1–3× center crop; capture and motion use identical framing |
-| Auto-Adjust Zoom | Off | Zooms out in small steps in Auto when a settled card needs centering, down to 1× |
+| Auto-Adjust Zoom | Off | Zooms out in Auto when the card reaches the edge of the preview or needs centering. At 1×, reposition the card if it still reaches an edge. |
 | Photo quality | Best | Choose Lowest, Balanced, or Best |
 
 | Camera resolution | High (2560 px wide) | Requests a camera frame width. The phone chooses the closest supported size |

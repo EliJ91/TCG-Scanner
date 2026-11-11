@@ -297,20 +297,21 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await tick(100);
     expect(mocks.capture).toHaveBeenCalledOnce();
   });
-  it('zooms out a step for a settled obstruction and captures the next stacked card once framed', async () => {
-    const first = printedCard(), next = printedCard(1), obstructed = obstructedFrame();
+  it('zooms out for a clipped stacked card and captures once the full card fits', async () => {
+    const first = printedCard(), next = printedCard(1);
+    const clipped = printedCard(1, 248, 241, { left: 50, top: -8, right: 110, bottom: 96 });
     const { tick } = await startAutoPreview(100, first, true, { settings: { stackCards: true, autoAdjustZoom: true, zoom: 1.2 } });
     await tick();
     await tick(33, first);
     await tick(100);
     expect(mocks.capture).toHaveBeenCalledOnce();
 
-    await tick(33, obstructed);
-    await tick(33, obstructed);
-    await tick(199, obstructed);
+    await tick(33, clipped);
+    await tick(33, clipped);
+    await tick(199, clipped);
     expect(mocks.zoom).toHaveBeenLastCalledWith(1.2);
     expect(mocks.capture).toHaveBeenCalledOnce();
-    await tick(1, obstructed);
+    await tick(1, clipped);
     expect(mocks.zoom).toHaveBeenLastCalledWith(1.1);
     expect(container.querySelector('video')?.style.transform).toBe('scale(1.1) rotate(180deg)');
     expect(container.textContent).toContain('Adjust card centering');
@@ -322,6 +323,25 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await tick(33, next);
     await tick(220, next);
     expect(mocks.capture).toHaveBeenCalledTimes(2);
+  });
+  it('cancels the shutter when the card becomes clipped at minimum zoom', async () => {
+    const card = printedCard();
+    const clipped = printedCard(0, 248, 241, { left: 50, top: -8, right: 110, bottom: 96 });
+    const { tick, scene, video } = await startAutoPreview(100, card, false, { settings: { autoAdjustZoom: true } });
+    await tick();
+    await tick(33, card);
+    expect(container.querySelector('.auto-countdown:not([hidden])')).not.toBeNull();
+    scene(clipped);
+    video.currentTime += 0.033;
+    await tick(100);
+    await tick(250, clipped);
+    expect(container.textContent).toContain('Adjust card centering');
+    expect(mocks.capture).not.toHaveBeenCalled();
+    expect(mocks.zoom).toHaveBeenLastCalledWith(1);
+    await tick(33, card);
+    await tick(33, card);
+    await tick(100);
+    expect(mocks.capture).toHaveBeenCalledOnce();
   });
   it.each([[false, 1.5, 1.5], [true, 1, 1], [true, 1.05, 1]])('shows centering guidance with auto zoom %s at %sx', async (autoAdjustZoom, zoom, expectedZoom) => {
     const obstructed = obstructedFrame();
@@ -574,7 +594,8 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(title()).toBe('0004');
     expect(viewer().querySelector('img')?.style.transform).toBe('translate(0px, 0px) scale(1)');
   });
-  it('deletes only the selected gallery photos after confirmation and can retry a failed delete', async () => {
+  it('selects photos with a hold and can retry a failed bulk delete', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     vi.stubGlobal('URL', class extends URL {
       static createObjectURL = vi.fn(() => 'blob:gallery-scan');
       static revokeObjectURL = vi.fn();
@@ -586,9 +607,28 @@ describe('manual capture, continuous errors, and batch naming', () => {
     mocks.load.mockResolvedValueOnce({ ...loaded, batch, scans });
     await renderApp();
     await click('3 / 3');
-    await click('Select');
     const tiles = [...container.querySelectorAll<HTMLButtonElement>('.scan-tile')];
-    expect(button('Delete selected').disabled).toBe(true);
+    expect([...container.querySelectorAll('button')].some(tile => tile.textContent === 'Select')).toBe(false);
+    const touch = (type: string, clientY = 100) => {
+      const event = new MouseEvent(type, { bubbles: true, clientX: 100, clientY });
+      Object.defineProperties(event, { pointerId: { value: 1 }, pointerType: { value: 'touch' }, isPrimary: { value: true } });
+      tiles[0].dispatchEvent(event);
+    };
+    await act(async () => {
+      touch('pointerdown');
+      touch('pointermove', 130);
+      await vi.advanceTimersByTimeAsync(500);
+      touch('pointercancel', 130);
+    });
+    expect(container.querySelector('.gallery-selection-footer')).toBeNull();
+    await act(async () => {
+      touch('pointerdown');
+      await vi.advanceTimersByTimeAsync(500);
+      touch('pointerup');
+      tiles[0].click();
+    });
+    expect(tiles[0].getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('.gallery-selection-footer [role="status"]')?.textContent).toBe('1 selected');
     await click('Select all');
     expect(tiles.every(tile => tile.getAttribute('aria-pressed') === 'true')).toBe(true);
     await act(async () => tiles[1].click());

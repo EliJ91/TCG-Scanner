@@ -271,6 +271,7 @@ export function useScanner() {
     canvas.height = previewHeight;
     const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
     const gray = new Uint8Array(canvas.width * canvas.height);
+    const wideGray = new Uint8Array(gray.length);
     const card = new CardPresenceDetector();
     const useVideoFrames = typeof video.requestVideoFrameCallback === 'function';
     let frame = 0, lastFrameAt = performance.now(), lastVideoTime = -1, lastUI = 0;
@@ -316,15 +317,23 @@ export function useScanner() {
       const crop = zoomRect(video.videoWidth, video.videoHeight, zoom);
       ctx.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, canvas.width, canvas.height);
       toLuma(ctx.getImageData(0, 0, canvas.width, canvas.height).data, gray, flipInterface);
-      const next = motion.update(gray, now, card.detect(gray));
+      let presence = card.detect(gray, autoAdjustZoom);
+      if (autoAdjustZoom && zoom > 1 && presence === 'empty') {
+        // A tight crop can miss the card even though the camera sees it at 1×.
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        toLuma(ctx.getImageData(0, 0, canvas.width, canvas.height).data, wideGray, flipInterface);
+        const widerPresence = card.detect(wideGray, true);
+        if (widerPresence === 'card' || widerPresence === 'clipped') presence = 'clipped';
+      }
+      const next = motion.update(gray, now, presence);
       const canCapture = c.hasCapacity && !editingBatch.current && !captureBusy.current && !storageIssueRef.current;
       schedule(canCapture ? motion.deadline : null);
       if (now - lastUI > 100) {
         setReading(next);
         lastUI = now;
       }
-      const needsCentering = next.presence === 'uncertain' && !next.awaitingNextCard;
-      if (!autoAdjustZoom || zoom <= 1 || !canCapture || !needsCentering || next.score >= motion.sensitivity) {
+      const needsMoreRoom = next.presence === 'clipped' || (next.presence === 'uncertain' && !next.awaitingNextCard);
+      if (!autoAdjustZoom || zoom <= 1 || !canCapture || !needsMoreRoom || next.score >= motion.sensitivity) {
         centering = undefined;
       } else if (freshFrame) {
         if (centering?.zoom !== zoom) centering = { zoom, since: now };
