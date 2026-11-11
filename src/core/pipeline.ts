@@ -44,6 +44,7 @@ export class CapturePipeline {
   get pending() { return this.controller.pending; }
   get nextOrdinal() { return this.controller.nextOrdinal; }
   get complete() { return this.controller.complete; }
+  get atBatchLimit() { return this.controller.atBatchLimit; }
   get running() { return this.controller.running; }
   get queueFull() { return this.pending >= saveQueueLimit; }
   get hasCapacity() { return !this.unsaved.size && this.controller.hasCapacity; }

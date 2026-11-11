@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   accept: vi.fn(), getAttempt: vi.fn(),
   start: vi.fn(), stop: vi.fn(), zoom: vi.fn(), capture: vi.fn(),
   control: vi.fn(), lock: vi.fn(), focus: vi.fn(), capabilities: {} as {torch?:boolean;exposureMode?:string[];focusMode?:string[];focusDistance?:{min:number;max:number;step:number}},
-  unlock: vi.fn(), error: vi.fn(), success: vi.fn(), complete: vi.fn(),
+  unlock: vi.fn(), error: vi.fn(), success: vi.fn(), complete: vi.fn(), queueFull: vi.fn(),
   lost: undefined as ((reason: string) => void) | undefined,
 }));
 vi.mock('../src/core/storage', () => ({ storage: {
@@ -31,7 +31,7 @@ vi.mock('../src/core/camera', () => ({ Camera: class {
   setZoom = mocks.zoom; capture = mocks.capture;
   control = mocks.control; lock = mocks.lock; focus = mocks.focus; focusDistance = 2;
 } }));
-vi.mock('../src/core/audio', () => ({ ScannerAudio: class { unlock = mocks.unlock; error = mocks.error; success = mocks.success; complete = mocks.complete; } }));
+vi.mock('../src/core/audio', () => ({ ScannerAudio: class { unlock = mocks.unlock; error = mocks.error; success = mocks.success; complete = mocks.complete; queueFull = mocks.queueFull; } }));
 
 let root: Root, container: HTMLDivElement;
 const loaded = { batch: undefined, scans: [], attempts: [], settings: undefined, nextBatchNumber: 1 };
@@ -448,6 +448,103 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.accept).toHaveBeenCalledTimes(1);
     await act(async () => finishSaving());
     expect(mocks.accept.mock.calls.map(([scan]) => scan.ordinal)).toEqual([0, 1, 2]);
+  });
+  it('alerts at queue capacity and accepts more photos as space opens', async () => {
+    let saveFirst!: () => void, saveSecond!: () => void;
+    mocks.accept
+      .mockImplementationOnce(() => new Promise<void>(resolve => { saveFirst = resolve; }))
+      .mockImplementationOnce(() => new Promise<void>(resolve => { saveSecond = resolve; }));
+    await renderApp();
+    await click('Manual');
+    for (let i = 0; i < 8; i++) await click('Take photo');
+    expect(mocks.capture).toHaveBeenCalledTimes(8);
+    expect(mocks.queueFull).toHaveBeenCalledOnce();
+    expect(mocks.complete).not.toHaveBeenCalled();
+    expect(container.querySelector('.session-state')?.textContent).toBe('Queue full · wait for photos to save');
+    expect(container.querySelector('.scan-count-spinner')).not.toBeNull();
+    expect(container.querySelector('.scan-count')?.getAttribute('aria-label')).toContain('8 processing');
+    expect(button('Take photo').disabled).toBe(true);
+
+    await act(async () => saveFirst());
+    expect(button('Take photo').disabled).toBe(false);
+    await click('Take photo');
+    expect(mocks.queueFull).toHaveBeenCalledTimes(2);
+    await act(async () => saveSecond());
+    expect(container.querySelector('.scan-count')?.textContent).toBe('9 / 50');
+    expect(container.querySelector('.scan-count-spinner')).toBeNull();
+  });
+  it('sounds batch completion when the final Auto frame is copied with earlier photos still saving', async () => {
+    let finishSaving!: () => void, finishEncoding!: () => void;
+    const jpeg = { blob: new Blob(['captured JPEG']), width: 1280, height: 720 };
+    mocks.accept.mockResolvedValueOnce(undefined)
+      .mockImplementationOnce(() => new Promise<void>(resolve => { finishSaving = resolve; }));
+    mocks.capture
+      .mockImplementationOnce(async (_alternate, _quality, copied) => { copied(); return jpeg; })
+      .mockImplementationOnce(async (_alternate, _quality, copied) => { copied(); return jpeg; })
+      .mockImplementationOnce((_alternate, _quality, copied) => {
+        copied();
+        return new Promise(resolve => { finishEncoding = () => resolve(jpeg); });
+      });
+    const first = printedCard(), second = printedCard(1), third = printedCard(2), fourth = printedCard(3);
+    const { tick } = await startAutoPreview(100, first, false, { settings: { batchTarget: 3, stackCards: true } });
+    await tick();
+    await tick(33, first);
+    await tick(100);
+    expect(mocks.complete).not.toHaveBeenCalled();
+    await tick(33, second);
+    await tick(33, second);
+    await tick(100);
+    expect(mocks.complete).not.toHaveBeenCalled();
+    await tick(33, third);
+    await tick(33, third);
+    await tick(100);
+    expect(mocks.capture).toHaveBeenCalledTimes(3);
+    expect(mocks.complete).toHaveBeenCalledOnce();
+    expect(mocks.success).toHaveBeenCalledTimes(2);
+    expect(mocks.accept).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('.scan-count')?.textContent).toBe('1 / 3');
+    expect(container.querySelector('.session-state')?.textContent).toBe('Batch captured · saving photos');
+    expect(container.querySelector('.scan-count-spinner')).not.toBeNull();
+    await tick(33, fourth);
+    await tick(33, fourth);
+    await tick(100);
+    expect(mocks.capture).toHaveBeenCalledTimes(3);
+    await act(async () => finishSaving());
+    expect(container.querySelector('.scan-count')?.textContent).toBe('2 / 3');
+    await act(async () => finishEncoding());
+    expect(container.querySelector('.scan-count')?.textContent).toBe('3 / 3');
+    expect(container.querySelector('.scan-count-spinner')).toBeNull();
+    expect(container.querySelector('.session-state')?.textContent).toBe('Batch complete');
+    expect(mocks.complete).toHaveBeenCalledOnce();
+  });
+  it('reopens the final slot after an encoding failure and announces the replacement capture', async () => {
+    localStorage.setItem('cardslinger-settings', JSON.stringify({ ...defaults, batchTarget: 1 }));
+    mocks.capture.mockImplementationOnce(async (_alternate, _quality, copied) => {
+      copied();
+      throw new Error('JPEG encoding failed');
+    });
+    await renderApp();
+    await click('Manual');
+    await click('Take photo');
+    expect(mocks.complete).toHaveBeenCalledOnce();
+    expect(mocks.error).toHaveBeenCalled();
+    expect(button('Take photo').disabled).toBe(false);
+    await click('Take photo');
+    expect(mocks.complete).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('.scan-count')?.textContent).toBe('1 / 1');
+  });
+  it('does not replay the batch sound when a retained photo saves on retry', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+    localStorage.setItem('cardslinger-settings', JSON.stringify({ ...defaults, batchTarget: 1 }));
+    mocks.accept.mockRejectedValueOnce(new Error('Temporary write failure'));
+    await renderApp();
+    await click('Manual');
+    await click('Take photo');
+    expect(mocks.complete).toHaveBeenCalledOnce();
+    expect(container.querySelector('.scan-count')?.textContent).toBe('0 / 1');
+    await act(async () => vi.advanceTimersByTimeAsync(3000));
+    expect(container.querySelector('.scan-count')?.textContent).toBe('1 / 1');
+    expect(mocks.complete).toHaveBeenCalledOnce();
   });
   it('saves each manual photo and opens those photos from the scan count', async () => {
     let urlNumber = 0;

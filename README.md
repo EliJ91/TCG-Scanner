@@ -56,7 +56,7 @@ Change the current batch size in **Menu → Batch Settings** after pending photo
 
 ## Errors, retries, and storage
 
-The shutter copies the current preview frame. JPEG encoding and IndexedDB writes can finish while the next card is captured. Up to eight photos can queue, subject to the batch target. Previously queued originals are added to the active batch up to its target. Additional originals can be downloaded or added to the batch from the **Gallery**. [Canvas specification](https://html.spec.whatwg.org/multipage/canvas.html#dom-canvas-toblob)
+The shutter copies the current preview frame. JPEG encoding and IndexedDB writes can finish while the next card is captured. The spinner by the gallery icon shows when photos are processing. Up to eight photos can queue, subject to the batch target. A separate sound and message tell you to wait when the queue fills. The batch sound plays as soon as the final frame is copied, and downloads are ready after the photos save. Previously queued originals are added to the active batch up to its target. Additional originals can be downloaded or added to the batch from the **Gallery**. [Canvas specification](https://html.spec.whatwg.org/multipage/canvas.html#dom-canvas-toblob)
 
 If storage fails, the session stays active and holds the unsaved JPEGs in memory. It waits for storage to recover and retries the retained photos in capture order every three seconds, including while capture is paused. Keep the page open until they save or download the originals. The camera remains visible. Browser eviction and private browsing can limit persistence. If an older scanner tab blocks a database upgrade, close the older tab to let recovery finish.
 

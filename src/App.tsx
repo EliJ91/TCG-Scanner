@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
-import { ArrowDownToLine, ArrowDownUp, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Coffee, Focus, Images, Layers3, Menu, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X, Zap } from 'lucide-react';
+import { ArrowDownToLine, ArrowDownUp, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Coffee, Focus, Images, Layers3, LoaderCircle, Menu, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X, Zap } from 'lucide-react';
 import { useScanner } from './useScanner';
 import { useTheme } from './useTheme';
 import { BlobImage, PhotoViewer, useReviewPhoto } from './PhotoViewer';
@@ -136,7 +136,7 @@ export default function App() {
   const count = s.scans.length, quantity = s.batch?.target ?? target;
   const minimumQuantity = Math.max(1, count);
   const sizeDisabled = !s.loaded || s.session === 'starting' || s.pending > 0 || working;
-  const batchReserved = count + s.pending >= quantity;
+  const batchReserved = s.batchAtLimit;
   const progress = Math.min(100, count / quantity * 100);
   const newestFirst = s.settings.galleryNewestFirst;
   const galleryScans = useMemo(() => newestFirst ? [...s.scans].reverse() : s.scans, [newestFirst, s.scans]);
@@ -353,8 +353,8 @@ export default function App() {
   else if (s.storageIssue) scannerStatus = 'Waiting for storage';
   else if (!s.loaded) scannerStatus = 'Loading saved photos';
   else if (s.capturing) scannerStatus = 'Taking photo';
-  else if (s.pending && batchReserved) scannerStatus = 'Saving final photos';
-  else if (s.queueFull) scannerStatus = 'Saving queued photos';
+  else if (s.pending && batchReserved) scannerStatus = 'Batch captured · saving photos';
+  else if (s.queueFull) scannerStatus = 'Queue full · wait for photos to save';
   else if (s.session === 'starting') scannerStatus = 'Preparing camera';
   else if (s.session === 'paused') scannerStatus = 'Scanning paused';
   else if (s.session === 'scanning') {
@@ -404,8 +404,10 @@ export default function App() {
         </div>
         <div className="scanner-status">
           <span className={`session-state ${s.session === 'scanning' ? 'is-live' : ''} ${failedCount ? 'needs-attention' : ''}`} role="status"><i /><span>{scannerStatus}</span></span>
-          <button type="button" className="scan-count" aria-haspopup="dialog" aria-expanded={showGallery} aria-label={`Open gallery, ${count} saved photos out of ${quantity}`} onClick={openGallery}>
-            <Images size={14} aria-hidden="true" /><span>{count}<span> / {quantity}</span></span>
+          <button type="button" className="scan-count" aria-haspopup="dialog" aria-expanded={showGallery} aria-label={`Open gallery, ${count} saved photos out of ${quantity}${s.pending > 0 ? `, ${s.pending} processing` : ''}`} onClick={openGallery}>
+            <Images size={14} aria-hidden="true" />
+            {s.pending > 0 && <LoaderCircle size={13} className="scan-count-spinner" aria-hidden="true" />}
+            <span>{count}<span> / {quantity}</span></span>
           </button>
         </div>
         <div className="capture-mode-row"><div className="capture-modes" role="group" aria-label="Capture mode"><button aria-pressed={autoMode} onClick={() => s.setCaptureMode('auto')}>Auto</button><button aria-pressed={!autoMode} onClick={() => s.setCaptureMode('manual')}>Manual</button></div></div>

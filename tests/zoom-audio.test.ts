@@ -30,6 +30,9 @@ describe('distinct error audio', () => {
     expect(voices.map(v=>[v.frequency,v.type])).toEqual([[220,'sawtooth'],[110,'sawtooth']]);
     voices.length=0;context.currentTime=2;sound.success();expect(voices.every(v=>v.type==='sine'&&v.frequency>1000)).toBe(true);
     voices.length=0;context.currentTime=3;sound.complete();expect(voices.map(v=>v.type)).toEqual(['triangle','triangle','triangle']);
+    expect(voices[0].time).toBe(3);
+    voices.length=0;context.currentTime=4;sound.queueFull();
+    expect(voices.map(v=>[v.frequency,v.type])).toEqual([[660,'square'],[660,'square']]);
   });
   it('respects mute and avoids overlapping alarms for the same rapid failure', async () => {
     const {voices,context}=audioFixture();const sound=new ScannerAudio();sound.error();expect(voices).toHaveLength(0);
@@ -39,6 +42,6 @@ describe('distinct error audio', () => {
   });
   it('keeps all notification sounds silent at zero volume', async () => {
     const {voices}=audioFixture();const sound=new ScannerAudio();await sound.unlock();sound.volume=0;
-    sound.error();sound.success();sound.complete();expect(voices).toHaveLength(0);
+    sound.error();sound.success();sound.complete();sound.queueFull();expect(voices).toHaveLength(0);
   });
 });

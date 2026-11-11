@@ -43,7 +43,7 @@ export function useScanner() {
   const setError = useCallback((value: string) => { updateError(value); if (value) audio.current?.error(); }, []);
   const detector = useRef(new MotionDetector());
   const captureBusy = useRef(false);
-  const lastComplete = useRef<string | undefined>(undefined); const wakeLock = useRef<{ release(): Promise<void> } | undefined>(undefined);
+  const announcedBatch = useRef<string | undefined>(undefined); const wakeLock = useRef<{ release(): Promise<void> } | undefined>(undefined);
   const mounted = useRef(true);
   const startToken = useRef(0);
   const editingBatch = useRef(false);
@@ -82,6 +82,12 @@ export function useScanner() {
     releaseWake(); if (reason) setError(reason);
   }, []);
 
+  const announceBatchLimit = (id: string) => {
+    if (announcedBatch.current === id) return;
+    announcedBatch.current = id;
+    audio.current?.complete();
+  };
+
   const makeController = (b: Batch, count: number) => {
     const pipeline = new CapturePipeline(b, count, {
       saved: scan => {
@@ -98,15 +104,14 @@ export function useScanner() {
       changed: () => {
         if (!mounted.current) return;
         setPending(pipeline.pending);
-        setRetained(pipeline.retained);
+        const retainedPhotos = pipeline.retained;
+        setRetained(retainedPhotos);
+        if (!pipeline.atBatchLimit && retainedPhotos.length === 0) announcedBatch.current = undefined;
         if (pipeline.complete) {
           changeSession('complete');
           releaseWake();
           setNotice('Your photos are ready to download.');
-          if (lastComplete.current !== b.id) {
-            audio.current?.complete();
-            lastComplete.current = b.id;
-          }
+          announceBatchLimit(b.id);
         }
         const current = batchRef.current!;
         const status = pipeline.complete ? 'complete' : pipeline.running ? 'scanning' : 'paused';
@@ -158,7 +163,7 @@ export function useScanner() {
         setCurrentBatchName(b.name, b.number);
         updateAttempts(data.attempts);
         resetMotion(data.scans.length > 0 || data.attempts.length > 0);
-        lastComplete.current = data.scans.length >= b.target ? b.id : undefined;
+        announcedBatch.current = data.scans.length >= b.target ? b.id : undefined;
         changeSession(data.scans.length >= b.target ? 'complete' : 'paused');
         makeController(b, data.scans.length);
         setNotice(data.scans.length >= b.target ? 'Completed batch recovered from this device. Your images are ready to review and download.' : 'Batch recovered. Resume scanning to add more photos.');
@@ -230,7 +235,8 @@ export function useScanner() {
 
   const capture = async (automatic = false) => {
     const c = controller.current;
-    if (!c?.hasCapacity || editingBatch.current || captureBusy.current || cameraPhaseRef.current !== 'ready' || storageIssueRef.current || !canUseCamera()) return;
+    const currentBatch = batchRef.current;
+    if (!currentBatch || !c?.hasCapacity || editingBatch.current || captureBusy.current || cameraPhaseRef.current !== 'ready' || storageIssueRef.current || !canUseCamera()) return;
     const { useImageCapture, quality, flipInterface } = settingsRef.current;
     const alternateCapture = !automatic && useImageCapture;
     if (alternateCapture) {
@@ -251,9 +257,11 @@ export function useScanner() {
     try {
       await c.capture(() => camera.current!.capture(alternateCapture, quality, () => {
         finishWaitingForFrame();
-        if (!mounted.current) return;
+        if (!mounted.current || controller.current !== c) return;
         if (automatic) setCountdown('snapped');
-        audio.current?.success();
+        if (c.atBatchLimit) announceBatchLimit(currentBatch.id);
+        else if (c.queueFull) audio.current?.queueFull();
+        else audio.current?.success();
       }, flipInterface));
     }
     catch (err) { setError(`Photo could not be taken: ${message(err)}. Try again.`); }
@@ -511,7 +519,6 @@ export function useScanner() {
       pipeline.resize(target);
       updateSettings({ ...settingsRef.current, batchTarget: target });
       if (wasComplete && !pipeline.complete) {
-        lastComplete.current = undefined;
         resetMotion();
         changeSession('paused');
         setNotice('Batch size updated. Resume scanning to add more photos.');
@@ -531,7 +538,6 @@ export function useScanner() {
       await storage.deleteScans(removing.map(scan => scan.id));
       setScans(items => items.filter(scan => !requested.has(scan.id)));
       pipeline.removeStored(removing.length);
-      lastComplete.current = undefined;
       changeSession('paused');
       setNotice(removing.length === 1 ? 'Image deleted.' : `${removing.length} images deleted.`);
     } finally { editingBatch.current = false; }
@@ -559,7 +565,7 @@ export function useScanner() {
     controller.current?.dispose(); controller.current = undefined; storageIssueRef.current = ''; setStorageIssue('');
     nextBatchNumber.current = nextNumber; setCurrentBatchName(nextName, nextNumber);
     resetMotion(false); setReading(undefined);
-    lastComplete.current = undefined; changeSession('idle'); setError(''); setNotice('Ready for a new batch.');
+    announcedBatch.current = undefined; changeSession('idle'); setError(''); setNotice('Ready for a new batch.');
   };
   const switchCamera = async (id: string) => {
     resetMotion();
@@ -612,7 +618,7 @@ export function useScanner() {
     return () => clearInterval(timer);
   }, [storageIssue]);
   const original = useCallback(async (id: string) => (await controller.current?.original(id)), []);
-  return { videoRef, batch, batchName, scans, attempts: [...attempts.filter(item => !retained.some(photo => photo.id === item.id)), ...retained], settings, setSettings: updateSettings, resetSettings, setCaptureMode, setZoom, zoomGesture, session, error, setError, notice, loaded, pending, capturing, queueFull: controller.current?.queueFull ?? false, storageIssue,
+  return { videoRef, batch, batchName, scans, attempts: [...attempts.filter(item => !retained.some(photo => photo.id === item.id)), ...retained], settings, setSettings: updateSettings, resetSettings, setCaptureMode, setZoom, zoomGesture, session, error, setError, notice, loaded, pending, capturing, queueFull: controller.current?.queueFull ?? false, batchAtLimit: controller.current?.atBatchLimit ?? false, storageIssue,
     cameraPhase, connectCamera, openBrowserSuggested,
     reading, countdown, cameraSize, capabilities, devices, start, takePhoto, pause: () => pause(), stop,
     keepOriginal, resizeBatch, removeScans, discard, clear, switchCamera, control, renameBatch,
