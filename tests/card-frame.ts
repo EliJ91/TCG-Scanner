@@ -15,6 +15,12 @@ export function shadowedSurface() {
   return frame;
 }
 
+export function obstructedFrame() {
+  const frame = emptyFrame();
+  for (let y = 18; y < 102; y++) frame.fill(120 + Math.round(y / 4), y * previewWidth + 40, y * previewWidth + 120);
+  return frame;
+}
+
 export function printedCard(seed = 0, background = 248, border = 241) {
   const frame = emptyFrame(background);
   for (let y = 24; y < 96; y++) {

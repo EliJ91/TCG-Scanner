@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
-import { ArrowDownToLine, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Coffee, Focus, Images, Layers3, Menu, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X, Zap } from 'lucide-react';
+import { ArrowDownToLine, ArrowDownUp, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Coffee, Focus, Images, Layers3, Menu, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X, Zap } from 'lucide-react';
 import { useScanner } from './useScanner';
 import { useTheme } from './useTheme';
 import { BlobImage, PhotoViewer, useReviewPhoto } from './PhotoViewer';
@@ -103,13 +103,13 @@ function BatchExport({ batch, scans, newestFirst, disabled, rename, close, compl
 }
 
 export default function App() {
-  const s = useScanner();
+  const [showGallery, setShowGallery] = useState(false);
+  const s = useScanner(showGallery);
   const theme = useTheme();
   const [showMenu, setShowMenu] = useState(false);
   const [showBatch, setShowBatch] = useState(false);
   const [quantityDraft, setQuantityDraft] = useState('');
   const [quantityError, setQuantityError] = useState('');
-  const [showGallery, setShowGallery] = useState(false);
   const [gallerySelection, setGallerySelection] = useState<Set<string>>();
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false); const [selected, setSelected] = useState<string>();
@@ -311,7 +311,7 @@ export default function App() {
     else if (showCountdown && !snapped) scannerStatus = 'Hold still';
     else if (s.reading?.awaitingNextCard) scannerStatus = s.settings.stackCards ? 'Place the next card on top' : 'Remove the card';
     else if (s.reading?.state === 'moving') scannerStatus = 'Card moving';
-    else scannerStatus = s.reading?.presence === 'uncertain' ? 'Center one card' : 'Place a card';
+    else scannerStatus = s.reading?.presence === 'uncertain' ? 'Adjust card centering' : 'Place a card';
   }
   const ratio = s.cameraSize.width && s.cameraSize.height ? s.cameraSize.width / s.cameraSize.height : .75;
   const editName = () => { setNameDraft(s.batchName); setNameError(''); setShowName(true); };
@@ -333,7 +333,7 @@ export default function App() {
             )}
             <button type="button" className="scanner-toolbar-button" aria-label="Flip Interface" title="Flip Interface" aria-pressed={s.settings.flipInterface}
               onClick={() => s.setSettings({ ...s.settings, flipInterface: !s.settings.flipInterface })}>
-              <RotateCw size={20} aria-hidden="true" />
+              <ArrowDownUp size={20} aria-hidden="true" />
             </button>
             <button type="button" className="scanner-toolbar-button" aria-label="Open menu" aria-haspopup="dialog" aria-expanded={showMenu} onClick={openMenu}>
               <Menu size={22} />{failedCount > 0 && <span className="menu-attention" aria-label={`${failedCount} scan${failedCount === 1 ? '' : 's'} need review`} />}
@@ -438,6 +438,7 @@ export default function App() {
       <Toggle label="Dark mode" checked={theme.dark} onChange={theme.setDark} />
       <Toggle label="Newest first in gallery and ZIP" hint="Show recent photos at the top and number them first in the ZIP." checked={newestFirst} onChange={galleryNewestFirst => s.setSettings({ ...s.settings, galleryNewestFirst })} />
       <Toggle label="Using Card Slinger" hint="In Auto, place the next card on top. The camera takes a photo when it settles." checked={s.settings.stackCards} onChange={stackCards => s.setSettings({ ...s.settings, stackCards })} />
+      <Toggle label="Auto-Adjust Zoom" hint="Zoom out a little in Auto when the card needs centering." checked={s.settings.autoAdjustZoom} onChange={autoAdjustZoom => s.setSettings({ ...s.settings, autoAdjustZoom })} />
       <Setting label="Wait before each photo" value={waitLabel} hint="Auto takes a photo once movement stops and the green bar fills.">
         <input aria-label="Wait before each photo" aria-valuetext={waitLabel} type="range" min="0" max={photoWaitTimes.length - 1} step="1" list="photo-wait-stops" value={photoWaitTimes.indexOf(s.settings.stabilityMs)} onChange={event => s.setSettings({ ...s.settings, stabilityMs: photoWaitTimes[event.currentTarget.valueAsNumber] })} />
         <datalist id="photo-wait-stops">{photoWaitTimes.map((wait, index) => <option key={wait} value={index} />)}</datalist>

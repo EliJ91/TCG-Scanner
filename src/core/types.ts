@@ -1,13 +1,13 @@
 export interface Settings {
   captureVersion: number; cameraId: string; torch: boolean;
-  captureMode: 'auto' | 'manual'; stackCards: boolean; zoom: number;
+  captureMode: 'auto' | 'manual'; stackCards: boolean; zoom: number; autoAdjustZoom: boolean;
   stabilityMs: number; sensitivity: number; quality: number;
   volume: number; muted: boolean; galleryNewestFirst: boolean; flipInterface: boolean;
   resolution: number; useImageCapture: boolean; batchTarget: number;
 }
 export const defaults: Settings = {
   captureVersion: 3, cameraId: '', torch: false,
-  captureMode: 'auto', stackCards: false, zoom: 1, stabilityMs: 100, sensitivity: 0.035, quality: 1,
+  captureMode: 'auto', stackCards: false, zoom: 1, autoAdjustZoom: false, stabilityMs: 100, sensitivity: 0.035, quality: 1,
   volume: 0.6, muted: false, galleryNewestFirst: false, flipInterface: false,
   resolution: 2560, useImageCapture: false, batchTarget: 50,
 };

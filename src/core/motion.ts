@@ -53,6 +53,13 @@ export class MotionDetector {
     }
   }
 
+  reframe() {
+    // The new crop needs a fresh comparison, but any detected card placement still counts.
+    const moved = this.movedSinceCapture;
+    this.reset();
+    this.movedSinceCapture = moved;
+  }
+
   update(gray: Uint8Array, now: number, presence: CardPresence): MotionReading {
     if (this.lastTime !== null && now - this.lastTime > 650) this.reset();
     const previous = this.previous;

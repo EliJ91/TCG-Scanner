@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { CardPresenceDetector, previewWidth } from '../src/core/card-presence';
+import { CardPresenceDetector } from '../src/core/card-presence';
 import { MotionDetector, toLuma } from '../src/core/motion';
-import { emptyFrame, printedCard, shadowedSurface } from './card-frame';
+import { emptyFrame, obstructedFrame, printedCard, shadowedSurface } from './card-frame';
 
 const presence = new CardPresenceDetector();
 function sample(d: MotionDetector, frame: Uint8Array, now: number) {
@@ -27,8 +27,7 @@ describe('card-gated motion', () => {
   });
 
   it('does not mistake a smooth obstruction or an exposure shift for a card', () => {
-    const obstructed = emptyFrame();
-    for (let y = 18; y < 102; y++) obstructed.fill(120 + Math.round(y / 4), y * previewWidth + 40, y * previewWidth + 120);
+    const obstructed = obstructedFrame();
     expect(presence.detect(obstructed)).toBe('uncertain');
     const d = new MotionDetector();
     for (let t = 0; t <= 900; t += 30) {

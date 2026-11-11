@@ -6,8 +6,8 @@ import App from '../src/App';
 import { CameraAccessError } from '../src/core/camera-access';
 import * as exportTools from '../src/core/export';
 import { cacheBatchName, cachedBatchName } from '../src/core/preferences';
-import { defaults } from '../src/core/types';
-import { emptyFrame, printedCard, shadowedSurface } from './card-frame';
+import { defaults, type Settings } from '../src/core/types';
+import { emptyFrame, obstructedFrame, printedCard, shadowedSurface } from './card-frame';
 
 const mocks = vi.hoisted(() => ({
   load: vi.fn(), settings: vi.fn(), saveBatch: vi.fn(), create: vi.fn(), rename: vi.fn(),
@@ -41,7 +41,10 @@ function button(label: string) {
 }
 async function renderApp() { await act(async () => root.render(<App />)); }
 async function click(label: string) { await act(async () => button(label).click()); }
-async function startAutoPreview(stabilityMs: number, initial: Uint8Array, flipInterface = false) {
+async function startAutoPreview(stabilityMs: number, initial: Uint8Array, flipInterface = false, options: {
+  settings?: Partial<Settings>;
+  configureVideo?: (video: HTMLVideoElement) => void;
+} = {}) {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
   let frame!: FrameRequestCallback;
   vi.stubGlobal('requestAnimationFrame', vi.fn(callback => { frame = callback; return 1; }));
@@ -51,10 +54,11 @@ async function startAutoPreview(stabilityMs: number, initial: Uint8Array, flipIn
   }
   scene(initial);
   vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue({ drawImage: vi.fn(), getImageData: () => ({ data: pixels }) } as unknown as CanvasRenderingContext2D);
-  localStorage.setItem('cardslinger-settings', JSON.stringify({ ...defaults, stabilityMs, flipInterface }));
+  localStorage.setItem('cardslinger-settings', JSON.stringify({ ...defaults, stabilityMs, flipInterface, ...options.settings }));
   await renderApp();
   const video = container.querySelector('video')!;
   Object.defineProperties(video, { videoWidth: { value: 1280 }, videoHeight: { value: 720 }, readyState: { value: 4 } });
+  options.configureVideo?.(video);
   await click('Start scanning');
   const tick = (ms = 0, values?: Uint8Array) => act(async () => {
     await vi.advanceTimersByTimeAsync(ms);
@@ -294,6 +298,68 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await tick(33, card);
     await tick(100);
     expect(mocks.capture).toHaveBeenCalledOnce();
+  });
+  it('zooms out a step for a settled obstruction and captures the next stacked card once framed', async () => {
+    const first = printedCard(), next = printedCard(1), obstructed = obstructedFrame();
+    const { tick } = await startAutoPreview(100, first, true, { settings: { stackCards: true, autoAdjustZoom: true, zoom: 1.2 } });
+    await tick();
+    await tick(33, first);
+    await tick(100);
+    expect(mocks.capture).toHaveBeenCalledOnce();
+
+    await tick(33, obstructed);
+    await tick(33, obstructed);
+    await tick(199, obstructed);
+    expect(mocks.zoom).toHaveBeenLastCalledWith(1.2);
+    expect(mocks.capture).toHaveBeenCalledOnce();
+    await tick(1, obstructed);
+    expect(mocks.zoom).toHaveBeenLastCalledWith(1.1);
+    expect(container.querySelector('video')?.style.transform).toBe('scale(1.1) rotate(180deg)');
+    expect(container.textContent).toContain('Adjust card centering');
+
+    await tick(33, next);
+    await tick(33, next);
+    await tick(100);
+    expect(mocks.capture).toHaveBeenCalledTimes(2);
+    await tick(33, next);
+    await tick(220, next);
+    expect(mocks.capture).toHaveBeenCalledTimes(2);
+  });
+  it.each([[false, 1.5, 1.5], [true, 1, 1], [true, 1.05, 1]])('shows centering guidance with auto zoom %s at %sx', async (autoAdjustZoom, zoom, expectedZoom) => {
+    const obstructed = obstructedFrame();
+    const { tick } = await startAutoPreview(100, obstructed, false, { settings: { autoAdjustZoom, zoom } });
+    await tick();
+    await tick(220, obstructed);
+    await tick(220, obstructed);
+    expect(container.textContent).toContain('Adjust card centering');
+    expect(mocks.zoom).toHaveBeenLastCalledWith(expectedZoom);
+    expect(mocks.capture).not.toHaveBeenCalled();
+  });
+  it('keeps Auto scanning in the scan-count gallery while video presentation callbacks are suspended', async () => {
+    vi.stubGlobal('URL', class extends URL {
+      static createObjectURL = vi.fn(() => 'blob:gallery-scan');
+      static revokeObjectURL = vi.fn();
+    });
+    const requestVideoFrame = vi.fn(() => 1), cancelVideoFrame = vi.fn();
+    const card = printedCard();
+    const { tick } = await startAutoPreview(100, card, false, {
+      configureVideo: video => Object.defineProperties(video, {
+        requestVideoFrameCallback: { value: requestVideoFrame },
+        cancelVideoFrameCallback: { value: cancelVideoFrame },
+      }),
+    });
+    expect(requestVideoFrame).toHaveBeenCalledOnce();
+    await click('0 / 50');
+    expect(cancelVideoFrame).toHaveBeenCalledWith(1);
+    await tick(33, card);
+    await tick(33, card);
+    await tick(100);
+    expect(mocks.capture).toHaveBeenCalledOnce();
+    expect(container.querySelector('dialog[open] .scan-tile')).not.toBeNull();
+    expect(mocks.stop).not.toHaveBeenCalled();
+    await act(async () => container.querySelector<HTMLButtonElement>('dialog[open] [aria-label="Close dialog"]')!.click());
+    expect(requestVideoFrame).toHaveBeenCalledTimes(2);
+    expect(button('Pause scanning').disabled).toBe(false);
   });
   it('starts a 10 ms countdown on confirmed stillness and cancels it when a fresh frame shows movement', async () => {
     const { tick, scene, video } = await startAutoPreview(10, printedCard(), true);
@@ -580,7 +646,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(container.querySelector('.batch-name-trigger')?.textContent).toContain('Keep these photos');
     expect(mocks.create).not.toHaveBeenCalled();
   });
-  it('remembers the batch size, photo delay, manual photo method, theme and interface flip after reopening', async () => {
+  it('remembers the batch size, photo delay, camera preferences, theme and interface flip after reopening', async () => {
     mocks.capabilities = { torch: true };
     await renderApp();
     const openMenu = () => act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
@@ -603,10 +669,12 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(container.querySelector('.interface-flipped dialog[open]')).not.toBeNull();
     expect(container.querySelector('dialog')?.textContent).not.toContain('Flip Interface');
     await act(async () => toggle('Alternate manual photo method').click());
+    expect(toggle('Auto-Adjust Zoom').checked).toBe(false);
+    await act(async () => toggle('Auto-Adjust Zoom').click());
     const waitSlider = '[aria-label="Wait before each photo"]';
     await input(waitSlider, '4');
     expect(container.querySelector(waitSlider)?.getAttribute('aria-valuetext')).toBe('400 ms');
-    expect(mocks.settings).toHaveBeenLastCalledWith(expect.objectContaining({ batchTarget: 73, useImageCapture: true, stabilityMs: 400, flipInterface: true }));
+    expect(mocks.settings).toHaveBeenLastCalledWith(expect.objectContaining({ batchTarget: 73, useImageCapture: true, stabilityMs: 400, flipInterface: true, autoAdjustZoom: true }));
     await act(async () => root.unmount());
     root = createRoot(container);
     await renderApp();
@@ -619,6 +687,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(toggle('Dark mode').checked).toBe(true);
     expect(flipButton().getAttribute('aria-pressed')).toBe('true');
     expect(toggle('Alternate manual photo method').checked).toBe(true);
+    expect(toggle('Auto-Adjust Zoom').checked).toBe(true);
     await click('Done');
     await act(async () => flipButton().click());
     expect(container.querySelector('.interface-flipped')).toBeNull();
