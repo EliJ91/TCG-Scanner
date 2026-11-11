@@ -54,7 +54,7 @@ export class CapturePipeline {
   start() { this.controller.start(); }
   pause() { this.controller.pause(); }
   resize(target: number) { this.controller.resize(target); }
-  removeStored() { this.controller.removeStored(); }
+  removeStored(count: number) { this.controller.removeStored(count); }
   dispose() { this.disposed = true; }
 
   async capture(snapshot: () => Promise<Snapshot>) {

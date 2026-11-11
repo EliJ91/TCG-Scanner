@@ -518,11 +518,23 @@ export function useScanner() {
       } else if (!pipeline.complete) setNotice('Batch size updated.');
     } finally { editingBatch.current = false; }
   };
-  const remove = async (scan: Scan) => {
-    if (editingBatch.current || controller.current?.pending || sessionRef.current === 'scanning') return;
-    await storage.deleteScan(scan.id); setScans(items => items.filter(s => s.id !== scan.id));
-    controller.current?.removeStored(); lastComplete.current = undefined; changeSession('paused');
-    setNotice('Image deleted. Resume explicitly to fill the open batch slot.');
+  const removeScans = async (ids: readonly string[]) => {
+    const pipeline = controller.current;
+    if (!pipeline || editingBatch.current || pipeline.pending || captureBusy.current || pipeline.running || sessionRef.current === 'starting') {
+      throw new Error('Pause scanning and wait for photos to save before deleting.');
+    }
+    const requested = new Set(ids);
+    const removing = scans.filter(scan => requested.has(scan.id));
+    if (!removing.length) return;
+    editingBatch.current = true;
+    try {
+      await storage.deleteScans(removing.map(scan => scan.id));
+      setScans(items => items.filter(scan => !requested.has(scan.id)));
+      pipeline.removeStored(removing.length);
+      lastComplete.current = undefined;
+      changeSession('paused');
+      setNotice(removing.length === 1 ? 'Image deleted.' : `${removing.length} images deleted.`);
+    } finally { editingBatch.current = false; }
   };
   const discard = async (attempt: AttemptInfo) => {
     const pipeline = controller.current;
@@ -603,7 +615,7 @@ export function useScanner() {
   return { videoRef, batch, batchName, scans, attempts: [...attempts.filter(item => !retained.some(photo => photo.id === item.id)), ...retained], settings, setSettings: updateSettings, resetSettings, setCaptureMode, setZoom, zoomGesture, session, error, setError, notice, loaded, pending, capturing, queueFull: controller.current?.queueFull ?? false, storageIssue,
     cameraPhase, connectCamera, openBrowserSuggested,
     reading, countdown, cameraSize, capabilities, devices, start, takePhoto, pause: () => pause(), stop,
-    keepOriginal, resizeBatch, remove, discard, clear, switchCamera, control, renameBatch,
+    keepOriginal, resizeBatch, removeScans, discard, clear, switchCamera, control, renameBatch,
     original,
     updateScan: async (scan: Scan) => { await storage.accept(scan); setScans(items => ordered(items.map(s => s.id === scan.id ? scan : s))); },
     testSound: async () => { await audio.current?.unlock(); audio.current?.success(); },

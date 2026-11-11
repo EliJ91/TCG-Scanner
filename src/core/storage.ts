@@ -109,7 +109,11 @@ export const storage = {
     const [raw, info] = await Promise.all([tx.objectStore('attempts').get(id),tx.objectStore('captureInfo').get(id)]);
     await tx.done; return raw ? { ...raw, ...info } : undefined;
   },
-  async deleteScan(id: string) { await (await db()).delete('scans', id); },
+  async deleteScans(ids: readonly string[]) {
+    const d = await db();
+    const tx = d.transaction('scans', 'readwrite');
+    await Promise.all([...ids.map(id => tx.store.delete(id)), tx.done]);
+  },
   async deleteAttempt(id: string) {
     const d = await db(); const tx = d.transaction(['attempts','captureInfo'],'readwrite');
     await tx.objectStore('attempts').delete(id); await tx.objectStore('captureInfo').delete(id); await tx.done;

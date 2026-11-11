@@ -50,7 +50,7 @@ export class BatchController<T> {
     if (!this.pending && !this.draining) return;
     await new Promise<void>(resolve => this.waiters.push(resolve));
   }
-  removeStored() { if (this.count > 0) this.count--; this.pause(); }
+  removeStored(count = 1) { this.count = Math.max(0, this.count - count); this.pause(); }
   private async drain() {
     if (this.draining) return;
     this.draining = true;

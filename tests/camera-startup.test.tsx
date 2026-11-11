@@ -11,7 +11,7 @@ import { emptyFrame, printedCard, shadowedSurface } from './card-frame';
 
 const mocks = vi.hoisted(() => ({
   load: vi.fn(), settings: vi.fn(), saveBatch: vi.fn(), create: vi.fn(), rename: vi.fn(),
-  resize: vi.fn(), clear: vi.fn(),
+  resize: vi.fn(), clear: vi.fn(), deleteScans: vi.fn(),
   accept: vi.fn(), getAttempt: vi.fn(),
   start: vi.fn(), stop: vi.fn(), zoom: vi.fn(), capture: vi.fn(),
   control: vi.fn(), lock: vi.fn(), focus: vi.fn(), capabilities: {} as {torch?:boolean;exposureMode?:string[];focusMode?:string[];focusDistance?:{min:number;max:number;step:number}},
@@ -21,7 +21,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../src/core/storage', () => ({ storage: {
   load: mocks.load, settings: mocks.settings, saveBatch: mocks.saveBatch, create: mocks.create,
   renameBatch: mocks.rename, accept: mocks.accept, getAttempt: mocks.getAttempt,
-  resizeBatch: mocks.resize, clear: mocks.clear,
+  resizeBatch: mocks.resize, clear: mocks.clear, deleteScans: mocks.deleteScans,
 } }));
 vi.mock('../src/core/camera', () => ({ Camera: class {
   stream?: { active: boolean }; get capabilities() { return mocks.capabilities; }
@@ -84,6 +84,7 @@ beforeEach(() => {
   mocks.getAttempt.mockResolvedValue(undefined);
   mocks.accept.mockResolvedValue(undefined); mocks.rename.mockResolvedValue(undefined);
   mocks.resize.mockResolvedValue(undefined); mocks.clear.mockResolvedValue(undefined);
+  mocks.deleteScans.mockResolvedValue(undefined);
   mocks.create.mockImplementation(async (target, name) => ({id:'test-batch',number:1,name:name || 'Batch#001',target,createdAt:Date.now(),status:'paused',nextOrdinal:0}));
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   // Lifecycle tests drive frame callbacks explicitly; motion timing has its own suite.
@@ -371,13 +372,22 @@ describe('manual capture, continuous errors, and batch naming', () => {
     mocks.accept.mockImplementationOnce(() => new Promise<void>(resolve => { finishSaving = resolve; }));
     const first = printedCard(), second = printedCard(1), third = printedCard(2);
     const { tick } = await startAutoPreview(100, first);
+    await tick();
+    await tick(33, first);
+    expect(container.querySelector('.auto-countdown:not([hidden])')).not.toBeNull();
     await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
+    expect(container.querySelector('.auto-countdown:not([hidden])')).toBeNull();
+    expect(container.textContent).toContain('Scanning paused');
     await click('Settings');
     const setting = [...container.querySelectorAll('label')].find(label => label.textContent?.startsWith('Using Card Slinger'))!;
     expect(setting.querySelector('input')?.checked).toBe(false);
     await act(async () => setting.querySelector('input')!.click());
     expect(JSON.parse(localStorage.getItem('cardslinger-settings')!).stackCards).toBe(true);
     await click('Done');
+    await tick(150, first);
+    expect(mocks.capture).not.toHaveBeenCalled();
+    expect(mocks.stop).not.toHaveBeenCalled();
+    await click('Resume scanning');
     await tick();
     await tick(33, first);
     await tick(100);
@@ -495,17 +505,51 @@ describe('manual capture, continuous errors, and batch naming', () => {
     for (const selector of ['dialog:has(.review-image)', 'dialog:has(.gallery-grid)']) {
       await act(async () => container.querySelector<HTMLButtonElement>(`${selector} [aria-label="Close dialog"]`)!.click());
     }
-    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
-    await click('Settings');
-    const flip = [...container.querySelectorAll('label')].find(label => label.textContent?.startsWith('Flip Interface'))!;
-    await act(async () => flip.querySelector('input')!.click());
-    await click('Done');
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Flip Interface"]')!.click());
     await click('5 / 50');
     await act(async () => container.querySelector<HTMLButtonElement>('.scan-tile')!.click());
     expect(title()).toBe('0005');
     await swipe(120, 220);
     expect(title()).toBe('0004');
     expect(viewer().querySelector('img')?.style.transform).toBe('translate(0px, 0px) scale(1)');
+  });
+  it('deletes only the selected gallery photos after confirmation and can retry a failed delete', async () => {
+    vi.stubGlobal('URL', class extends URL {
+      static createObjectURL = vi.fn(() => 'blob:gallery-scan');
+      static revokeObjectURL = vi.fn();
+    });
+    const batch = { id: 'bulk-delete', number: 1, name: 'Batch#001', target: 3, createdAt: 1, status: 'complete', nextOrdinal: 3 };
+    const scans = Array.from({ length: 3 }, (_, ordinal) => ({
+      id: `photo-${ordinal}`, batchId: batch.id, ordinal, blob: new Blob([`photo-${ordinal}`]),
+    }));
+    mocks.load.mockResolvedValueOnce({ ...loaded, batch, scans });
+    await renderApp();
+    await click('3 / 3');
+    await click('Select');
+    const tiles = [...container.querySelectorAll<HTMLButtonElement>('.scan-tile')];
+    expect(button('Delete selected').disabled).toBe(true);
+    await click('Select all');
+    expect(tiles.every(tile => tile.getAttribute('aria-pressed') === 'true')).toBe(true);
+    await act(async () => tiles[1].click());
+    expect(container.querySelector('.gallery-selection-footer [role="status"]')?.textContent).toBe('2 selected');
+    expect(container.querySelector('.review-image')).toBeNull();
+    await click('Delete selected');
+    await click('Keep photos');
+    expect(mocks.deleteScans).not.toHaveBeenCalled();
+    expect(tiles[0].getAttribute('aria-pressed')).toBe('true');
+    expect(tiles[1].getAttribute('aria-pressed')).toBe('false');
+    await click('Delete selected');
+    mocks.deleteScans.mockRejectedValueOnce(new Error('Storage temporarily unavailable.'));
+    await click('Delete 2 photos');
+    expect(container.querySelector('dialog [role="alert"]')?.textContent).toBe('Storage temporarily unavailable.');
+    expect(container.querySelectorAll('.scan-tile')).toHaveLength(3);
+    await click('Delete 2 photos');
+    expect(mocks.deleteScans).toHaveBeenLastCalledWith(['photo-0', 'photo-2']);
+    expect(container.querySelectorAll('.scan-tile')).toHaveLength(1);
+    expect(container.querySelector('.scan-name')?.textContent).toBe('0001');
+    expect(container.querySelector('.scan-count')?.textContent).toBe('1 / 3');
+    expect(mocks.saveBatch).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'paused', nextOrdinal: 3 }));
+    expect(container.textContent).toContain('Scanning paused');
   });
   it('restores cached camera controls and resets settings without deleting the saved batch', async () => {
     mocks.capabilities={torch:true,exposureMode:['manual','continuous'],focusMode:['manual','continuous']};
@@ -537,8 +581,15 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.create).not.toHaveBeenCalled();
   });
   it('remembers the batch size, photo delay, manual photo method, theme and interface flip after reopening', async () => {
+    mocks.capabilities = { torch: true };
     await renderApp();
     const openMenu = () => act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
+    const flipButton = () => container.querySelector<HTMLButtonElement>('.scanner-toolbar [aria-label="Flip Interface"]')!;
+    expect(flipButton().previousElementSibling?.getAttribute('aria-label')).toBe('Flashlight');
+    expect(flipButton().getAttribute('aria-pressed')).toBe('false');
+    await act(async () => flipButton().click());
+    expect(container.querySelector('.interface-flipped main')).not.toBeNull();
+    expect(container.querySelector('video')?.style.transform).toBe('scale(1) rotate(180deg)');
     await openMenu();
     await click('Batch Settings0 / 50 cards scanned');
     expect(container.querySelector('dialog h2')?.textContent).toBe('Batch Settings');
@@ -549,10 +600,8 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await click('Settings');
     const toggle = (name: string) => [...container.querySelectorAll('label')].find(label => label.textContent?.startsWith(name))!.querySelector('input')!;
     await act(async () => toggle('Dark mode').click());
-    await act(async () => toggle('Flip Interface').click());
-    expect(container.querySelector('.interface-flipped main')).not.toBeNull();
     expect(container.querySelector('.interface-flipped dialog[open]')).not.toBeNull();
-    expect(container.querySelector('video')?.style.transform).toBe('scale(1) rotate(180deg)');
+    expect(container.querySelector('dialog')?.textContent).not.toContain('Flip Interface');
     await act(async () => toggle('Alternate manual photo method').click());
     const waitSlider = '[aria-label="Wait before each photo"]';
     await input(waitSlider, '4');
@@ -568,9 +617,10 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await click('Settings');
     expect(container.querySelector(waitSlider)?.getAttribute('aria-valuetext')).toBe('400 ms');
     expect(toggle('Dark mode').checked).toBe(true);
-    expect(toggle('Flip Interface').checked).toBe(true);
+    expect(flipButton().getAttribute('aria-pressed')).toBe('true');
     expect(toggle('Alternate manual photo method').checked).toBe(true);
-    await act(async () => toggle('Flip Interface').click());
+    await click('Done');
+    await act(async () => flipButton().click());
     expect(container.querySelector('.interface-flipped')).toBeNull();
     expect(container.querySelector('video')?.style.transform).toBe('scale(1)');
   });

@@ -34,11 +34,11 @@ Fonts and app assets are bundled locally. Use `npm ci` for a reproducible instal
 6. Tap the scan count to open the **Gallery**. Open a photo to rotate it or swipe left or right to browse. Pinch to zoom, then drag to pan. Choose **Export ZIP** from the menu or gallery and edit the batch name before downloading. It defaults to `Batch#001`, `Batch#002`, and so on, and your edit is remembered for later exports. The archive uses that name, such as `Batch#001.zip` or `Trade night.zip`. Photos are numbered `0001.jpg`, `0002.jpg`, and so on in the selected gallery order.
 7. Tap **Download ZIP** to save the archive. The app offers to start a fresh batch after requesting the download. Check your archive before confirming.
 
-The centered scanner includes an editable batch name, camera view with pinch zoom, capture mode, scan count, and capture control. The count opens the Gallery. **Menu** also gives access to Batch Settings, Gallery, downloads, settings, and the guide. Opening the menu or gallery keeps the camera mounted and detection running. Thumbnails render only while the gallery is open.
+The centered scanner includes an editable batch name, camera view with pinch zoom, capture mode, scan count, and capture control. The count opens the Gallery. Tap **Select** to mark photos, then **Delete selected** to remove them together. **Menu** gives access to Batch Settings, Gallery, downloads, settings, and the guide. Opening it pauses Auto scanning until you tap **Resume scanning**. The camera stays open. Thumbnails render only while the gallery is open.
 
 Toggle dark/light mode under **Menu → Settings → Dark mode**. Dark mode uses a pure black background and neutral gray surfaces, with monochrome controls. The initial theme follows your device preference and your selection is remembered locally.
 
-Turn on **Menu → Settings → Flip Interface** when your phone is mounted upside down. The controls turn 180°, and the live image rotates within the viewfinder to match the saved photo. The app remembers this setting on the device.
+Tap **Flip Interface** beside the flashlight above the camera when your phone is mounted upside down. The controls turn 180°, and the live image rotates within the viewfinder to match the saved photo. The app remembers this setting on the device.
 
 Turn on **Newest first in gallery and ZIP** in Settings to see your latest scans at the top of the Gallery and export them first.
 

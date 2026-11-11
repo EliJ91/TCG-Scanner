@@ -56,6 +56,14 @@ describe('storage, recovery, filenames, ZIP', () => {
     expect(restored.scans).toHaveLength(2);
     await storage.clear(batch.id);
   });
+  it('persists bulk deletion while keeping the other saved scans', async () => {
+    const batch = await storage.create(3);
+    const photos = [scan(batch.id, 0), scan(batch.id, 1), scan(batch.id, 2)];
+    await Promise.all(photos.map(photo => storage.accept(photo)));
+    await storage.deleteScans([photos[0].id, photos[2].id]);
+    expect((await storage.load()).scans.map(photo => photo.id)).toEqual([photos[1].id]);
+    await storage.clear(batch.id);
+  });
   it('exports in capture order, with no gaps from failures or deletion', async () => {
     const data = [scan('test', 9), scan('test', 1), scan('test', 4)];
     const progress: number[] = [];

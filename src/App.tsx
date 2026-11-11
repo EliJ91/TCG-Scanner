@@ -110,9 +110,12 @@ export default function App() {
   const [quantityDraft, setQuantityDraft] = useState('');
   const [quantityError, setQuantityError] = useState('');
   const [showGallery, setShowGallery] = useState(false);
+  const [gallerySelection, setGallerySelection] = useState<Set<string>>();
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false); const [selected, setSelected] = useState<string>();
-  const [clearPrompt, setClearPrompt] = useState<'manual' | DownloadResult>(); const [deleteId, setDeleteId] = useState<string>();
+  const [clearPrompt, setClearPrompt] = useState<'manual' | DownloadResult>();
+  const [deleteIds, setDeleteIds] = useState<string[]>();
+  const [deleteError, setDeleteError] = useState('');
   const [working, setWorking] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [showName, setShowName] = useState(false); const [nameDraft, setNameDraft] = useState(''); const [nameError, setNameError] = useState('');
@@ -122,6 +125,7 @@ export default function App() {
     window.addEventListener('beforeinstallprompt', handler); return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
   const busy = s.session === 'starting' || s.session === 'scanning';
+  const autoMode = s.settings.captureMode === 'auto';
   const editingDisabled = busy || s.pending > 0 || working;
   const target = s.settings.batchTarget;
   const count = s.scans.length, quantity = s.batch?.target ?? target;
@@ -131,6 +135,7 @@ export default function App() {
   const progress = Math.min(100, count / quantity * 100);
   const newestFirst = s.settings.galleryNewestFirst;
   const galleryScans = useMemo(() => newestFirst ? [...s.scans].reverse() : s.scans, [newestFirst, s.scans]);
+  const selectedCount = gallerySelection?.size ?? 0;
   const activeIndex = selected ? galleryScans.findIndex(scan => scan.id === selected) : -1;
   const requestedPhoto = galleryScans[activeIndex];
   const reviewedPhoto = useReviewPhoto(requestedPhoto);
@@ -164,11 +169,43 @@ export default function App() {
   };
   const safe = async (action: () => Promise<unknown>) => { setWorking(true); try { await action(); } catch (err) { s.setError(message(err)); } finally { setWorking(false); } };
   const exportButton = () => <button className="button dark" aria-label={`Export ZIP, ${count} saved photos`} disabled={!count || editingDisabled} onClick={() => setExportOpen(true)}><ArrowDownToLine size={17} />Export ZIP<span className="button-count">{count}</span></button>;
+  const closeGallery = () => { setShowGallery(false); setGallerySelection(undefined); };
+  const selectPhotos = () => {
+    if (busy) s.pause();
+    setGallerySelection(new Set());
+  };
+  const openScan = (id: string) => {
+    if (!gallerySelection) { setSelected(id); return; }
+    setGallerySelection(previous => {
+      const next = new Set(previous);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const requestDelete = (ids: string[]) => {
+    setDeleteError('');
+    setDeleteIds(ids);
+  };
+  const confirmDelete = async () => {
+    if (!deleteIds || editingDisabled) return;
+    setWorking(true);
+    setDeleteError('');
+    try {
+      await s.removeScans(deleteIds);
+      setSelected(undefined);
+      setGallerySelection(undefined);
+      setDeleteIds(undefined);
+    } catch (error) {
+      setDeleteError(message(error));
+    } finally { setWorking(false); }
+  };
   const gallery = () => <>
     {count ? <div className="gallery-grid">{galleryScans.map((scan, index) => {
       const imageIndex = captureIndex(index);
-      return <button className="scan-tile" key={scan.id} onClick={() => setSelected(scan.id)}>
-        <div className="scan-image"><BlobImage blob={scan.thumbnail ?? scan.blob} alt={`Scanned card ${imageIndex + 1}`} loading="lazy" /><span><Check size={12} /></span></div>
+      const picked = gallerySelection?.has(scan.id);
+      return <button type="button" className="scan-tile" key={scan.id} aria-pressed={picked} onClick={() => openScan(scan.id)}>
+        <div className="scan-image"><BlobImage blob={scan.thumbnail ?? scan.blob} alt={`Scanned card ${imageIndex + 1}`} loading="lazy" /><span aria-hidden="true">{picked !== false && <Check size={12} />}</span></div>
         <span className="scan-name">{photoNumber(imageIndex)}</span><span className="scan-meta">{scan.width && scan.height ? `${scan.width} × ${scan.height}` : 'JPEG'}</span>
       </button>;
     })}</div> : <div className="gallery-empty"><div className="empty-icon"><Images size={26} strokeWidth={1.5} /></div><strong>Your collection starts here</strong><p>Saved photos appear here.</p></div>}
@@ -198,9 +235,12 @@ export default function App() {
     </div>}
 
   </>;
+  const openMenu = () => {
+    if (autoMode && busy) s.pause();
+    setShowMenu(true);
+  };
   const openFromMenu = (open: () => void) => { setShowMenu(false); open(); };
   const failedCount = s.attempts.length;
-  const autoMode = s.settings.captureMode === 'auto';
   const zoomContacts = useRef(new Map<number, { x: number; y: number }>());
   const gestureZoom = useRef(s.settings.zoom);
   useEffect(() => {
@@ -291,7 +331,11 @@ export default function App() {
                 <Zap size={21} />
               </button>
             )}
-            <button type="button" className="scanner-toolbar-button" aria-label="Open menu" aria-haspopup="dialog" aria-expanded={showMenu} onClick={() => setShowMenu(true)}>
+            <button type="button" className="scanner-toolbar-button" aria-label="Flip Interface" title="Flip Interface" aria-pressed={s.settings.flipInterface}
+              onClick={() => s.setSettings({ ...s.settings, flipInterface: !s.settings.flipInterface })}>
+              <RotateCw size={20} aria-hidden="true" />
+            </button>
+            <button type="button" className="scanner-toolbar-button" aria-label="Open menu" aria-haspopup="dialog" aria-expanded={showMenu} onClick={openMenu}>
               <Menu size={22} />{failedCount > 0 && <span className="menu-attention" aria-label={`${failedCount} scan${failedCount === 1 ? '' : 's'} need review`} />}
             </button>
           </div>
@@ -366,15 +410,32 @@ export default function App() {
       <div className="dialog-footer batch-actions">{s.batch && <button className="button danger-outline" disabled={busy || s.pending > 0} onClick={() => setClearPrompt('manual')}>New batch</button>}{exportButton()}</div>
     </Dialog>}
 
-    {showGallery && <Dialog title="Gallery" close={() => setShowGallery(false)} wide>
-      <div className="gallery-heading"><p>{count} saved{busy ? ' · pause to edit' : ''}</p>{exportButton()}</div>
+    {showGallery && <Dialog title="Gallery" close={closeGallery} wide>
+      <div className="gallery-heading">
+        <p>{count} saved{busy ? ' · pause to edit' : ''}</p>
+        <div className="gallery-actions">
+          {gallerySelection
+            ? <button type="button" className="button outline" onClick={() => setGallerySelection(undefined)}>Done</button>
+            : <>{count > 0 && <button type="button" className="button outline" onClick={selectPhotos}>Select</button>}{exportButton()}</>}
+        </div>
+      </div>
       {gallery()}
+      {gallerySelection && <div className="dialog-footer gallery-selection-footer">
+        <p role="status">{selectedCount} selected</p>
+        <div className="gallery-actions">
+          <button type="button" className="button outline" onClick={() => setGallerySelection(new Set(selectedCount === count ? [] : galleryScans.map(scan => scan.id)))}>
+            {selectedCount === count ? 'Deselect all' : 'Select all'}
+          </button>
+          <button type="button" className="button danger-outline" disabled={!selectedCount || editingDisabled} onClick={() => requestDelete([...gallerySelection])}>
+            <Trash2 size={16} />Delete selected
+          </button>
+        </div>
+      </div>}
     </Dialog>}
 
     {showSettings && <Dialog title="Settings" close={() => setShowSettings(false)}><div className="settings-content simple-settings">
       <p className="dialog-intro">Your choices are saved automatically on this device.</p>
       <Toggle label="Dark mode" checked={theme.dark} onChange={theme.setDark} />
-      <Toggle label="Flip Interface" hint="Use this when your phone is mounted upside down." checked={s.settings.flipInterface} onChange={flipInterface => s.setSettings({ ...s.settings, flipInterface })} />
       <Toggle label="Newest first in gallery and ZIP" hint="Show recent photos at the top and number them first in the ZIP." checked={newestFirst} onChange={galleryNewestFirst => s.setSettings({ ...s.settings, galleryNewestFirst })} />
       <Toggle label="Using Card Slinger" hint="In Auto, place the next card on top. The camera takes a photo when it settles." checked={s.settings.stackCards} onChange={stackCards => s.setSettings({ ...s.settings, stackCards })} />
       <Setting label="Wait before each photo" value={waitLabel} hint="Auto takes a photo once movement stops and the green bar fills.">
@@ -431,7 +492,7 @@ export default function App() {
       </div>
       <div className="dialog-footer">
         <button className="button outline" onClick={() => setClearPrompt(undefined)}>Keep batch</button>
-        <button className="button danger" disabled={editingDisabled} onClick={() => void safe(async () => { await s.clear(); setExportOpen(false); setClearPrompt(undefined); setShowBatch(false); setShowGallery(false); setShowMenu(false); })}><Trash2 size={15} /> Delete & start new</button>
+        <button className="button danger" disabled={editingDisabled} onClick={() => void safe(async () => { await s.clear(); setExportOpen(false); setClearPrompt(undefined); setShowBatch(false); closeGallery(); setShowMenu(false); })}><Trash2 size={15} /> Delete & start new</button>
       </div>
     </Dialog>}
     {exportOpen && s.batch && <BatchExport batch={s.batch} scans={s.scans} newestFirst={newestFirst} disabled={editingDisabled} rename={s.renameBatch} close={() => setExportOpen(false)} completed={result => { setExportOpen(false); setClearPrompt(result); }} />}
@@ -441,11 +502,20 @@ export default function App() {
       <div className="dialog-footer review-actions">
         <button className="icon-button" aria-label="Previous card" disabled={activeIndex === 0} onClick={() => movePhoto(-1)}><ArrowLeft size={20} /></button>
         <button className="button outline" disabled={editingDisabled || active !== requestedPhoto} onClick={() => void safe(async () => s.updateScan(await rotateScan(active)))}><RotateCw size={16} /> Rotate 180°</button>
-        <button className="button danger-outline" disabled={editingDisabled || active !== requestedPhoto} onClick={() => setDeleteId(active.id)}><Trash2 size={16} /> Delete</button>
+        <button className="button danger-outline" disabled={editingDisabled || active !== requestedPhoto} onClick={() => requestDelete([active.id])}><Trash2 size={16} /> Delete</button>
         <button className="icon-button" aria-label="Next card" disabled={activeIndex === count - 1} onClick={() => movePhoto(1)}><ArrowRight size={20} /></button>
       </div>
     </Dialog>}
-    {deleteId && <Dialog title="Delete this scan?" close={() => setDeleteId(undefined)}><div className="confirm-content"><p>The image will be removed and exported filenames will stay sequential. Scanning stays paused until you explicitly resume.</p></div><div className="dialog-footer"><button className="button outline" onClick={() => setDeleteId(undefined)}>Keep image</button><button className="button danger" disabled={editingDisabled} onClick={() => void safe(async () => { const scan = s.scans.find(a => a.id === deleteId); if (scan) await s.remove(scan); setSelected(undefined); setDeleteId(undefined); })}>Delete image</button></div></Dialog>}
+    {deleteIds && <Dialog title={deleteIds.length === 1 ? 'Delete this scan?' : `Delete ${deleteIds.length} photos?`} close={() => { if (!working) setDeleteIds(undefined); }}>
+      <div className="confirm-content">
+        <p>Exported filenames stay sequential. Resume scanning to fill the open batch slots.</p>
+        {deleteError && <p className="name-error" role="alert">{deleteError}</p>}
+      </div>
+      <div className="dialog-footer">
+        <button className="button outline" disabled={working} onClick={() => setDeleteIds(undefined)}>{deleteIds.length === 1 ? 'Keep image' : 'Keep photos'}</button>
+        <button className="button danger" disabled={editingDisabled} onClick={() => void confirmDelete()}>{deleteIds.length === 1 ? 'Delete image' : `Delete ${deleteIds.length} photos`}</button>
+      </div>
+    </Dialog>}
   </div>;
 }
 function Setting({ label, value, hint, children }: { label: string; value?: string; hint?: string; children: ReactNode }) {
