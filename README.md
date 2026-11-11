@@ -29,12 +29,12 @@ Fonts and app assets are bundled locally. Use `npm ci` for a reproducible instal
 1. Mount the phone securely above a plain surface. Use diffuse light from the sides. Center one card with background visible around it. Fill roughly 20–80% of the camera area with the card.
 2. The camera preview opens as soon as the app opens. Choose **Allow** if the browser asks. If it requires a tap, use **Enable camera**. Set the quantity in **Menu → Batch Settings**. Tap the batch name/pencil in the camera's upper-left corner to rename it at any time, including before the first photo.
 3. Choose **Auto** or **Manual**. In Auto, place the first card and tap **Start scanning**. The green bar fills during the stillness delay. Remove each card and briefly show the bare surface before placing the next one, or turn on **Using Card Slinger** in Settings to place each new card on top. Set **Wait before each photo** from **10 ms to 1 second** in Settings. In Manual, tap **Take photo**.
-4. Use zoom to frame the photo. If the lightning bolt appears beside the menu, tap it to turn the flashlight on or off. On cameras with manual focus, drag the right-side slider to focus and tap the lock to hold focus or restore autofocus.
+4. Pinch the camera view to zoom in or out and frame the photo. The camera focuses automatically. If the lightning bolt appears beside the menu, tap it to turn the flashlight on or off.
 5. The camera dings when it takes a photo. The completion alarm plays after the batch target is saved.
 6. Tap the scan count to open the **Gallery**. Open a photo to rotate it or swipe left or right to browse. Pinch to zoom, then drag to pan. Choose **Export ZIP** from the menu or gallery and edit the batch name before downloading. It defaults to `Batch#001`, `Batch#002`, and so on, and your edit is remembered for later exports. The archive uses that name, such as `Batch#001.zip` or `Trade night.zip`. Photos are numbered `0001.jpg`, `0002.jpg`, and so on in the selected gallery order.
 7. Tap **Download ZIP** to save the archive. The app offers to start a fresh batch after requesting the download. Check your archive before confirming.
 
-The centered scanner includes an editable batch name, zoom slider, capture mode, scan count, and capture control. The count opens the Gallery. **Menu** also gives access to Batch Settings, Gallery, downloads, settings, and the guide. Opening the menu or gallery keeps the camera mounted and detection running. Thumbnails render only while the gallery is open.
+The centered scanner includes an editable batch name, camera view with pinch zoom, capture mode, scan count, and capture control. The count opens the Gallery. **Menu** also gives access to Batch Settings, Gallery, downloads, settings, and the guide. Opening the menu or gallery keeps the camera mounted and detection running. Thumbnails render only while the gallery is open.
 
 Toggle dark/light mode under **Menu → Settings → Dark mode**. Dark mode uses a pure black background and neutral gray surfaces, with monochrome controls. The initial theme follows your device preference and your selection is remembered locally.
 
@@ -64,20 +64,20 @@ Deleting a stored scan reduces the count and pauses the scanner, including a pre
 
 ## Settings
 
-**Menu → Settings** starts with Dark mode, gallery order, Using Card Slinger, Wait before each photo, and Sounds/Volume. Camera and photo tuning stay inside **Advanced settings**. Selected camera, resolution, zoom, flashlight, focus position and lock, capture mode, stacking, and tuning are saved in browser preferences and restored on entry. A missing remembered camera falls back to the rear camera. **Reset settings** restores defaults and the device's theme preference while keeping photos and the batch. Pause capture before resetting. The old default of 220 ms migrates to 100 ms. Other previously saved delays round to the nearest slider stop.
+**Menu → Settings** starts with Dark mode, gallery order, Using Card Slinger, Wait before each photo, and Sounds/Volume. Camera and photo tuning stay inside **Advanced settings**. Selected camera, resolution, zoom, flashlight, capture mode, stacking, and tuning are saved in browser preferences and restored on entry. Old manual focus preferences are cleared so autofocus can operate. A missing remembered camera falls back to the rear camera. **Reset settings** restores defaults and the device's theme preference while keeping photos and the batch. Pause capture before resetting. The old default of 220 ms migrates to 100 ms. Other previously saved delays round to the nearest slider stop.
 
 | Control | Default | Notes |
 | --- | --- | --- |
 | Capture mode | Auto | Manual takes one snapshot per tap |
 | Wait before each photo | 100 ms | 10 ms, then 100 ms increments from 100 ms to 1 second |
 | Ignore small movements | 3.5% | Adjustable from 3% to 22% of the frame changing before the countdown restarts |
-| Zoom | 1× | Preview slider, 1–3× center crop; capture and motion use identical framing |
+| Zoom | 1× | Pinch the preview for a 1–3× center crop; capture and motion use identical framing |
 | Photo quality | Best | Choose Lowest, Balanced, or Best |
 
 | Camera resolution | High (2560 px wide) | Requests a camera frame width. The phone chooses the closest supported size |
 | Alternate manual photo method | Off | Advanced; optional `ImageCapture.grabFrame()` for manual shots, with video-canvas fallback |
 
-Zoom controls framing. Camera selection appears after permission, and resolution changes require stopping the camera. The focus slider and lock use camera capabilities exposed by the browser. [MediaStream Image Capture specification](https://w3c.github.io/mediacapture-image/)
+Zoom controls framing. Camera selection appears after permission, and resolution changes require stopping the camera. Continuous autofocus is enabled when the browser exposes it, with device autofocus as the fallback. [MediaStream Image Capture specification](https://w3c.github.io/mediacapture-image/)
 
 ## How it works
 

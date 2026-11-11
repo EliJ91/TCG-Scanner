@@ -1,5 +1,5 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowDownToLine, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Focus, Images, Layers3, Lock, LockOpen, Menu, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X, Zap } from 'lucide-react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
+import { ArrowDownToLine, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Focus, Images, Layers3, Menu, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X, Zap } from 'lucide-react';
 import { useScanner } from './useScanner';
 import { useTheme } from './useTheme';
 import { BlobImage, PhotoViewer, useReviewPhoto } from './PhotoViewer';
@@ -201,10 +201,41 @@ export default function App() {
   const openFromMenu = (open: () => void) => { setShowMenu(false); open(); };
   const failedCount = s.attempts.length;
   const autoMode = s.settings.captureMode === 'auto';
-  const focusRange = s.capabilities.focusDistance;
-  const focusModes = s.capabilities.focusMode ?? [];
-  const canToggleFocus = focusModes.includes('manual') && (focusModes.includes('continuous') || focusModes.includes('single-shot'));
-  const focusPosition = focusRange ? Math.min(focusRange.max, Math.max(focusRange.min, s.focusPosition ?? focusRange.min)) : undefined;
+  const zoomContacts = useRef(new Map<number, { x: number; y: number }>());
+  const gestureZoom = useRef(s.settings.zoom);
+  useEffect(() => {
+    if (s.cameraPhase === 'ready') return;
+    zoomContacts.current.clear();
+    s.zoomGesture(false);
+  }, [s.cameraPhase]);
+  const beginZoom = (event: PointerEvent<HTMLDivElement>) => {
+    const contacts = zoomContacts.current;
+    if (s.cameraPhase !== 'ready' || event.pointerType !== 'touch' || contacts.size >= 2) return;
+    contacts.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (contacts.size === 1) {
+      gestureZoom.current = s.settings.zoom;
+      s.zoomGesture(true);
+    }
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+  const moveZoom = (event: PointerEvent<HTMLDivElement>) => {
+    const contacts = zoomContacts.current;
+    const previous = contacts.get(event.pointerId);
+    if (!previous) return;
+    const point = { x: event.clientX, y: event.clientY };
+    contacts.set(event.pointerId, point);
+    const other = [...contacts].find(([id]) => id !== event.pointerId)?.[1];
+    if (!other) return;
+    const oldDistance = Math.hypot(previous.x - other.x, previous.y - other.y);
+    if (!oldDistance) return;
+    const distance = Math.hypot(point.x - other.x, point.y - other.y);
+    gestureZoom.current = Math.max(1, Math.min(3, gestureZoom.current * distance / oldDistance));
+    s.setZoom(Math.round(gestureZoom.current * 100) / 100);
+  };
+  const finishZoom = (event: PointerEvent<HTMLDivElement>) => {
+    if (!zoomContacts.current.delete(event.pointerId)) return;
+    if (zoomContacts.current.size === 0) s.zoomGesture(false);
+  };
   const snapped = s.countdown === 'snapped';
   const showCountdown = autoMode && s.cameraPhase === 'ready' && s.countdown !== null && !s.storageIssue
     && (s.session === 'scanning' || (s.session === 'complete' && snapped));
@@ -254,7 +285,9 @@ export default function App() {
       <section className="scanner" aria-label="Scanner">
         <div className="preview-shell">
           <div className={`viewfinder ${s.cameraSize.width ? 'has-camera' : ''}`}>
-            <div className="camera-feed" style={{ width: `${Math.min(1, ratio / .75) * 100}%`, height: `${Math.min(1, .75 / ratio) * 100}%` }}>
+            <div className="camera-feed" style={{ width: `${Math.min(1, ratio / .75) * 100}%`, height: `${Math.min(1, .75 / ratio) * 100}%` }}
+              onPointerDown={beginZoom} onPointerMove={moveZoom} onPointerUp={finishZoom}
+              onPointerCancel={finishZoom} onLostPointerCapture={finishZoom}>
               <video ref={s.videoRef} style={{ transform: `scale(${s.settings.zoom})${s.settings.flipInterface ? ' rotate(180deg)' : ''}` }} playsInline muted autoPlay aria-label="Live camera preview" />
             </div>
             <div className="viewfinder-toolbar">
@@ -274,33 +307,7 @@ export default function App() {
             <div className={`auto-countdown${snapped ? ' is-snapped' : ''}`} hidden={!showCountdown} aria-hidden="true">
               <div ref={countdownFill} />
             </div>
-            <label className="zoom-control"><span>Zoom</span><input aria-label="Camera zoom" type="range" min="1" max="3" step="0.1" value={s.settings.zoom} disabled={s.cameraPhase !== 'ready'} onPointerDown={() => s.zoomGesture(true)} onPointerUp={() => s.zoomGesture(false)} onPointerCancel={() => s.zoomGesture(false)} onBlur={() => s.zoomGesture(false)} onChange={event => s.setZoom(+event.target.value)} /><output>{s.settings.zoom.toFixed(1)}×</output></label>
           </div>
-          {s.cameraPhase === 'ready' && (focusRange || canToggleFocus) && (
-            <div className="focus-control" role="group" aria-label="Camera focus controls">
-              {canToggleFocus && <button
-                className="focus-lock"
-                aria-label={s.focusLocked ? 'Unlock focus' : 'Lock focus'}
-                title={s.focusLocked ? 'Unlock focus' : 'Lock focus'}
-                aria-pressed={s.focusLocked}
-                disabled={s.focusBusy}
-                onClick={() => void s.setFocus(!s.focusLocked)}
-              >{s.focusLocked ? <Lock size={16} /> : <LockOpen size={16} />}</button>}
-              {focusRange && <input
-                aria-label="Manual focus"
-                type="range"
-                min={focusRange.min}
-                max={focusRange.max}
-                step={focusRange.step && focusRange.step > 0 ? focusRange.step : 'any'}
-                value={focusPosition}
-                onPointerDown={() => s.zoomGesture(true)}
-                onPointerUp={() => s.zoomGesture(false)}
-                onPointerCancel={() => s.zoomGesture(false)}
-                onBlur={() => s.zoomGesture(false)}
-                onChange={event => void s.setFocus(true, +event.target.value)}
-              />}
-            </div>
-          )}
         </div>
         <div className="scanner-status">
           <span className={`session-state ${s.session === 'scanning' ? 'is-live' : ''} ${failedCount ? 'needs-attention' : ''}`} role="status"><i /><span>{scannerStatus}</span></span>
@@ -393,7 +400,7 @@ export default function App() {
         </label>
         <h3><Camera size={16} /> Camera</h3>
         {s.devices.length > 1 && <label className="select-setting">Choose a camera<select disabled={busy || s.pending > 0} value={s.settings.cameraId} onChange={e => void s.switchCamera(e.target.value)}><option value="">Automatic rear camera</option>{s.devices.map((d, i) => <option key={d.deviceId} value={d.deviceId}>{d.label || `Camera ${i + 1}`}</option>)}</select></label>}
-        <p className="setting-hint">Use the zoom slider below the preview to frame your photo. On supported cameras, use the side slider to focus and the lock to hold focus.</p>
+        <p className="setting-hint">Pinch the camera view to zoom in or out. The camera focuses automatically.</p>
         <label className="select-setting">Camera resolution
           <select disabled={busy || s.cameraSize.width > 0} value={s.settings.resolution} onChange={e => s.setSettings({ ...s.settings, resolution: +e.target.value })}>
             <option value={1920}>Standard (1920 px)</option>
@@ -408,7 +415,7 @@ export default function App() {
     </div><div className="dialog-footer"><button className="button outline" disabled={!s.loaded || busy || s.capturing || working || s.cameraPhase === 'requesting'} title={busy ? 'Pause scanning to reset settings' : 'Restore defaults and keep your photos'} onClick={() => void safe(async () => { await s.resetSettings(); theme.setDark(window.matchMedia('(prefers-color-scheme: dark)').matches); })}>Reset settings</button><button className="button dark" onClick={() => setShowSettings(false)}>Done</button></div></Dialog>}
     {showHelp && <Dialog title="How to scan" close={() => setShowHelp(false)}><div className="guide-content"><p className="dialog-intro">Use Auto for hands-free photos, or Manual to take each photo yourself.</p>{[
       ['Position your phone', 'Keep your phone steady above one card. Allow camera access when asked. Keep all four card edges visible, with a little space around them. Avoid glare from lights.'],
-      ['Choose your batch', 'Open Menu → Batch Settings to choose how many cards to scan. Tap the name at the top of the camera view to change it. Use the zoom slider to bring the card closer.'],
+      ['Choose your batch', 'Open Menu → Batch Settings to choose how many cards to scan. Tap the name at the top of the camera view to change it. Pinch the camera view to zoom in or out.'],
       ['Take your photos', 'In Auto, place a card and tap Start scanning. The camera dings when the green bar fills and the photo is taken. Remove each card before placing the next, or turn on Using Card Slinger in Settings to stack cards. In Manual, tap Take photo.'],
       ['Check and export', 'Tap the scan count to view your photos. When the batch is full, scanning stops and an alarm plays. Choose Export ZIP to download the batch.'],
     ].map(([title, text], i) => <div className="guide-step" key={title}><span>{String(i + 1).padStart(2,'0')}</span><div><h3>{title}</h3><p>{text}</p></div></div>)}<div className="guide-callout"><ShieldCheck size={18} /><p>Scans stay in this browser’s local storage. Download your batch before clearing browser data. When resuming a saved batch in Auto with Using Card Slinger off, clear the camera view before placing a card.</p></div></div><div className="dialog-footer"><button className="button primary" onClick={() => setShowHelp(false)}>Ready to scan <ArrowRight size={16} /></button></div></Dialog>}

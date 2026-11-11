@@ -35,11 +35,6 @@ export function useScanner() {
   const editedPreferences = useRef(new Set<keyof Settings>()); const zoomAdjusting = useRef(false);
   const [reading, setReading] = useState<MotionReading>();
   const [countdown, setCountdown] = useState<number | 'snapped' | null>(null);
-  const [focusPosition, setFocusPosition] = useState<number>();
-  const [focusLocked, setFocusLocked] = useState(false);
-  const [focusBusy, setFocusBusy] = useState(false);
-  const focusApplying = useRef(false);
-  const focusRequest = useRef<{ locked: boolean; distance?: number; epoch: number } | undefined>(undefined);
   const [cameraSize, setCameraSize] = useState({ width: 0, height: 0 });
   const [capabilities, setCapabilities] = useState<CameraCapabilities>({});
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -145,8 +140,7 @@ export function useScanner() {
       if (cameraConfig.current) {
         const cameraChanged = cameraConfig.current.resolution !== config.resolution || cameraConfig.current.id !== config.cameraId;
         const torchChanged = previous.torch !== config.torch;
-        const focusChanged = previous.focusLocked !== config.focusLocked || previous.focusDistance !== config.focusDistance;
-        if (cameraChanged || torchChanged || focusChanged) {
+        if (cameraChanged || torchChanged) {
           void (cameraRequest.current ?? Promise.resolve()).then(async () => {
             if (!mounted.current || !previewWanted.current) return;
             if (cameraChanged) { await enableCamera(settingsRef.current.cameraId); return; }
@@ -154,9 +148,6 @@ export function useScanner() {
             const caps = camera.current?.capabilities;
             const prefs = settingsRef.current;
             if (torchChanged && caps?.torch) void control({ torch: prefs.torch });
-            if (focusChanged && (caps?.focusMode?.includes('manual') || caps?.focusDistance)) {
-              void setFocus(prefs.focusLocked, prefs.focusDistance ?? undefined);
-            }
           }).catch(() => {});
         }
       }
@@ -305,7 +296,7 @@ export function useScanner() {
       }
       if (freshFrame) lastFrameAt = now;
       const { captureMode, zoom, flipInterface } = settingsRef.current;
-      if (captureMode !== 'auto' || zoomAdjusting.current || focusApplying.current || video.readyState < 2) {
+      if (captureMode !== 'auto' || zoomAdjusting.current || video.readyState < 2) {
         schedule(null);
         return;
       }
@@ -387,14 +378,8 @@ export function useScanner() {
       const caps = activeCamera.capabilities;
       const prefs = settingsRef.current;
       setCapabilities(caps);
-      setFocusLocked(false);
-      setFocusPosition(activeCamera.focusDistance);
       try {
         if (caps.torch) await activeCamera.control({ torch: prefs.torch });
-        if (prefs.focusLocked && (caps.focusMode?.includes('manual') || caps.focusDistance)) {
-          setFocusPosition(await activeCamera.focus(true, prefs.focusDistance ?? undefined));
-          setFocusLocked(true);
-        }
       } catch { setNotice('Some saved camera adjustments are unavailable.'); }
       if (!canUseCamera() || cameraEpoch.current !== epoch) {
         if (cameraEpoch.current === epoch) camera.current?.stop();
@@ -569,40 +554,6 @@ export function useScanner() {
     try { await enableCamera(id); updateSettings({ ...settingsRef.current, cameraId: id }); setNotice('Camera changed and remembered.'); } catch (err) { setError(message(err)); setOpenBrowserSuggested(err instanceof CameraAccessError && err.openBrowser); }
   };
   const control = async (values: Record<string, unknown>) => { try { await camera.current?.control(values); if (typeof values.torch === 'boolean') updateSettings({ ...settingsRef.current, torch: values.torch }); } catch (err) { setError(`Camera setting unavailable: ${message(err)}`); } };
-  const setFocus = async (locked: boolean, distance?: number) => {
-    if (cameraPhaseRef.current !== 'ready' || !camera.current) return;
-    if (distance !== undefined) setFocusPosition(distance);
-    focusRequest.current = { locked, distance, epoch: cameraEpoch.current };
-    if (focusApplying.current) return;
-    focusApplying.current = true;
-    setFocusBusy(true);
-    resetMotion();
-    let applied: { locked: boolean; distance?: number; epoch: number } | undefined;
-    try {
-      while (focusRequest.current) {
-        const request = focusRequest.current;
-        focusRequest.current = undefined;
-        if (request.epoch !== cameraEpoch.current) continue;
-        try {
-          const position = await camera.current.focus(request.locked, request.distance);
-          applied = { ...request, distance: position };
-        } catch (err) {
-          if (request.epoch === cameraEpoch.current) setError(`Focus could not be changed: ${message(err)}`);
-        }
-      }
-      if (applied?.epoch === cameraEpoch.current) {
-        setFocusLocked(applied.locked);
-        setFocusPosition(applied.distance);
-        updateSettings({ ...settingsRef.current, focusLocked: applied.locked, focusDistance: applied.locked ? applied.distance ?? null : null });
-      } else {
-        setFocusPosition(camera.current?.focusDistance);
-      }
-    } finally {
-      focusApplying.current = false;
-      setFocusBusy(false);
-      resetMotion();
-    }
-  };
   const resetSettings = async () => {
     if (controller.current?.running || captureBusy.current || cameraPhaseRef.current === 'requesting') return;
     const open = cameraPhaseRef.current === 'ready';
@@ -633,7 +584,9 @@ export function useScanner() {
     void audio.current?.unlock();
   };
   const setZoom = (zoom: number) => {
-    editedPreferences.current.add('zoom'); zoom = Math.max(1, Math.min(3, zoom));
+    zoom = Number.isFinite(zoom) ? Math.max(1, Math.min(3, zoom)) : 1;
+    if (zoom === settingsRef.current.zoom) return;
+    editedPreferences.current.add('zoom');
     camera.current?.setZoom(zoom); updateSettings({ ...settingsRef.current, zoom });
     resetMotion();
   };
@@ -649,7 +602,7 @@ export function useScanner() {
   const original = useCallback(async (id: string) => (await controller.current?.original(id)), []);
   return { videoRef, batch, batchName, scans, attempts: [...attempts.filter(item => !retained.some(photo => photo.id === item.id)), ...retained], settings, setSettings: updateSettings, resetSettings, setCaptureMode, setZoom, zoomGesture, session, error, setError, notice, loaded, pending, capturing, queueFull: controller.current?.queueFull ?? false, storageIssue,
     cameraPhase, connectCamera, openBrowserSuggested,
-    reading, countdown, cameraSize, capabilities, focusPosition, focusLocked, focusBusy, setFocus, devices, start, takePhoto, pause: () => pause(), stop,
+    reading, countdown, cameraSize, capabilities, devices, start, takePhoto, pause: () => pause(), stop,
     keepOriginal, resizeBatch, remove, discard, clear, switchCamera, control, renameBatch,
     original,
     updateScan: async (scan: Scan) => { await storage.accept(scan); setScans(items => ordered(items.map(s => s.id === scan.id ? scan : s))); },

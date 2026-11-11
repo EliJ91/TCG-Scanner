@@ -4,8 +4,8 @@ import { cacheSettings, normalizeSettings, readCachedSettings } from '../src/cor
 import { defaults } from '../src/core/types';
 beforeEach(()=>localStorage.clear());
 describe('browser-cached camera preferences',()=>{
-  it('restores the selected camera, zoom, resolution, flashlight and focus before async storage loads',()=>{
-    const saved={...defaults,cameraId:'rear-wide',resolution:3840,zoom:1.8,torch:true,focusLocked:true,stackCards:true,stabilityMs:200,batchTarget:123};
+  it('restores the selected camera, zoom, resolution and flashlight before async storage loads',()=>{
+    const saved={...defaults,cameraId:'rear-wide',resolution:3840,zoom:1.8,torch:true,stackCards:true,stabilityMs:200,batchTarget:123};
     cacheSettings(saved);expect(normalizeSettings(readCachedSettings())).toEqual(saved);
   });
   it('migrates the old slow-capture setting and rounds saved delays to the nearest stop',()=>{
@@ -28,10 +28,12 @@ describe('browser-cached camera preferences',()=>{
     localStorage.setItem('cardslinger-settings','invalid');expect(readCachedSettings()).toBeUndefined();
     localStorage.setItem('cardslinger-settings','[]');expect(readCachedSettings()).toBeUndefined();
   });
-  it('keeps legacy focus and rounds older quality settings to the nearest preset',()=>{
-    const settings = normalizeSettings({ lockCamera: true, debug: true, quality: 0.86 });
-    expect(settings).toMatchObject({ focusLocked: true, quality: 0.9 });
+  it('drops saved manual focus and rounds older quality settings to the nearest preset',()=>{
+    const settings = normalizeSettings({ lockCamera: true, focusLocked: true, focusDistance: 3, debug: true, quality: 0.86 });
+    expect(settings).toMatchObject({ quality: 0.9 });
     expect(settings).not.toHaveProperty('lockCamera');
+    expect(settings).not.toHaveProperty('focusLocked');
+    expect(settings).not.toHaveProperty('focusDistance');
     expect(settings).not.toHaveProperty('debug');
     expect(normalizeSettings({ batchTarget: 0 }).batchTarget).toBe(50);
   });

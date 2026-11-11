@@ -2,10 +2,8 @@ import { CameraAccessError, cameraErrorName, requestCameraStream } from './camer
 import { zoomRect } from './zoom';
 import type { Snapshot } from './types';
 
-export interface FocusRange { min: number; max: number; step?: number }
 export interface CameraCapabilities {
   torch?: boolean; zoom?: { min: number; max: number; step: number };
-  focusDistance?: FocusRange;
   focusMode?: string[];
 }
 interface FrameGrabber { grabFrame(): Promise<ImageBitmap> }
@@ -56,11 +54,13 @@ export class Camera {
       const track = acquired.getVideoTracks()[0];
       if (!track) throw new CameraAccessError('unavailable', 'The browser did not provide a camera video track.');
       try { this.capabilities = (track.getCapabilities?.() ?? {}) as CameraCapabilities; } catch { this.capabilities = {}; }
-      const range = this.capabilities.focusDistance;
-      if (range && (!Number.isFinite(range.min) || !Number.isFinite(range.max) || range.max <= range.min)) {
-        delete this.capabilities.focusDistance;
-      }
       try { this.baseConstraints = track.getConstraints?.() ?? {}; } catch { this.baseConstraints = {}; }
+      const focusModes = this.capabilities.focusMode ?? [];
+      const autofocus = focusModes.includes('continuous') ? 'continuous' : focusModes.find(mode => mode === 'single-shot');
+      if (autofocus) {
+        try { await this.control({ focusMode: autofocus }); } catch { /* Keep the camera's default autofocus when controls are unavailable. */ }
+      }
+      if (generation !== this.generation || !this.canUseCamera()) throw new CameraAccessError('cancelled', 'Camera request cancelled.');
       const reportLost = (reason: string) => { if (generation === this.generation) this.lost(reason); };
       track.addEventListener('ended', () => reportLost('Camera disconnected. Reconnecting automatically.'));
       track.addEventListener('mute', () => reportLost('Camera feed interrupted. Reconnecting automatically.'));
@@ -130,32 +130,6 @@ export class Camera {
     });
     this.controlQueue = operation.catch(() => {});
     await operation;
-  }
-  get focusDistance() {
-    try {
-      const settings = this.stream?.getVideoTracks()[0]?.getSettings() as (MediaTrackSettings & { focusDistance?: number }) | undefined;
-      const position = settings?.focusDistance;
-      return position !== undefined && Number.isFinite(position) ? position : undefined;
-    } catch { return undefined; }
-  }
-  async focus(locked: boolean, distance?: number): Promise<number | undefined> {
-    const modes = this.capabilities.focusMode ?? [];
-    const range = this.capabilities.focusDistance;
-    if (!locked) {
-      const auto = modes.includes('continuous') ? 'continuous' : modes.find(mode => mode === 'single-shot');
-      if (!auto) throw new Error('This camera does not expose autofocus controls.');
-      await this.control({ focusMode: auto, focusDistance: undefined });
-      return this.focusDistance;
-    }
-    if (!range && !modes.includes('manual')) throw new Error('This camera does not expose manual focus.');
-    let position = distance ?? this.focusDistance;
-    if (range && position !== undefined && Number.isFinite(position)) {
-      const step = range.step ?? 0;
-      if (Number.isFinite(step) && step > 0) position = range.min + Math.round((position - range.min) / step) * step;
-      position = Math.max(range.min, Math.min(range.max, position));
-    } else position = undefined;
-    await this.control({ focusMode: modes.includes('manual') ? 'manual' : undefined, focusDistance: position });
-    return position ?? this.focusDistance;
   }
   stop() { this.generation++; this.cancelPreview?.(); this.cancelPreview = undefined; this.disposeSynthetic?.(); this.disposeSynthetic = undefined; this.stream?.getTracks().forEach(track => track.stop()); this.stream = undefined; this.capabilities = {}; this.video.srcObject = null; this.grabber = undefined; this.adjustments = {}; this.controlQueue = Promise.resolve(); this.baseConstraints = {}; }
 }

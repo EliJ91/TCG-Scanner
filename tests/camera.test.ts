@@ -102,7 +102,7 @@ describe('direct mobile camera permission requests', () => {
 });
 
 describe('mobile video preview startup', () => {
-  it('locks focus without mixing stream and photo controls in a constraint set', async () => {
+  it('starts continuous autofocus and preserves it when changing the flashlight', async () => {
     const {stream, track} = streamFixture();
     getUserMedia.mockResolvedValue(stream);
     track.getCapabilities.mockReturnValue({ focusMode: ['manual', 'continuous'], focusDistance: { min: 0, max: 10, step: 0.5 } });
@@ -113,19 +113,23 @@ describe('mobile video preview startup', () => {
     });
     const camera = new Camera(new Preview() as unknown as HTMLVideoElement, vi.fn());
     await camera.start(1920);
-    await expect(camera.focus(true)).resolves.toBe(2.5);
     expect(track.applyConstraints).toHaveBeenLastCalledWith({
-      width: { ideal: 1920 }, advanced: [{ focusMode: 'manual', focusDistance: 2.5 }],
+      width: { ideal: 1920 }, advanced: [{ focusMode: 'continuous' }],
     });
-    await expect(camera.focus(true, 30)).resolves.toBe(10);
     await camera.control({ torch: true });
-    expect(track.applyConstraints).toHaveBeenLastCalledWith({
-      width: { ideal: 1920 }, advanced: [{ focusMode: 'manual', focusDistance: 10, torch: true }],
-    });
-    await camera.focus(false);
     expect(track.applyConstraints).toHaveBeenLastCalledWith({
       width: { ideal: 1920 }, advanced: [{ focusMode: 'continuous', torch: true }],
     });
+  });
+  it('opens the preview when the browser rejects autofocus controls', async () => {
+    const { stream, track } = streamFixture();
+    getUserMedia.mockResolvedValue(stream);
+    track.getCapabilities.mockReturnValue({ focusMode: ['continuous'] });
+    track.applyConstraints.mockRejectedValueOnce(new DOMException('Unsupported focus control', 'OverconstrainedError'));
+    const preview = new Preview();
+    const camera = new Camera(preview as unknown as HTMLVideoElement, vi.fn());
+    await expect(camera.start(1920)).resolves.toMatchObject({ width: preview.videoWidth });
+    expect(camera.stream?.active).toBe(true);
   });
   it.each([false, true])('uses the centered zoom crop and resets the flip after capture (alternate method %s)', async alternate => {
     const fixture=streamFixture();getUserMedia.mockResolvedValue(fixture.stream);

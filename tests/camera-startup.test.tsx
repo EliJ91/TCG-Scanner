@@ -175,9 +175,9 @@ describe('automatic camera preview independent from scanner initialization', () 
     await act(async () => finish({ ...loaded, settings: saved }));
     expect(mocks.start).toHaveBeenCalledTimes(1);
     expect(mocks.control).toHaveBeenLastCalledWith({ torch: true });
-    expect(mocks.focus).toHaveBeenCalledWith(true, 2);
+    expect(mocks.focus).not.toHaveBeenCalled();
     expect(mocks.zoom).toHaveBeenLastCalledWith(2);
-    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!)).toEqual({ ...saved, stackCards: true });
+    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!)).toEqual({ ...defaults, torch: true, zoom: 2, batchTarget: 25, stackCards: true });
   });
   it('still requests the camera after storage initialization fails', async () => {
     mocks.load.mockRejectedValue(new Error('Storage blocked')); await renderApp();
@@ -230,16 +230,69 @@ describe('automatic camera preview independent from scanner initialization', () 
 });
 
 describe('manual capture, continuous errors, and batch naming', () => {
-  it('applies the side focus slider and saves the focus lock across reloads', async () => {
+  it.each([false, true])('uses pinch zoom and ignores saved manual focus (flipped %s)', async flipInterface => {
     mocks.capabilities = { focusMode: ['manual', 'continuous'], focusDistance: { min: 0, max: 10, step: 1 } };
-    mocks.focus.mockImplementation(async (_locked, position) => position ?? 2);
+    localStorage.setItem('cardslinger-settings', JSON.stringify({ ...defaults, flipInterface, focusLocked: true, focusDistance: 3 }));
     await renderApp();
-    await input('input[aria-label="Manual focus"]', '3');
-    expect(mocks.focus).toHaveBeenCalledWith(true, 3);
-    expect(container.querySelector('[aria-label="Unlock focus"]')?.getAttribute('aria-pressed')).toBe('true');
-    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!)).toMatchObject({ focusLocked: true, focusDistance: 3 });
-    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Unlock focus"]')!.click());
-    expect(mocks.focus).toHaveBeenLastCalledWith(false, undefined);
+    expect(mocks.focus).not.toHaveBeenCalled();
+    expect(container.querySelector('.viewfinder input[type="range"], .focus-control')).toBeNull();
+    const cameraFeed = container.querySelector<HTMLDivElement>('.camera-feed')!;
+    const touch = (type: string, id: number, x: number) => {
+      const event = new MouseEvent(type, { bubbles: true, clientX: x, clientY: 160 });
+      Object.defineProperties(event, { pointerId: { value: id }, pointerType: { value: 'touch' } });
+      cameraFeed.dispatchEvent(event);
+    };
+    await act(async () => {
+      touch('pointerdown', 1, 100);
+      touch('pointermove', 1, 120);
+      touch('pointerdown', 2, 220);
+      touch('pointermove', 2, 320);
+    });
+    expect(container.querySelector('video')?.style.transform).toBe(`scale(2)${flipInterface ? ' rotate(180deg)' : ''}`);
+    expect(mocks.zoom).toHaveBeenLastCalledWith(2);
+    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!)).toMatchObject({ zoom: 2 });
+    await act(async () => touch('pointermove', 2, 600));
+    expect(mocks.zoom).toHaveBeenLastCalledWith(3);
+    await act(async () => touch('pointermove', 2, 130));
+    expect(mocks.zoom).toHaveBeenLastCalledWith(1);
+    await act(async () => {
+      touch('pointercancel', 1, 120);
+      touch('lostpointercapture', 2, 130);
+      touch('pointermove', 2, 500);
+    });
+    expect(mocks.zoom).toHaveBeenLastCalledWith(1);
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await renderApp();
+    expect(container.querySelector('video')?.style.transform).toBe(`scale(1)${flipInterface ? ' rotate(180deg)' : ''}`);
+  });
+  it('waits for every finger to leave the camera view before restarting auto capture', async () => {
+    const card = printedCard();
+    const { tick } = await startAutoPreview(100, card);
+    await tick();
+    await tick(33, card);
+    expect(container.querySelector('.auto-countdown:not([hidden])')).not.toBeNull();
+    const touch = (type: string, id: number, x: number) => {
+      const event = new MouseEvent(type, { bubbles: true, clientX: x, clientY: 160 });
+      Object.defineProperties(event, { pointerId: { value: id }, pointerType: { value: 'touch' } });
+      container.querySelector('.camera-feed')!.dispatchEvent(event);
+    };
+    await act(async () => {
+      touch('pointerdown', 1, 100);
+      touch('pointerdown', 2, 200);
+      touch('pointermove', 2, 250);
+    });
+    expect(container.querySelector('.auto-countdown:not([hidden])')).toBeNull();
+    await tick(150, card);
+    expect(mocks.capture).not.toHaveBeenCalled();
+    await act(async () => touch('pointerup', 1, 100));
+    await tick(150, card);
+    expect(mocks.capture).not.toHaveBeenCalled();
+    await act(async () => touch('pointercancel', 2, 250));
+    await tick(33, card);
+    await tick(33, card);
+    await tick(100);
+    expect(mocks.capture).toHaveBeenCalledOnce();
   });
   it('starts a 10 ms countdown on confirmed stillness and cancels it when a fresh frame shows movement', async () => {
     const { tick, scene, video } = await startAutoPreview(10, printedCard(), true);
@@ -460,7 +513,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     const b={id:'saved-batch',number:3,name:'Keep these photos',target:5,createdAt:1,status:'paused',nextOrdinal:1};
     mocks.load.mockResolvedValueOnce({...loaded,batch:b,scans:[{id:'saved',batchId:b.id,ordinal:0,blob:new Blob(),thumbnail:new Blob(),processingMs:1,corners:[],width:900,height:1257}]});
     await renderApp();expect(mocks.start).toHaveBeenCalledWith(3840,'rear-wide');
-    expect(mocks.control).toHaveBeenCalledWith({torch:true});expect(mocks.focus).toHaveBeenCalledWith(true, 2);
+    expect(mocks.control).toHaveBeenCalledWith({torch:true});expect(mocks.focus).not.toHaveBeenCalled();
     expect(mocks.lock).not.toHaveBeenCalled();
     const flashlight = container.querySelector<HTMLButtonElement>('main .viewfinder button[aria-label="Flashlight"]')!;
     expect(flashlight.getAttribute('aria-pressed')).toBe('true');

@@ -1,10 +1,10 @@
 import { defaults, motionSensitivityRange, photoWaitTimes, validBatchTarget, type Settings } from './types';
 const key = 'cardslinger-settings';
 const batchNameKey = 'cardslinger-custom-batch-name';
-type SavedSettings = Partial<Settings> & { lockCamera?: boolean; debug?: boolean };
+type SavedSettings = Partial<Settings> & { lockCamera?: boolean; debug?: boolean; focusLocked?: boolean; focusDistance?: number | null };
 /** Migrate saved settings to the current controls. */
 export function normalizeSettings(saved?: SavedSettings): Settings {
-  const { lockCamera, debug: _debug, ...current } = saved ?? {};
+  const { lockCamera: _lockCamera, debug: _debug, focusLocked: _focusLocked, focusDistance: _focusDistance, ...current } = saved ?? {};
   const next = { ...defaults, ...current };
   const version = current.captureVersion ?? 0;
   if (version < 2 || (version === 2 && next.stabilityMs === 220)) next.stabilityMs = defaults.stabilityMs;
@@ -23,8 +23,6 @@ export function normalizeSettings(saved?: SavedSettings): Settings {
   next.quality = Number.isFinite(next.quality)
     ? Math.max(8, Math.min(10, Math.round(next.quality * 10))) / 10
     : defaults.quality;
-  next.focusLocked = current.focusLocked ?? lockCamera ?? defaults.focusLocked;
-  next.focusDistance = typeof next.focusDistance === 'number' && Number.isFinite(next.focusDistance) ? next.focusDistance : null;
   next.cameraId = typeof next.cameraId === 'string' ? next.cameraId : '';
   return next;
 }
