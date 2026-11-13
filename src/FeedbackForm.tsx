@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { feedbackCategories, feedbackMessageLimit } from './core/feedback';
+import { feedbackMessageLimit, feedbackSubjectLimit } from './core/feedback';
 
 export function FeedbackForm({ endpoint, close }: { endpoint: string; close: () => void }) {
   const [sending, setSending] = useState(false);
@@ -19,7 +19,7 @@ export function FeedbackForm({ endpoint, close }: { endpoint: string; close: () 
         method: 'POST',
         credentials: 'omit',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category: form.get('category'), message }),
+        body: JSON.stringify({ subject: String(form.get('subject') ?? '').trim(), message }),
         signal: AbortSignal.timeout(15000),
       });
       if (response.status === 429) { setError('Too many messages. Try again in a minute.'); return; }
@@ -37,11 +37,9 @@ export function FeedbackForm({ endpoint, close }: { endpoint: string; close: () 
 
   return <form onSubmit={submit}>
     <div className="confirm-content">
-      <p className="dialog-intro">Your message goes privately to the scanner owner. You can leave out your name and email.</p>
-      <label className="select-setting">Category
-        <select name="category" disabled={sending}>
-          {Object.entries(feedbackCategories).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-        </select>
+      <p className="dialog-intro">All messages are completely anonymous and help development.</p>
+      <label className="select-setting feedback-subject">Subject (optional)
+        <input name="subject" maxLength={feedbackSubjectLimit} disabled={sending} />
       </label>
       <label className="select-setting feedback-message">Message
         <textarea name="message" rows={5} maxLength={feedbackMessageLimit} disabled={sending} required />

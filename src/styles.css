@@ -126,7 +126,7 @@ input[type='range'] { width: 100%; margin: 16px 0 7px; }
 .setting > .range-with-labels { gap: 8px; margin: 12px 0 7px; }
 .range-with-labels input[type='range'] { flex: 1; width: auto; min-width: 0; margin: 0; }
 .select-setting { display: flex; flex-direction: column; gap: 9px; margin-bottom: 22px; font-size: 13px; }
-.select-setting select, .batch-name-field input { width: 100%; min-width: 0; padding: 11px; border: 1px solid var(--line); border-radius: 7px; background: var(--soft); color: var(--text); font-size: 12px; }
+.select-setting select, .batch-name-field input, .feedback-subject input { width: 100%; min-width: 0; padding: 11px; border: 1px solid var(--line); border-radius: 7px; background: var(--soft); color: var(--text); font-size: 12px; }
 .select-setting small { font-size: 11px; line-height: 1.8; color: var(--muted); }
 .feedback-message textarea { font: inherit; padding: 11px; border: 1px solid var(--line); border-radius: 7px; background: var(--soft); color: var(--text); resize: vertical; }
 .toggle-setting { position: relative; display: flex; align-items: center; gap: 16px; margin: 24px 0; font-size: 13px; cursor: pointer; }

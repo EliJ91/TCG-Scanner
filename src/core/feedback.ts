@@ -5,4 +5,5 @@ export const feedbackCategories = {
 } as const;
 
 export type FeedbackCategory = keyof typeof feedbackCategories;
+export const feedbackSubjectLimit = 120;
 export const feedbackMessageLimit = 2000;

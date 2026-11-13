@@ -1,4 +1,4 @@
-import { feedbackCategories, feedbackMessageLimit, type FeedbackCategory } from '../src/core/feedback';
+import { feedbackCategories, feedbackMessageLimit, feedbackSubjectLimit, type FeedbackCategory } from '../src/core/feedback';
 import { inbox, page, type Feedback } from './inbox';
 
 interface Env {
@@ -142,11 +142,21 @@ async function readSubmission(request: Request) {
     body += decoder.decode(value, { stream: true });
   }
   try {
-    const { category, message } = JSON.parse(body + decoder.decode()) as { category?: unknown; message?: unknown };
-    if (typeof category !== 'string' || !Object.hasOwn(feedbackCategories, category) || typeof message !== 'string') return;
+    const { subject, category, message } = JSON.parse(body + decoder.decode()) as {
+      subject?: unknown;
+      category?: unknown;
+      message?: unknown;
+    };
+    if (typeof message !== 'string' || (subject !== undefined && typeof subject !== 'string')) return;
     const trimmed = message.trim();
     if (!trimmed || trimmed.length > feedbackMessageLimit) return;
-    return { category: category as FeedbackCategory, message: trimmed };
+    let title = subject?.trim() ?? '';
+    if (title.length > feedbackSubjectLimit) return;
+    if (subject === undefined && category !== undefined) {
+      if (typeof category !== 'string' || !Object.hasOwn(feedbackCategories, category)) return;
+      title = feedbackCategories[category as FeedbackCategory];
+    }
+    return { subject: title, message: trimmed };
   } catch { /* The form only accepts valid JSON. */ }
 }
 

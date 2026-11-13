@@ -22,10 +22,10 @@ function setup() {
     SUBMISSION_LIMIT: { limit: vi.fn(async () => ({ success: true })) },
   };
   const request = (path: string, options?: RequestInit) => worker.fetch(new Request(workerOrigin + path, options), env);
-  const post = (message: string, category = 'issue', from = origin) => request('/feedback', {
+  const post = (message: string, fields: { subject?: unknown; category?: string } = {}, from = origin) => request('/feedback', {
     method: 'POST',
     headers: { Origin: from, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ category, message }),
+    body: JSON.stringify({ ...fields, message }),
   });
   async function signIn(id: number, expectedState = true) {
     const github = vi.fn()
@@ -48,11 +48,11 @@ afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 it('accepts anonymous feedback while denying public reads and deletes', async () => {
   const { messages, env, request, post } = setup();
-  const sent = await post('  Thank you!  ', 'thanks');
+  const sent = await post('  Thank you!  ');
   expect(sent.status).toBe(201);
   expect(sent.headers.get('Access-Control-Allow-Origin')).toBe(origin);
   const [key, value] = [...messages][0];
-  expect(JSON.parse(value)).toEqual({ id: key.slice('feedback/'.length), message: 'Thank you!', category: 'thanks', createdAt: expect.any(String) });
+  expect(JSON.parse(value)).toEqual({ id: key.slice('feedback/'.length), message: 'Thank you!', subject: '', createdAt: expect.any(String) });
   const signIn = await request('/inbox');
   expect(await signIn.text()).toContain('Sign in with GitHub');
   expect(env.FEEDBACK.list).not.toHaveBeenCalled();
@@ -63,8 +63,10 @@ it('accepts anonymous feedback while denying public reads and deletes', async ()
 
 it('rejects foreign origins, invalid submissions, oversized bodies and rate limited requests', async () => {
   const { messages, env, request, post } = setup();
-  expect((await post('hello', 'review', 'https://other.example.com')).status).toBe(403);
-  expect((await post('hello', 'constructor')).status).toBe(400);
+  expect((await post('hello', {}, 'https://other.example.com')).status).toBe(403);
+  expect((await post('hello', { category: 'constructor' })).status).toBe(400);
+  expect((await post('hello', { subject: 42 })).status).toBe(400);
+  expect((await post('hello', { subject: 'x'.repeat(121) })).status).toBe(400);
   expect((await post('   ')).status).toBe(400);
   expect((await post('x'.repeat(17_000))).status).toBe(400);
   expect((await request('/feedback', { method: 'OPTIONS', headers: { Origin: origin } })).status).toBe(204);
@@ -76,7 +78,7 @@ it('rejects foreign origins, invalid submissions, oversized bodies and rate limi
 it('waits for the inbox to be configured before accepting feedback', async () => {
   const { messages, env, request, post } = setup();
   env.SESSION_SECRET = '';
-  expect((await post('Thank you!', 'thanks')).status).toBe(503);
+  expect((await post('Thank you!')).status).toBe(503);
   expect((await request('/inbox')).status).toBe(503);
   expect(messages.size).toBe(0);
 });
@@ -93,7 +95,7 @@ it('checks the signed OAuth state and denies a GitHub account with the wrong ID'
 
 it('lets only the signed-in owner read and delete escaped messages from the inbox', async () => {
   const { messages, request, post, signIn } = setup();
-  await post('<script>alert(1)</script>');
+  await post('<script>alert(1)</script>', { subject: '  <em>A suggestion</em>  ' });
   const [key] = messages.keys();
   const path = '/inbox/delete/' + key.slice('feedback/'.length);
   const { result, github } = await signIn(ownerId);
@@ -107,6 +109,7 @@ it('lets only the signed-in owner read and delete escaped messages from the inbo
   const inbox = await request('/inbox', { headers: { Cookie } });
   expect(inbox.headers.get('Cache-Control')).toBe('no-store');
   const html = await inbox.text();
+  expect(html).toContain('<h2>&lt;em&gt;A suggestion&lt;/em&gt;</h2>');
   expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
   expect(html).not.toContain('<script>alert(1)</script>');
   expect((await request(path, { method: 'POST', headers: { Cookie, Origin: origin } })).status).toBe(403);
@@ -117,4 +120,17 @@ it('lets only the signed-in owner read and delete escaped messages from the inbo
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(Date.now() + 8 * 60 * 60 * 1000 + 1000);
   expect(await (await request('/inbox', { headers: { Cookie } })).text()).toContain('Sign in with GitHub');
+});
+
+it('displays blank subjects and preserves categories from older scanners and stored messages', async () => {
+  const { messages, request, post, signIn } = setup();
+  expect((await post('An older scanner submission', { category: 'review' })).status).toBe(201);
+  expect((await post('A message without a subject', { subject: '   ' })).status).toBe(201);
+  messages.set('feedback/legacy', JSON.stringify({ id: 'legacy', category: 'thanks', message: 'An older stored message', createdAt: '2026-11-13T00:00:00Z' }));
+  const { result } = await signIn(ownerId);
+  const Cookie = result.headers.getSetCookie().find(value => value.startsWith('__Host-feedback_session='))!.split(';')[0];
+  const html = await (await request('/inbox', { headers: { Cookie } })).text();
+  expect(html).toContain('<h2>No subject</h2>');
+  expect(html).toContain('<h2>Review</h2>');
+  expect(html).toContain('<h2>Thank you</h2>');
 });
