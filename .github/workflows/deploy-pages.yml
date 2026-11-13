@@ -38,6 +38,7 @@ jobs:
       - name: Build for the Pages URL
         env:
           VITE_BASE_PATH: ${{ steps.pages.outputs.base_path }}/
+          VITE_FEEDBACK_URL: ${{ vars.FEEDBACK_URL }}
         run: npm run build
       - name: Verify offline assets and deployment paths
         run: npm run verify:build

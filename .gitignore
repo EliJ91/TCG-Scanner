@@ -8,3 +8,5 @@ test-results/
 playwright-report/
 .sites/
 *.tsbuildinfo
+.wrangler/
+.dev.vars*

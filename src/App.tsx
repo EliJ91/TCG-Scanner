@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
-import { ArrowDownToLine, ArrowDownUp, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Coffee, Focus, Images, Layers3, LoaderCircle, Menu, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X, Zap } from 'lucide-react';
+import { ArrowDownToLine, ArrowDownUp, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Coffee, Focus, Images, Layers3, LoaderCircle, Menu, MessageSquare, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X, Zap } from 'lucide-react';
+import { FeedbackForm } from './FeedbackForm';
 import { useScanner } from './useScanner';
 import { useTheme } from './useTheme';
 import { BlobImage, PhotoViewer, useReviewPhoto } from './PhotoViewer';
@@ -11,6 +12,7 @@ const photoQualities = [
   { value: 0.9, label: 'Balanced' },
   { value: 1, label: 'Best' },
 ];
+const feedbackEndpoint = import.meta.env.VITE_FEEDBACK_URL?.trim();
 const photoHoldMs = 450;
 const photoHoldSlop = 10;
 
@@ -108,6 +110,7 @@ export default function App() {
   const s = useScanner();
   const theme = useTheme();
   const [showMenu, setShowMenu] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
   const [showBatch, setShowBatch] = useState(false);
   const [quantityDraft, setQuantityDraft] = useState('');
   const [quantityError, setQuantityError] = useState('');
@@ -429,6 +432,7 @@ export default function App() {
         <button onClick={() => openFromMenu(openGallery)}><Images size={20} /><span>Gallery<small>{failedCount ? `${failedCount} need review` : `${count} saved`}</small></span><ChevronRight size={17} /></button>
         <button onClick={() => openFromMenu(() => setShowSettings(true))}><Settings2 size={20} /><span>Settings</span><ChevronRight size={17} /></button>
         <button onClick={() => openFromMenu(() => setShowHelp(true))}><CircleHelp size={20} /><span>Scanning guide</span><ChevronRight size={17} /></button>
+        {feedbackEndpoint && <button onClick={() => openFromMenu(() => setShowFeedback(true))}><MessageSquare size={20} /><span>Send feedback</span><ChevronRight size={17} /></button>}
         {s.cameraSize.width > 0 && <>
           <div className="menu-divider" />
           {!autoMode && s.session === 'scanning' && <button onClick={() => openFromMenu(s.pause)}><Pause size={18} /><span>Pause scanning</span><ChevronRight size={17} /></button>}
@@ -442,6 +446,10 @@ export default function App() {
         </a>
         {busy && <p className="setting-hint">Pause scanning to export or edit images.</p>}
       </div>
+    </Dialog>}
+
+    {showFeedback && feedbackEndpoint && <Dialog title="Send feedback" close={() => setShowFeedback(false)}>
+      <FeedbackForm endpoint={feedbackEndpoint} close={() => setShowFeedback(false)} />
     </Dialog>}
 
     {showBatch && <Dialog title="Batch Settings" close={() => setShowBatch(false)}>

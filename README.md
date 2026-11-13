@@ -110,7 +110,7 @@ The build is a static site. GitHub Actions tests, builds, verifies offline suppo
 
 Online visits to the GitHub Pages deployment are counted with a GoatCounter tracking pixel. The dashboard requires sign-in, and photos stay on the device.
 
-To deploy elsewhere, upload the **contents of `dist/`** to an HTTPS static host (Cloudflare Pages, Netlify, Vercel static hosting, or an HTTPS server). The default build uses the origin root `/`. For a subpath, set `VITE_BASE_PATH=/TCG-Scanner/` before `npm run build`, or run `npm run build -- --base=/TCG-Scanner/`. Run `npm run verify:build` after either build; it checks the actual deployment prefix, PWA paths, and offline cache behavior. Set the base back to `/` for a custom root domain. No server APIs or runtime secrets are needed.
+To deploy elsewhere, upload the **contents of `dist/`** to an HTTPS static host (Cloudflare Pages, Netlify, Vercel static hosting, or an HTTPS server). The default build uses the origin root `/`. For a subpath, set `VITE_BASE_PATH=/TCG-Scanner/` before `npm run build`, or run `npm run build -- --base=/TCG-Scanner/`. Run `npm run verify:build` after either build; it checks the actual deployment prefix, PWA paths, and offline cache behavior. Set the base back to `/` for a custom root domain. Camera capture and ZIP export run in the browser.
 
 Recommended headers:
 
@@ -122,11 +122,21 @@ Cache-Control: public, max-age=31536000, immutable # hashed /assets/*
 Permissions-Policy: camera=(self), microphone=()
 ```
 
-If you add a CSP, allow same-origin scripts, inline styles used by React, and `blob:` images. The GitHub Pages deployment also uses `https://jernitcg.goatcounter.com/count` as an image source for analytics.
+If you add a CSP, allow same-origin scripts, inline styles used by React, and `blob:` images. The GitHub Pages deployment also uses `https://jernitcg.goatcounter.com/count` as an image source for analytics. If feedback is enabled, include the Worker origin in `connect-src`.
 
 For LAN development, terminate HTTPS using a certificate trusted by your phone (for example a local HTTPS reverse proxy with a trusted development certificate). Set its upstream to Vite at `http://127.0.0.1:5173`. A trusted HTTPS tunnel is another option. Do not bypass certificate warnings and expect camera permissions to work. Production hosting supplies the simplest trusted HTTPS address.
 
 The production build generates a content-versioned service worker and pre-caches the application, icons, and local fonts. The first visit needs connectivity and enough cache space (app assets plus photos). Wait for service worker installation before airplane-mode testing. Opening or refreshing the scanner online loads the published page. Offline launches use the installed copy. Active scans continue when an update installs. Offline support is disabled in Vite development mode. Test it using the production preview. Android offers installation from its browser menu. On iOS use Safari's Share → Add to Home Screen. Scans are scoped to browser/profile/origin. An installed iOS app can have different storage from a Safari tab.
+
+## Private feedback inbox
+
+The feedback Worker stores each anonymous message as a file in a private Cloudflare R2 bucket. Only the verified GitHub account configured in `feedback/wrangler.jsonc` can read or delete messages. Visitors can submit a category and message without signing in. The scanner's **Send feedback** menu item appears when `FEEDBACK_URL` is configured.
+
+1. Sign in with `npx wrangler login` and activate R2 on the Cloudflare account if needed. Create the private `cardslinger-feedback` bucket. Leave public access disabled. [Cloudflare R2 setup](https://developers.cloudflare.com/r2/get-started/)
+2. Deploy from the project root with `npx wrangler deploy --config feedback/wrangler.jsonc`. Use the HTTPS Worker URL printed by Wrangler in the remaining steps.
+3. Register a GitHub OAuth app with the scanner URL as its homepage and the Worker URL followed by `/oauth/callback` as its callback URL. Generate its client secret. [GitHub OAuth app setup](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app)
+4. Add `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and `SESSION_SECRET` to the Worker with `npx wrangler secret put NAME --config feedback/wrangler.jsonc` for each name. Use 32 random bytes encoded as hex for `SESSION_SECRET`.
+5. Open the Worker URL followed by `/inbox`, sign in with GitHub, and bookmark the page. Set the GitHub repository Actions variable `FEEDBACK_URL` to the Worker URL followed by `/feedback`, then run **Test, build, and deploy GitHub Pages** to enable the menu item.
 
 ## Validation and limitations
 
