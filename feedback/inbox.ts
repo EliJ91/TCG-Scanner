@@ -20,7 +20,7 @@ export function page(scannerUrl: string, content: string, status = 200) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>Feedback Inbox · CardSlinger</title>
+  <title>Feedback Inbox · JerniTCG Scanner</title>
   <style>
     :root { color-scheme: light dark; --background: #f7f7f7; --surface: #fff; --text: #191919; --muted: #606060; --border: #ddd; }
     @media (prefers-color-scheme: dark) { :root { --background: #000; --surface: #141414; --text: #f2f2f2; --muted: #aaa; --border: #333; } }

@@ -1,6 +1,6 @@
 {
-  "name": "CardSlinger — Pokémon Auto Scanner",
-  "short_name": "CardSlinger",
+  "name": "JerniTCG Scanner",
+  "short_name": "JerniTCG Scanner",
   "description": "Private, hands-free Pokémon card scanning on your device.",
   "start_url": "./", "scope": "./", "display": "standalone",
   "theme_color": "#000000", "background_color": "#000000",

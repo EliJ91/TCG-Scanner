@@ -1,4 +1,4 @@
-# CardSlinger — Pokémon Auto Scanner
+# JerniTCG Scanner
 
 A mobile-first React and TypeScript camera app for hands-free photography above a physical card-slinger. The browser stores photos and builds the batch ZIP on your device.
 
