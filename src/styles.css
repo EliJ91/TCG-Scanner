@@ -183,13 +183,13 @@ input[type='range'] { width: 100%; margin: 16px 0 7px; }
 .attempt small { font-size: 10px; color: var(--muted); }
 .attempt-buttons { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 7px; }
 .attempt-buttons button { display: flex; align-items: center; gap: 4px; min-height: 36px; padding: 4px 0; font-size: 11px; text-decoration: underline; }
-.guide-step { display: flex; gap: 15px; margin-bottom: 27px; }
-.guide-step > span { font-size: 12px; color: var(--muted); padding-top: 3px; }
-.guide-step h3 { font-size: 13px; font-weight: 600; margin-bottom: 7px; }
-.guide-step p { font-size: 12px; color: var(--muted); line-height: 1.8; }
+.guide-step { margin-bottom: 22px; }
+.guide-step h3 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+.guide-step p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+.guide-step p + p { margin-top: 8px; }
 .guide-callout { display: flex; gap: 12px; padding: 15px; border: 1px solid var(--line); border-radius: 9px; color: var(--muted); }
 .guide-callout svg { flex-shrink: 0; }
-.guide-callout p { font-size: 11px; line-height: 1.8; }
+.guide-callout p { font-size: 12px; line-height: 1.6; }
 .confirm-content > .button { margin: 18px 0 12px; }
 .batch-name-field { margin: 22px 0 10px; }
 .batch-name-field input { font-size: 14px; }
@@ -250,3 +250,4 @@ input[type='range'] { width: 100%; margin: 16px 0 7px; }
 .settings-pause-note { margin-top: 16px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); font-size: 12px; line-height: 1.7; }
 .settings-pause-note .button { width: 100%; margin-top: 10px; }
 .install-scanner { margin-top: 14px; }
+.settings-reset-hint { margin-top: 20px; }

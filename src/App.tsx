@@ -455,7 +455,8 @@ export default function App() {
     {showBatch && <Dialog title="Batch Settings" close={() => setShowBatch(false)}>
       <div className="batch-content">
         <button className="edit-name-link" onClick={editName}><Pencil size={14} />Edit batch name<span>{s.batchName}</span></button>
-        <label className="field-label" htmlFor="batch-quantity">Cards per batch</label>
+        <p className="field-label">Cards per batch</p>
+        <p className="setting-hint">Scanning stops at this number. Tap a number or enter your own and tap Save size.</p>
         <div className="quantity-options">{[10, 25, 50, 100].map(q => <button key={q} disabled={sizeDisabled || q < minimumQuantity} aria-pressed={quantity === q} className={quantity === q ? 'selected' : ''} onClick={() => void changeBatchSize(q)}>{q}</button>)}</div>
         <form className="custom-quantity" noValidate onSubmit={event => { event.preventDefault(); void changeBatchSize(Number(quantityDraft)); }}>
           <label htmlFor="batch-quantity">Custom size</label>
@@ -465,7 +466,7 @@ export default function App() {
         {quantityError && <p className="name-error" role="alert">{quantityError}</p>}
         <div className="progress-heading"><span>{count} / {quantity} cards scanned</span><span>{Math.round(progress)}%</span></div>
         <div className="progress-track" role="progressbar" aria-label="Batch progress" aria-valuemin={0} aria-valuemax={quantity} aria-valuenow={count}><div style={{ width: `${progress}%` }} /></div>
-        {s.pending > 0 && <p className="setting-hint batch-hint">Wait for the current photos to save before changing the size.</p>}
+        {s.pending > 0 && <p className="setting-hint batch-hint">Let your photos finish saving before you change the batch size.</p>}
         {s.notice && <p className="setting-hint batch-hint">{s.notice}</p>}
       </div>
       <div className="dialog-footer batch-actions">{s.batch && <button className="button danger-outline" disabled={busy || s.pending > 0} onClick={() => setClearPrompt('manual')}>New batch</button>}{exportButton()}</div>
@@ -495,23 +496,23 @@ export default function App() {
     </Dialog>}
 
     {showSettings && <Dialog title="Settings" close={() => setShowSettings(false)}><div className="settings-content simple-settings">
-      <p className="dialog-intro">Your choices are saved automatically on this device.</p>
-      <Toggle label="Dark mode" checked={theme.dark} onChange={theme.setDark} />
-      <Toggle label="Newest first in gallery and ZIP" hint="Show recent photos at the top and number them first in the ZIP." checked={newestFirst} onChange={galleryNewestFirst => s.setSettings({ ...s.settings, galleryNewestFirst })} />
-      <Toggle label="Using Card Slinger" hint="In Auto, place the next card on top. The camera takes a photo when it settles." checked={s.settings.stackCards} onChange={stackCards => s.setSettings({ ...s.settings, stackCards })} />
-      <Setting label="Wait before each photo" value={waitLabel} hint="Auto takes a photo once movement stops and the green bar fills.">
+      <p className="dialog-intro">This browser saves your settings automatically.</p>
+      <Toggle label="Dark mode" hint="Use a black background with light text." checked={theme.dark} onChange={theme.setDark} />
+      <Toggle label="Newest first in gallery and ZIP" hint="Show your latest photos first in the Gallery and give them the first file numbers in the ZIP." checked={newestFirst} onChange={galleryNewestFirst => s.setSettings({ ...s.settings, galleryNewestFirst })} />
+      <Toggle label="Using Card Slinger" hint="Turn this on to stack cards in Auto. With it off, remove each card before placing the next." checked={s.settings.stackCards} onChange={stackCards => s.setSettings({ ...s.settings, stackCards })} />
+      <Setting label="Wait before each photo" value={waitLabel} hint="Set how long a card must stay still in Auto. The green bar fills during this wait.">
         <input aria-label="Wait before each photo" aria-valuetext={waitLabel} type="range" min="0" max={photoWaitTimes.length - 1} step="1" list="photo-wait-stops" value={photoWaitTimes.indexOf(s.settings.stabilityMs)} onChange={event => s.setSettings({ ...s.settings, stabilityMs: photoWaitTimes[event.currentTarget.valueAsNumber] })} />
         <datalist id="photo-wait-stops">{photoWaitTimes.map((wait, index) => <option key={wait} value={index} />)}</datalist>
       </Setting>
-      <Toggle label="Sounds" hint="A ding means the camera took a photo. A low buzz means there’s a problem." checked={!s.settings.muted} onChange={v => s.setSettings({ ...s.settings, muted: !v })} />
+      <Toggle label="Sounds" hint="Get sound alerts when a photo is taken, the batch is full, the app needs time to save photos, or an error occurs." checked={!s.settings.muted} onChange={v => s.setSettings({ ...s.settings, muted: !v })} />
       {!s.settings.muted && <>
-        <Setting label="Volume" value={`${Math.round(s.settings.volume * 100)}%`}><input aria-label="Sound volume" type="range" min="0" max="1" step="0.05" value={s.settings.volume} onChange={e => s.setSettings({ ...s.settings, volume: +e.target.value })} /></Setting>
-        <div className="sound-previews" role="group" aria-label="Preview sounds"><button className="button outline" onClick={() => void s.testSound()}><Volume2 size={16} />Play ding</button><button className="button outline" onClick={() => void s.testErrorSound()}><Volume2 size={16} />Play buzz</button></div>
+        <Setting label="Volume" value={`${Math.round(s.settings.volume * 100)}%`} hint="Use the buttons below to test the volume."><input aria-label="Sound volume" type="range" min="0" max="1" step="0.05" value={s.settings.volume} onChange={e => s.setSettings({ ...s.settings, volume: +e.target.value })} /></Setting>
+        <div className="sound-previews" role="group" aria-label="Preview sounds"><button className="button outline" onClick={() => void s.testSound()}><Volume2 size={16} />Photo sound</button><button className="button outline" onClick={() => void s.testErrorSound()}><Volume2 size={16} />Error sound</button></div>
       </>}
-      <details className="advanced-settings"><summary><span>Advanced settings<small>Extra camera and photo controls</small></span><ChevronRight size={18} /></summary><div>
-        {busy && <div className="settings-pause-note"><p>Pause scanning to change the greyed-out controls.</p><button className="button outline" onClick={s.pause}><Pause size={16} />Pause scanning</button></div>}
+      <details className="advanced-settings"><summary><span>Advanced settings<small>Camera, photo quality, and motion controls</small></span><ChevronRight size={18} /></summary><div>
+        {busy && <div className="settings-pause-note"><p>Pause scanning to change these settings.</p><button className="button outline" onClick={s.pause}><Pause size={16} />Pause scanning</button></div>}
         <h3><Focus size={16} /> Photos</h3>
-        <Setting label="Ignore small movements" hint="Turn this up if small vibrations keep restarting the countdown.">
+        <Setting label="Ignore small movements" hint="In Auto, move toward More if small shakes restart the green bar. Move toward Less if the scanner misses movement when you place a card.">
           <div className="range-with-labels">
             <span aria-hidden="true">Less</span>
             <input aria-label="Ignore small movements" disabled={busy} type="range" {...motionSensitivityRange} value={s.settings.sensitivity} onChange={e => s.setSettings({ ...s.settings, sensitivity: +e.target.value })} />
@@ -522,29 +523,51 @@ export default function App() {
           <select aria-label="Photo quality" disabled={busy} value={s.settings.quality} onChange={e => s.setSettings({ ...s.settings, quality: +e.target.value })}>
             {photoQualities.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
-          <small>Higher JPEG quality makes larger files.</small>
+          <small>Lowest saves smaller files. Best keeps the most detail. Balanced is in between.</small>
         </label>
         <h3><Camera size={16} /> Camera</h3>
-        {s.devices.length > 1 && <label className="select-setting">Choose a camera<select disabled={busy || s.pending > 0} value={s.settings.cameraId} onChange={e => void s.switchCamera(e.target.value)}><option value="">Automatic rear camera</option>{s.devices.map((d, i) => <option key={d.deviceId} value={d.deviceId}>{d.label || `Camera ${i + 1}`}</option>)}</select></label>}
-        <p className="setting-hint">Pinch the camera view to zoom in or out. The camera focuses automatically.</p>
+        {s.devices.length > 1 && <label className="select-setting">Choose a camera
+          <select disabled={busy || s.pending > 0} value={s.settings.cameraId} onChange={e => void s.switchCamera(e.target.value)}><option value="">Automatic rear camera</option>{s.devices.map((d, i) => <option key={d.deviceId} value={d.deviceId}>{d.label || `Camera ${i + 1}`}</option>)}</select>
+          <small>Choose a specific camera or let the app pick a rear camera.</small>
+        </label>}
         <label className="select-setting">Camera resolution
           <select disabled={busy || s.cameraSize.width > 0} value={s.settings.resolution} onChange={e => s.setSettings({ ...s.settings, resolution: +e.target.value })}>
             <option value={1920}>Standard (1920 px)</option>
             <option value={2560}>High (2560 px)</option>
             <option value={3840}>Highest (3840 px)</option>
           </select>
-          <small>Sets the requested camera frame width. Use Menu → Stop camera before changing it.</small>
+          <small>Higher resolutions can capture more detail if your camera supports them. Choose Stop camera in the menu before changing this setting, then tap Enable camera.</small>
         </label>
-        <Toggle label="Alternate manual photo method" hint="Turn this on if Take photo fails in Manual mode." checked={s.settings.useImageCapture} disabled={busy} onChange={v => s.setSettings({ ...s.settings, useImageCapture: v })} />
-        <h3><ArrowDownToLine size={16} /> Add to your home screen</h3><p className="setting-hint">On iPhone, open Safari → Share → Add to Home Screen. On Android, choose Install app in the browser menu.</p>{installPrompt && <button className="button outline install-scanner" onClick={() => { void installPrompt.prompt(); setInstallPrompt(undefined); }}>Install app</button>}
+        <Toggle label="Alternate manual photo method" hint="Try this if tapping Take photo in Manual mode fails." checked={s.settings.useImageCapture} disabled={busy} onChange={v => s.setSettings({ ...s.settings, useImageCapture: v })} />
+        <h3><ArrowDownToLine size={16} /> Add to your home screen</h3><p className="setting-hint">On iPhone, open Safari’s Share menu and tap Add to Home Screen. On Android, look for Install app in your browser’s menu.</p>{installPrompt && <button className="button outline install-scanner" onClick={() => { void installPrompt.prompt(); setInstallPrompt(undefined); }}>Install app</button>}
       </div></details>
+      <p className="setting-hint settings-reset-hint">Reset settings restores the original settings and keeps your saved photos.</p>
     </div><div className="dialog-footer"><button className="button outline" disabled={!s.loaded || busy || s.capturing || working || s.cameraPhase === 'requesting'} title={busy ? 'Pause scanning to reset settings' : 'Restore defaults and keep your photos'} onClick={() => void safe(async () => { await s.resetSettings(); theme.setDark(window.matchMedia('(prefers-color-scheme: dark)').matches); })}>Reset settings</button><button className="button dark" onClick={() => setShowSettings(false)}>Done</button></div></Dialog>}
-    {showHelp && <Dialog title="How to scan" close={() => setShowHelp(false)}><div className="guide-content"><p className="dialog-intro">Use Auto for hands-free photos, or Manual to take each photo yourself.</p>{[
-      ['Position your phone', 'Keep your phone steady above one card. Allow camera access when asked. Keep all four card edges visible, with a little space around them. Avoid glare from lights.'],
-      ['Choose your batch', 'Open Menu → Batch Settings to choose how many cards to scan. Tap the name above the camera view to change it. Pinch the camera view to zoom in or out.'],
-      ['Take your photos', 'In Auto, place a card and tap Start scanning. The camera dings when the green bar fills and the photo is taken. Remove each card before placing the next, or turn on Using Card Slinger in Settings to stack cards. In Manual, tap Take photo.'],
-      ['Check and export', 'Tap the scan count to view your photos. When the batch is full, scanning stops and an alarm plays. Choose Export ZIP to download the batch.'],
-    ].map(([title, text], i) => <div className="guide-step" key={title}><span>{String(i + 1).padStart(2,'0')}</span><div><h3>{title}</h3><p>{text}</p></div></div>)}<div className="guide-callout"><ShieldCheck size={18} /><p>Scans stay in this browser’s local storage. Download your batch before clearing browser data. When resuming a saved batch in Auto with Using Card Slinger off, clear the camera view before placing a card.</p></div></div><div className="dialog-footer"><button className="button primary" onClick={() => setShowHelp(false)}>Ready to scan <ArrowRight size={16} /></button></div></Dialog>}
+    {showHelp && <Dialog title="Scanning guide" close={() => setShowHelp(false)}>
+      <div className="guide-content">
+        <div className="guide-step">
+          <h3>Set up the camera</h3>
+          <p>Tap <strong>Enable camera</strong> if needed and allow camera access when asked. Keep your phone steady above a plain surface with the card face up. Pinch to zoom and keep the whole card in view.</p>
+        </div>
+        <div className="guide-step">
+          <h3>Choose a batch size</h3>
+          <p>In the menu, open <strong>Batch Settings</strong> and choose how many cards to scan before the app stops. To name the batch, tap its name above the camera view.</p>
+        </div>
+        <div className="guide-step">
+          <h3>Take photos in Auto or Manual</h3>
+          <p>In <strong>Auto</strong>, place a card and tap <strong>Start scanning</strong>. Once the card is still, the green bar fills. The app takes a photo when the bar is full.</p>
+          <p>Lift each card and briefly show the empty surface before placing the next. To stack cards, turn on <strong>Using Card Slinger</strong> in Settings and place each new card on top.</p>
+          <p>In <strong>Manual</strong>, tap <strong>Take photo</strong> for each card.</p>
+        </div>
+        <div className="guide-step">
+          <h3>Review and download your photos</h3>
+          <p>Tap the photo count below the camera to open the <strong>Gallery</strong>. Opening it or the menu pauses Auto. To continue, return to the camera and tap <strong>Resume scanning</strong>.</p>
+          <p>Once your photos finish saving, choose <strong>Export ZIP</strong> from the menu or Gallery, then tap <strong>Download ZIP</strong> to save them in one file.</p>
+        </div>
+        <div className="guide-callout"><ShieldCheck size={18} /><p>Your photos are saved in this browser. Download the ZIP before starting a new batch or clearing browser data.</p></div>
+      </div>
+      <div className="dialog-footer"><button className="button primary" onClick={() => setShowHelp(false)}>Done</button></div>
+    </Dialog>}
     {clearPrompt && <Dialog key={clearPrompt === 'manual' ? 'manual' : 'download'} title="Start a fresh batch?" close={() => setClearPrompt(undefined)}>
       <div className="confirm-content">
         <p>{clearPrompt === 'manual' ? 'Download your ZIP first if you want to keep these photos.' : 'Check that your ZIP finished downloading before clearing the batch.'}</p>
