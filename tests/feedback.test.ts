@@ -15,11 +15,8 @@ function setup() {
     SESSION_SECRET: 'a-test-only-key-longer-than-thirty-two-characters',
     FEEDBACK: {
       put: async (key, value) => { messages.set(key, value); },
-      get: async key => {
-        const value = messages.get(key);
-        return value ? { json: async () => JSON.parse(value) } : null;
-      },
-      list: vi.fn(async () => ({ objects: [...messages.keys()].sort().map(key => ({ key })), truncated: false as const })),
+      get: async keys => new Map(keys.map(key => [key, JSON.parse(messages.get(key) ?? 'null')])),
+      list: vi.fn(async () => ({ keys: [...messages.keys()].sort().map(name => ({ name })), list_complete: true as const })),
       delete: async key => { messages.delete(key); },
     },
     SUBMISSION_LIMIT: { limit: vi.fn(async () => ({ success: true })) },

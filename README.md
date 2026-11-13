@@ -130,13 +130,15 @@ The production build generates a content-versioned service worker and pre-caches
 
 ## Private feedback inbox
 
-The feedback Worker stores each anonymous message as a file in a private Cloudflare R2 bucket. Only the verified GitHub account configured in `feedback/wrangler.jsonc` can read or delete messages. Visitors can submit a category and message without signing in. The scanner's **Send feedback** menu item appears when `FEEDBACK_URL` is configured.
+The feedback Worker stores each anonymous message as a separate JSON entry in Cloudflare Workers KV. Only the verified GitHub account configured in `feedback/wrangler.jsonc` can read or delete messages. Visitors can submit a category and message without signing in. The scanner's **Send feedback** menu item appears when `FEEDBACK_URL` is configured.
 
-1. Sign in with `npx wrangler login` and activate R2 on the Cloudflare account if needed. Create the private `cardslinger-feedback` bucket. Leave public access disabled. [Cloudflare R2 setup](https://developers.cloudflare.com/r2/get-started/)
-2. Deploy from the project root with `npx wrangler deploy --config feedback/wrangler.jsonc`. Use the HTTPS Worker URL printed by Wrangler in the remaining steps.
+1. Sign in with `npx wrangler login` and use an account on the Workers Free plan. [Workers KV quotas](https://developers.cloudflare.com/kv/platform/pricing/)
+2. Deploy from the project root with `npx wrangler deploy --config feedback/wrangler.jsonc`. Wrangler provisions a KV namespace for the feedback binding. Use the HTTPS Worker URL printed by Wrangler in the remaining steps.
 3. Register a GitHub OAuth app with the scanner URL as its homepage and the Worker URL followed by `/oauth/callback` as its callback URL. Generate its client secret. [GitHub OAuth app setup](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app)
 4. Add `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and `SESSION_SECRET` to the Worker with `npx wrangler secret put NAME --config feedback/wrangler.jsonc` for each name. Use 32 random bytes encoded as hex for `SESSION_SECRET`.
 5. Open the Worker URL followed by `/inbox`, sign in with GitHub, and bookmark the page. Set the GitHub repository Actions variable `FEEDBACK_URL` to the Worker URL followed by `/feedback`, then run **Test, build, and deploy GitHub Pages** to enable the menu item.
+
+KV changes can take about a minute to appear across locations. [Workers KV consistency](https://developers.cloudflare.com/kv/concepts/how-kv-works/)
 
 ## Validation and limitations
 

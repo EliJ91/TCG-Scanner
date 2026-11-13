@@ -8,8 +8,8 @@
     "SCANNER_URL": "https://elij91.github.io/TCG-Scanner/",
     "OWNER_GITHUB_ID": "59631669"
   },
-  "r2_buckets": [
-    { "binding": "FEEDBACK", "bucket_name": "cardslinger-feedback" }
+  "kv_namespaces": [
+    { "binding": "FEEDBACK" }
   ],
   "ratelimits": [
     { "name": "SUBMISSION_LIMIT", "namespace_id": "59631669", "simple": { "limit": 5, "period": 60 } }

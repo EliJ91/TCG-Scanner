@@ -9,9 +9,9 @@ interface Env {
   SESSION_SECRET: string;
   FEEDBACK: {
     put(key: string, value: string): Promise<unknown>;
-    get(key: string): Promise<{ json<T>(): Promise<T> } | null>;
+    get<T>(keys: string[], type: 'json'): Promise<Map<string, T | null>>;
     list(options: { prefix: string; limit: number; cursor?: string }): Promise<
-      { objects: { key: string }[] } & ({ truncated: true; cursor: string } | { truncated: false })
+      { keys: { name: string }[] } & ({ list_complete: false; cursor: string } | { list_complete: true })
     >;
     delete(key: string): Promise<void>;
   };
@@ -190,8 +190,10 @@ async function route(request: Request, env: Env) {
     const cursor = url.searchParams.get('cursor') || undefined;
     if (cursor && cursor.length > 2048) return redirect('/inbox');
     const result = await env.FEEDBACK.list({ prefix, limit: 20, cursor });
-    const messages = await Promise.all(result.objects.map(async ({ key }) => (await env.FEEDBACK.get(key))?.json<Feedback>()));
-    return inbox(env.SCANNER_URL, messages.filter((message): message is Feedback => !!message), result.truncated ? result.cursor : undefined, !!cursor);
+    const keys = result.keys.map(({ name }) => name);
+    const values = keys.length ? await env.FEEDBACK.get<Feedback>(keys, 'json') : undefined;
+    const messages = keys.map(key => values?.get(key)).filter((message): message is Feedback => !!message);
+    return inbox(env.SCANNER_URL, messages, result.list_complete ? undefined : result.cursor, !!cursor);
   }
   if (request.method === 'POST' && (url.pathname === '/logout' || url.pathname.startsWith('/inbox/delete/'))) {
     if (!isOwner || request.headers.get('Origin') !== url.origin) return new Response(null, { status: 403 });
