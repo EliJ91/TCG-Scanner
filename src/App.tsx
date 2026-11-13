@@ -562,7 +562,7 @@ export default function App() {
         <div className="guide-step">
           <h3>Review and download your photos</h3>
           <p>Tap the photo count below the camera to open the <strong>Gallery</strong>. Opening it or the menu pauses Auto. To continue, return to the camera and tap <strong>Resume scanning</strong>.</p>
-          <p>Once your photos finish saving, choose <strong>Export ZIP</strong> from the menu or Gallery, then tap <strong>Download ZIP</strong> to save them in one file.</p>
+          <p>If Manual is still scanning, choose <strong>Pause scanning</strong> from the menu. Once your photos finish saving, choose <strong>Export ZIP</strong> from the menu or Gallery. Tap <strong>Download ZIP</strong> to save them in one file.</p>
         </div>
         <div className="guide-callout"><ShieldCheck size={18} /><p>Your photos are saved in this browser. Download the ZIP before starting a new batch or clearing browser data.</p></div>
       </div>
