@@ -36,10 +36,11 @@ function OriginalPhoto({ id, load }: { id: string; load(id: string): Promise<Blo
 
 type DownloadResult = { nameError?: string };
 
-function BatchExport({ batch, scans, newestFirst, disabled, rename, close, completed }: {
+function BatchExport({ batch, scans, newestFirst, saving, disabled, rename, close, completed }: {
   batch: Batch;
   scans: Scan[];
   newestFirst: boolean;
+  saving: boolean;
   disabled: boolean;
   rename(name: string): Promise<void>;
   close(): void;
@@ -54,6 +55,7 @@ function BatchExport({ batch, scans, newestFirst, disabled, rename, close, compl
   useEffect(() => { if (result) completed(result); }, [result, completed]);
 
   useEffect(() => {
+    if (saving) return;
     let current = true;
     setBuild({ progress: 0 });
     void createZip(scans, progress => {
@@ -64,7 +66,7 @@ function BatchExport({ batch, scans, newestFirst, disabled, rename, close, compl
       if (current) setBuild({ error: `Could not prepare the ZIP. ${message(error)}` });
     });
     return () => { current = false; };
-  }, [scans, newestFirst]);
+  }, [scans, newestFirst, saving]);
 
   const archiveName = archiveFilename(name, batch.number);
   const file = 'blob' in build && build.scans === scans && build.newestFirst === newestFirst
@@ -92,12 +94,14 @@ function BatchExport({ batch, scans, newestFirst, disabled, rename, close, compl
         <input id="export-batch-name" type="text" maxLength={100} value={name} disabled={downloading} placeholder={defaultBatchName(batch.number)} onChange={event => setName(event.target.value)} />
       </label>
       <p className="archive-preview">{archiveName}</p>
-      <p className="setting-hint">{scans.length} saved photos in this ZIP.</p>
-      {'progress' in build && <>
-        <p className="setting-hint">Preparing ZIP · {build.progress}%</p>
-        <div className="progress-track" role="progressbar" aria-label="ZIP export progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={build.progress}><div style={{ width: `${build.progress}%` }} /></div>
+      {saving ? <p className="setting-hint" role="status">Waiting for photos to finish saving…</p> : <>
+        <p className="setting-hint">{scans.length} saved photos in this ZIP.</p>
+        {'progress' in build && <>
+          <p className="setting-hint">Preparing ZIP · {build.progress}%</p>
+          <div className="progress-track" role="progressbar" aria-label="ZIP export progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={build.progress}><div style={{ width: `${build.progress}%` }} /></div>
+        </>}
+        {'error' in build && <p className="name-error" role="alert">{build.error}</p>}
       </>}
-      {'error' in build && <p className="name-error" role="alert">{build.error}</p>}
       {actionError && <p className="name-error" role="alert">{actionError}</p>}
     </div>
     <div className="dialog-footer">
@@ -176,7 +180,11 @@ export default function App() {
     } finally { setWorking(false); }
   };
   const safe = async (action: () => Promise<unknown>) => { setWorking(true); try { await action(); } catch (err) { s.setError(message(err)); } finally { setWorking(false); } };
-  const exportButton = () => <button className="button dark" aria-label={`Export ZIP, ${count} saved photos`} disabled={!count || editingDisabled} onClick={() => setExportOpen(true)}><ArrowDownToLine size={17} />Export ZIP<span className="button-count">{count}</span></button>;
+  const openExport = () => {
+    if (busy) s.pause();
+    setExportOpen(true);
+  };
+  const exportButton = () => <button className="button dark" aria-label={`Export ZIP, ${count} saved photos`} disabled={!count || working} onClick={openExport}><ArrowDownToLine size={17} />Export ZIP<span className="button-count">{count}</span></button>;
   const cancelPhotoHold = (pointerId?: number) => {
     const hold = galleryHold.current;
     if (hold && (pointerId === undefined || hold.pointerId === pointerId)) {
@@ -444,7 +452,7 @@ export default function App() {
         <a className="button outline kofi-button" href="https://ko-fi.com/jernitcg" target="_blank" rel="noopener noreferrer">
           <Coffee size={16} aria-hidden="true" />Support on Ko-fi
         </a>
-        {busy && <p className="setting-hint">Pause scanning to export or edit images.</p>}
+        {busy && <p className="setting-hint">Pause scanning to edit images.</p>}
       </div>
     </Dialog>}
 
@@ -562,7 +570,7 @@ export default function App() {
         <div className="guide-step">
           <h3>Review and download your photos</h3>
           <p>Tap the photo count below the camera to open the <strong>Gallery</strong>. Opening it or the menu pauses Auto. To continue, return to the camera and tap <strong>Resume scanning</strong>.</p>
-          <p>If Manual is still scanning, choose <strong>Pause scanning</strong> from the menu. Once your photos finish saving, choose <strong>Export ZIP</strong> from the menu or Gallery. Tap <strong>Download ZIP</strong> to save them in one file.</p>
+          <p>After your first photo saves, you can choose <strong>Export ZIP</strong> from the menu or Gallery at any time. The app pauses scanning and finishes saving your photos. Tap <strong>Download ZIP</strong> to save them in one file.</p>
         </div>
         <div className="guide-callout"><ShieldCheck size={18} /><p>Your photos are saved in this browser. Download the ZIP before starting a new batch or clearing browser data.</p></div>
       </div>
@@ -579,7 +587,7 @@ export default function App() {
         <button className="button danger" disabled={editingDisabled} onClick={() => void safe(async () => { await s.clear(); setExportOpen(false); setClearPrompt(undefined); setShowBatch(false); closeGallery(); setShowMenu(false); })}><Trash2 size={15} /> Delete & start new</button>
       </div>
     </Dialog>}
-    {exportOpen && s.batch && <BatchExport batch={s.batch} scans={s.scans} newestFirst={newestFirst} disabled={editingDisabled} rename={s.renameBatch} close={() => setExportOpen(false)} completed={result => { setExportOpen(false); setClearPrompt(result); }} />}
+    {exportOpen && s.batch && <BatchExport batch={s.batch} scans={s.scans} newestFirst={newestFirst} saving={s.pending > 0} disabled={editingDisabled} rename={s.renameBatch} close={() => setExportOpen(false)} completed={result => { setExportOpen(false); setClearPrompt(result); }} />}
     {active && <Dialog title={photoNumber(captureIndex(displayedIndex < 0 ? activeIndex : displayedIndex))} close={() => setSelected(undefined)} wide>
       <PhotoViewer photoId={active.id} src={reviewedPhoto?.url} flipped={s.settings.flipInterface} onSwipe={movePhoto} />
       <div className="review-meta"><span>{active.width && active.height ? `${active.width} × ${active.height} · JPEG` : 'JPEG'}</span></div>

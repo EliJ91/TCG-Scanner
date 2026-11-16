@@ -136,6 +136,33 @@ describe('batch ZIP downloads', () => {
     expect(container.querySelector('.scan-count')?.textContent).toBe('12 / 13');
   });
 
+  it('opens export during an unfinished manual batch and includes photos still saving', async () => {
+    const build = vi.spyOn(exportTools, 'createZip').mockResolvedValueOnce(zip);
+    const download = vi.spyOn(exportTools, 'downloadArchive').mockImplementation(() => {});
+    await renderApp();
+    await click('Manual');
+    await click('Take photo');
+
+    let finishSaving!: () => void;
+    mocks.accept.mockImplementationOnce(() => new Promise<void>(resolve => { finishSaving = resolve; }));
+    await click('Take photo');
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
+    const exportZip = container.querySelector<HTMLButtonElement>('[aria-label="Export ZIP, 1 saved photos"]')!;
+    expect(exportZip.disabled).toBe(false);
+    await act(async () => exportZip.click());
+    expect(button('Download ZIP').disabled).toBe(true);
+    expect(build).not.toHaveBeenCalled();
+
+    await act(async () => finishSaving());
+    expect(build).toHaveBeenCalledOnce();
+    expect(build.mock.calls[0][0]).toHaveLength(2);
+    await click('Download ZIP');
+    expect(download).toHaveBeenCalledOnce();
+    await click('Keep batch');
+    expect(container.querySelector('.scan-count')?.textContent).toBe('2 / 50');
+    expect(mocks.clear).not.toHaveBeenCalled();
+  });
+
   it('allows retry after a download error and clears only after confirmation', async () => {
     vi.spyOn(exportTools, 'createZip').mockResolvedValueOnce(zip);
     const download = vi.spyOn(exportTools, 'downloadArchive')
