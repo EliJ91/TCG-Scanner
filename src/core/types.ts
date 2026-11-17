@@ -1,6 +1,7 @@
 export interface Settings {
   captureVersion: number; cameraId: string; torch: boolean;
   captureMode: 'auto' | 'manual'; stackCards: boolean; zoom: number;
+  autoZoom: boolean; autoZoomInterval: number; autoZoomOutPercent: number;
   stabilityMs: number; sensitivity: number; quality: number;
   volume: number; muted: boolean; galleryNewestFirst: boolean; flipInterface: boolean;
   resolution: number; useImageCapture: boolean; batchTarget: number;
@@ -8,11 +9,13 @@ export interface Settings {
 export const defaults: Settings = {
   captureVersion: 3, cameraId: '', torch: false,
   captureMode: 'auto', stackCards: false, zoom: 1, stabilityMs: 100, sensitivity: 0.035, quality: 1,
+  autoZoom: false, autoZoomInterval: 10, autoZoomOutPercent: 20,
   volume: 0.6, muted: false, galleryNewestFirst: false, flipInterface: false,
   resolution: 2560, useImageCapture: false, batchTarget: 50,
 };
 export const motionSensitivityRange = { min: 0.03, max: 0.22, step: 0.005 } as const;
 export const photoWaitTimes: readonly number[] = [10, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
+export const autoZoomOutLevels: readonly number[] = [1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 export interface Batch {
   id: string; number: number; name: string; target: number; createdAt: number;
   status: 'paused' | 'scanning' | 'complete'; nextOrdinal: number;

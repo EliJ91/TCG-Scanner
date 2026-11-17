@@ -1,4 +1,4 @@
-import { defaults, motionSensitivityRange, photoWaitTimes, validBatchTarget, type Settings } from './types';
+import { autoZoomOutLevels, defaults, motionSensitivityRange, photoWaitTimes, validBatchTarget, type Settings } from './types';
 const key = 'cardslinger-settings';
 const batchNameKey = 'cardslinger-custom-batch-name';
 type SavedSettings = Partial<Settings> & { lockCamera?: boolean; debug?: boolean; focusLocked?: boolean; focusDistance?: number | null; autoAdjustZoom?: boolean };
@@ -12,6 +12,9 @@ export function normalizeSettings(saved?: SavedSettings): Settings {
   next.stackCards = current.stackCards === true;
   next.flipInterface = current.flipInterface === true;
   if (!validBatchTarget(next.batchTarget)) next.batchTarget = defaults.batchTarget;
+  next.autoZoom = current.autoZoom === true;
+  if (!validBatchTarget(next.autoZoomInterval)) next.autoZoomInterval = defaults.autoZoomInterval;
+  if (!autoZoomOutLevels.includes(next.autoZoomOutPercent)) next.autoZoomOutPercent = defaults.autoZoomOutPercent;
   next.zoom = Number.isFinite(next.zoom) ? Math.max(1, Math.min(3, next.zoom)) : defaults.zoom;
   const savedWait = next.stabilityMs;
   next.stabilityMs = Number.isFinite(savedWait)

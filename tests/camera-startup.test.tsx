@@ -341,6 +341,20 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.capture).toHaveBeenCalledOnce();
     expect(container.querySelector('video')?.style.transform).toBe('scale(1.5)');
   });
+  it('zooms all the way out at 100% without scanning the same card again', async () => {
+    const card = printedCard();
+    const { tick } = await startAutoPreview(100, card, false, {
+      settings: { zoom: 2, autoZoom: true, autoZoomInterval: 1, autoZoomOutPercent: 100 },
+    });
+    await tick();
+    await tick(33, card);
+    await tick(100);
+    expect(container.querySelector('video')?.style.transform).toBe('scale(1)');
+
+    await tick(150, card);
+    await tick(150, card);
+    expect(mocks.capture).toHaveBeenCalledOnce();
+  });
   it('pauses Auto when the scan count opens the gallery and waits for an explicit resume', async () => {
     const card = printedCard();
     const { tick } = await startAutoPreview(100, card);
@@ -825,6 +839,49 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await renderApp(); await click('Manual'); await click('Take photo');
     expect(mocks.capture).toHaveBeenCalledWith(true, 1, expect.any(Function), true);
     expect(mocks.accept).toHaveBeenCalledOnce();
+  });
+  it('zooms out at the selected photo interval while saves are still queued', async () => {
+    localStorage.setItem('cardslinger-settings', JSON.stringify({ ...defaults, zoom: 2 }));
+    await renderApp();
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
+    await click('Settings');
+    await act(async () => container.querySelector<HTMLInputElement>('.auto-zoom input[type="checkbox"]')!.click());
+    await act(async () => container.querySelector<HTMLElement>('.auto-zoom-settings summary')!.click());
+    await input('.auto-zoom-settings input[type="number"]', '2');
+    await input('[aria-label="Zoom out amount"]', '5');
+    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!)).toMatchObject({
+      autoZoom: true, autoZoomInterval: 2, autoZoomOutPercent: 50,
+    });
+    await click('Done');
+    await click('Manual');
+
+    let finishSaving!: () => void;
+    mocks.accept.mockImplementationOnce(() => new Promise<void>(resolve => { finishSaving = resolve; }));
+    await click('Take photo');
+    expect(mocks.zoom).toHaveBeenLastCalledWith(2);
+    await click('Take photo');
+    expect(mocks.zoom).toHaveBeenLastCalledWith(1.5);
+    expect(mocks.accept).toHaveBeenCalledOnce();
+    await click('Take photo');
+    expect(mocks.zoom).toHaveBeenLastCalledWith(1.5);
+    await click('Take photo');
+    expect(mocks.zoom).toHaveBeenLastCalledWith(1.25);
+    await act(async () => finishSaving());
+    expect(container.querySelector('.scan-count')?.textContent).toBe('4 / 50');
+  });
+  it('offers a confirmed batch reset from the Gallery', async () => {
+    await renderApp();
+    await click('Manual');
+    await click('Take photo');
+    await act(async () => container.querySelector<HTMLButtonElement>('.scan-count')!.click());
+    await click('New batch');
+    expect(mocks.clear).not.toHaveBeenCalled();
+    await click('Keep batch');
+    expect(container.querySelector('.scan-count')?.textContent).toBe('1 / 50');
+    await click('New batch');
+    await click('Delete & start new');
+    expect(mocks.clear).toHaveBeenCalledWith('test-batch');
+    expect(container.querySelector('.scan-count')?.textContent).toBe('0 / 50');
   });
   it('switches mode without restarting the camera and persists the selection', async () => {
     await renderApp(); await click('Manual'); await click('Take photo'); await click('Auto');

@@ -43,6 +43,7 @@ export function useScanner() {
   const setError = useCallback((value: string) => { updateError(value); if (value) audio.current?.error(); }, []);
   const detector = useRef(new MotionDetector());
   const captureBusy = useRef(false);
+  const photosTaken = useRef(0);
   const announcedBatch = useRef<string | undefined>(undefined); const wakeLock = useRef<{ release(): Promise<void> } | undefined>(undefined);
   const mounted = useRef(true);
   const startToken = useRef(0);
@@ -89,6 +90,7 @@ export function useScanner() {
   };
 
   const makeController = (b: Batch, count: number) => {
+    photosTaken.current = count;
     const pipeline = new CapturePipeline(b, count, {
       saved: scan => {
         if (!mounted.current) return;
@@ -258,6 +260,11 @@ export function useScanner() {
       await c.capture(() => camera.current!.capture(alternateCapture, quality, () => {
         finishWaitingForFrame();
         if (!mounted.current || controller.current !== c) return;
+        photosTaken.current++;
+        const { autoZoom, autoZoomInterval, autoZoomOutPercent, zoom } = settingsRef.current;
+        if (autoZoom && photosTaken.current % autoZoomInterval === 0) {
+          setZoom(1 + (zoom - 1) * (1 - autoZoomOutPercent / 100));
+        }
         if (automatic) setCountdown('snapped');
         if (c.atBatchLimit) announceBatchLimit(currentBatch.id);
         else if (c.queueFull) audio.current?.queueFull();

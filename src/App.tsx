@@ -5,7 +5,7 @@ import { useScanner } from './useScanner';
 import { useTheme } from './useTheme';
 import { BlobImage, PhotoViewer, useReviewPhoto } from './PhotoViewer';
 import { createZip, downloadArchive, rotateScan } from './core/export';
-import { archiveFilename, defaultBatchName, filename, maxBatchTarget, message, motionSensitivityRange, photoNumber, photoWaitTimes, validBatchTarget, type Batch, type Scan } from './core/types';
+import { archiveFilename, autoZoomOutLevels, defaultBatchName, filename, maxBatchTarget, message, motionSensitivityRange, photoNumber, photoWaitTimes, validBatchTarget, type Batch, type Scan } from './core/types';
 
 const photoQualities = [
   { value: 0.8, label: 'Lowest' },
@@ -123,6 +123,7 @@ export default function App() {
   const galleryHold = useRef<{ pointerId: number; x: number; y: number; timer: ReturnType<typeof setTimeout> } | undefined>(undefined);
   const heldPhoto = useRef<string | undefined>(undefined);
   const [showSettings, setShowSettings] = useState(false);
+  const [zoomIntervalDraft, setZoomIntervalDraft] = useState<string>();
   const [showHelp, setShowHelp] = useState(false); const [selected, setSelected] = useState<string>();
   const [clearPrompt, setClearPrompt] = useState<'manual' | DownloadResult>();
   const [deleteIds, setDeleteIds] = useState<string[]>();
@@ -185,6 +186,10 @@ export default function App() {
     setExportOpen(true);
   };
   const exportButton = () => <button className="button dark" aria-label={`Export ZIP, ${count} saved photos`} disabled={!count || working} onClick={openExport}><ArrowDownToLine size={17} />Export ZIP<span className="button-count">{count}</span></button>;
+  const newBatchButton = () => s.batch && <button type="button" className="button danger-outline" disabled={working} onClick={() => {
+    if (busy) s.pause();
+    setClearPrompt('manual');
+  }}>New batch</button>;
   const cancelPhotoHold = (pointerId?: number) => {
     const hold = galleryHold.current;
     if (hold && (pointerId === undefined || hold.pointerId === pointerId)) {
@@ -438,7 +443,7 @@ export default function App() {
       <nav className="menu-list" aria-label="Scanner menu">
         <button onClick={() => openFromMenu(openBatch)}><Layers3 size={20} /><span>Batch Settings<small>{count} / {quantity} cards scanned</small></span><ChevronRight size={17} /></button>
         <button onClick={() => openFromMenu(openGallery)}><Images size={20} /><span>Gallery<small>{failedCount ? `${failedCount} need review` : `${count} saved`}</small></span><ChevronRight size={17} /></button>
-        <button onClick={() => openFromMenu(() => setShowSettings(true))}><Settings2 size={20} /><span>Settings</span><ChevronRight size={17} /></button>
+        <button onClick={() => openFromMenu(() => { setZoomIntervalDraft(undefined); setShowSettings(true); })}><Settings2 size={20} /><span>Settings</span><ChevronRight size={17} /></button>
         <button onClick={() => openFromMenu(() => setShowHelp(true))}><CircleHelp size={20} /><span>Scanning guide</span><ChevronRight size={17} /></button>
         {feedbackEndpoint && <button onClick={() => openFromMenu(() => setShowFeedback(true))}><MessageSquare size={20} /><span>Send feedback</span><ChevronRight size={17} /></button>}
         {s.cameraSize.width > 0 && <>
@@ -477,7 +482,7 @@ export default function App() {
         {s.pending > 0 && <p className="setting-hint batch-hint">Let your photos finish saving before you change the batch size.</p>}
         {s.notice && <p className="setting-hint batch-hint">{s.notice}</p>}
       </div>
-      <div className="dialog-footer batch-actions">{s.batch && <button className="button danger-outline" disabled={busy || s.pending > 0} onClick={() => setClearPrompt('manual')}>New batch</button>}{exportButton()}</div>
+      <div className="dialog-footer batch-actions">{newBatchButton()}{exportButton()}</div>
     </Dialog>}
 
     {showGallery && <Dialog title="Gallery" close={closeGallery} wide>
@@ -486,7 +491,7 @@ export default function App() {
         <div className="gallery-actions">
           {gallerySelection
             ? <button type="button" className="button outline" onClick={() => setGallerySelection(undefined)}>Done</button>
-            : exportButton()}
+            : <>{newBatchButton()}{exportButton()}</>}
         </div>
       </div>
       {gallery()}
@@ -508,6 +513,28 @@ export default function App() {
       <Toggle label="Dark mode" hint="Use a black background with light text." checked={theme.dark} onChange={theme.setDark} />
       <Toggle label="Newest first in gallery and ZIP" hint="Show your latest photos first in the Gallery and give them the first file numbers in the ZIP." checked={newestFirst} onChange={galleryNewestFirst => s.setSettings({ ...s.settings, galleryNewestFirst })} />
       <Toggle label="Using Card Slinger" hint="Turn this on to stack cards in Auto. With it off, remove each card before placing the next." checked={s.settings.stackCards} onChange={stackCards => s.setSettings({ ...s.settings, stackCards })} />
+      <div className="auto-zoom">
+        <Toggle label="Auto zoom" hint="Zoom out after a set number of photos. Pinch to zoom in first." checked={s.settings.autoZoom} onChange={autoZoom => s.setSettings({ ...s.settings, autoZoom })} />
+        <details className="auto-zoom-settings">
+          <summary><span>Auto zoom settings</span><ChevronRight size={18} /></summary>
+          <div>
+            <label className="select-setting">Photos between zoom changes
+              <input type="number" inputMode="numeric" min={1} max={maxBatchTarget} step={1} value={zoomIntervalDraft ?? s.settings.autoZoomInterval}
+                onChange={event => {
+                  setZoomIntervalDraft(event.currentTarget.value);
+                  const interval = event.currentTarget.valueAsNumber;
+                  if (validBatchTarget(interval)) s.setSettings({ ...s.settings, autoZoomInterval: interval });
+                }}
+                onBlur={() => setZoomIntervalDraft(undefined)}
+                onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }} />
+            </label>
+            <Setting label="Zoom out amount" value={`${s.settings.autoZoomOutPercent}%`} hint="100% zooms all the way out. Smaller amounts move partway toward the widest view.">
+              <input aria-label="Zoom out amount" aria-valuetext={`${s.settings.autoZoomOutPercent}%`} type="range" min="0" max={autoZoomOutLevels.length - 1} step="1"
+                value={autoZoomOutLevels.indexOf(s.settings.autoZoomOutPercent)} onChange={event => s.setSettings({ ...s.settings, autoZoomOutPercent: autoZoomOutLevels[event.currentTarget.valueAsNumber] })} />
+            </Setting>
+          </div>
+        </details>
+      </div>
       <Setting label="Wait before each photo" value={waitLabel} hint="Set how long a card must stay still in Auto. The green bar fills during this wait.">
         <input aria-label="Wait before each photo" aria-valuetext={waitLabel} type="range" min="0" max={photoWaitTimes.length - 1} step="1" list="photo-wait-stops" value={photoWaitTimes.indexOf(s.settings.stabilityMs)} onChange={event => s.setSettings({ ...s.settings, stabilityMs: photoWaitTimes[event.currentTarget.valueAsNumber] })} />
         <datalist id="photo-wait-stops">{photoWaitTimes.map((wait, index) => <option key={wait} value={index} />)}</datalist>
@@ -550,7 +577,7 @@ export default function App() {
         <h3><ArrowDownToLine size={16} /> Add to your home screen</h3><p className="setting-hint">On iPhone, open Safari’s Share menu and tap Add to Home Screen. On Android, look for Install app in your browser’s menu.</p>{installPrompt && <button className="button outline install-scanner" onClick={() => { void installPrompt.prompt(); setInstallPrompt(undefined); }}>Install app</button>}
       </div></details>
       <p className="setting-hint settings-reset-hint">Reset settings restores the original settings and keeps your saved photos.</p>
-    </div><div className="dialog-footer"><button className="button outline" disabled={!s.loaded || busy || s.capturing || working || s.cameraPhase === 'requesting'} title={busy ? 'Pause scanning to reset settings' : 'Restore defaults and keep your photos'} onClick={() => void safe(async () => { await s.resetSettings(); theme.setDark(window.matchMedia('(prefers-color-scheme: dark)').matches); })}>Reset settings</button><button className="button dark" onClick={() => setShowSettings(false)}>Done</button></div></Dialog>}
+    </div><div className="dialog-footer"><button className="button outline" disabled={!s.loaded || busy || s.capturing || working || s.cameraPhase === 'requesting'} title={busy ? 'Pause scanning to reset settings' : 'Restore defaults and keep your photos'} onClick={() => void safe(async () => { await s.resetSettings(); setZoomIntervalDraft(undefined); theme.setDark(window.matchMedia('(prefers-color-scheme: dark)').matches); })}>Reset settings</button><button className="button dark" onClick={() => setShowSettings(false)}>Done</button></div></Dialog>}
     {showHelp && <Dialog title="Scanning guide" close={() => setShowHelp(false)}>
       <div className="guide-content">
         <div className="guide-step">
@@ -579,6 +606,7 @@ export default function App() {
     {clearPrompt && <Dialog key={clearPrompt === 'manual' ? 'manual' : 'download'} title="Start a fresh batch?" close={() => setClearPrompt(undefined)}>
       <div className="confirm-content">
         <p>{clearPrompt === 'manual' ? 'Download your ZIP first if you want to keep these photos.' : 'Check that your ZIP finished downloading before clearing the batch.'}</p>
+        {s.pending > 0 && <p>Wait for your photos to finish saving before starting a new batch.</p>}
         <p>Starting fresh deletes this batch’s {count} saved images and {s.attempts.length} retained captures from this device.</p>
         {clearPrompt === 'manual' ? exportButton() : clearPrompt.nameError && <p className="name-error" role="alert">{clearPrompt.nameError}</p>}
       </div>
