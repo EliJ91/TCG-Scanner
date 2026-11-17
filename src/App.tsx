@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import { ArrowDownToLine, ArrowDownUp, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Coffee, Focus, Images, Layers3, LoaderCircle, Menu, MessageSquare, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X, Zap } from 'lucide-react';
 import { FeedbackForm } from './FeedbackForm';
-import { useScanner } from './useScanner';
+import { useScanner, type ScannerAlert } from './useScanner';
 import { useTheme } from './useTheme';
 import { BlobImage, PhotoViewer, useReviewPhoto } from './PhotoViewer';
 import { createZip, downloadArchive, rotateScan } from './core/export';
@@ -15,6 +15,23 @@ const photoQualities = [
 const feedbackEndpoint = import.meta.env.VITE_FEEDBACK_URL?.trim();
 const photoHoldMs = 450;
 const photoHoldSlop = 10;
+
+const scannerAlertContent = {
+  'batch-full': { title: 'Batch Full', detail: 'You reached the batch limit.', Icon: CheckCheck },
+  'queue-full': { title: 'Scan Queue Full', detail: 'Wait for photos to save before scanning again.', Icon: Layers3 },
+  error: { title: 'Scanner Error', detail: '', Icon: TriangleAlert },
+  'error-preview': { title: 'Error Sound Preview', detail: 'This sound plays when the scanner reports a problem.', Icon: Volume2 },
+};
+
+function ScannerAlertBanner({ alert }: { alert: ScannerAlert }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => { ref.current?.showPopover?.(); }, []);
+  const { title, detail, Icon } = scannerAlertContent[alert.kind];
+  return <div ref={ref} popover="manual" className={`scanner-alert ${alert.kind}`} role={alert.kind === 'error' ? 'alert' : 'status'}>
+    <Icon size={22} aria-hidden="true" />
+    <div><strong>{title}</strong><p>{alert.detail ?? detail}</p></div>
+  </div>;
+}
 
 function Dialog({ title, children, close, wide = false }: { title: string; children: ReactNode; close: () => void; wide?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -431,7 +448,7 @@ export default function App() {
           {s.session === 'complete' ? <CheckCheck size={19} /> : <Play size={18} fill="currentColor" />}
           {s.session === 'complete' ? 'Batch complete' : !s.loaded ? (s.storageIssue ? 'Storage unavailable' : 'Loading saved scans…') : s.session === 'starting' ? 'Preparing…' : s.batch ? 'Resume scanning' : 'Start scanning'}
         </button>}
-        {s.error && <div role="alert" className="scanner-error"><TriangleAlert size={16} /><p>{s.error}{s.session === 'scanning' && ' Scanning has not been paused.'}{failedCount > 0 && ' Retained originals are in the Gallery.'}</p><button className="icon-button" onClick={() => s.setError('')} aria-label="Dismiss error"><X size={16} /></button></div>}
+        {s.error && <div className="scanner-error"><TriangleAlert size={16} aria-hidden="true" /><p>{s.error}{s.session === 'scanning' && ' Scanning has not been paused.'}{failedCount > 0 && ' Retained originals are in the Gallery.'}</p><button className="icon-button" onClick={() => s.setError('')} aria-label="Dismiss error"><X size={16} /></button></div>}
         {s.openBrowserSuggested && <a className="camera-browser-link" href={new URL(import.meta.env.BASE_URL, location.origin).href} target="_blank" rel="noopener noreferrer">Open scanner in Safari or Chrome <ArrowRight size={14} /></a>}
         {import.meta.env.DEV && new URLSearchParams(location.search).get('test-camera') === '1' && <div className="test-camera-controls"><small>Synthetic test camera · development only</small><button className="button outline" disabled={s.session !== 'scanning'} onClick={() => window.dispatchEvent(new Event('test-card-slide'))}>Slide test card</button><button className="button outline" disabled={s.cameraPhase !== 'ready'} onClick={() => window.dispatchEvent(new Event('test-card-invalid'))}>Blank test frame</button><button className="button outline" disabled={s.cameraPhase !== 'ready'} onClick={() => window.dispatchEvent(new Event('test-card-silver'))}>Use silver border</button><button className="button outline" disabled={s.session !== 'scanning'} onClick={() => window.dispatchEvent(new Event('test-card-feed'))}>Feed 9 cards · one per second</button></div>}
       </section>
@@ -636,6 +653,7 @@ export default function App() {
         <button className="button danger" disabled={editingDisabled} onClick={() => void confirmDelete()}>{deleteIds.length === 1 ? 'Delete image' : `Delete ${deleteIds.length} photos`}</button>
       </div>
     </Dialog>}
+    {s.alert && <ScannerAlertBanner key={s.alert.id} alert={s.alert} />}
   </div>;
 }
 function Setting({ label, value, hint, children }: { label: string; value?: string; hint?: string; children: ReactNode }) {

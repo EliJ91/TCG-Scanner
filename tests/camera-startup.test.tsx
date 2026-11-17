@@ -508,25 +508,35 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.accept.mock.calls.map(([scan]) => scan.ordinal)).toEqual([0, 1, 2]);
   });
   it('alerts at queue capacity and accepts more photos as space opens', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     let saveFirst!: () => void, saveSecond!: () => void;
     mocks.accept
       .mockImplementationOnce(() => new Promise<void>(resolve => { saveFirst = resolve; }))
       .mockImplementationOnce(() => new Promise<void>(resolve => { saveSecond = resolve; }));
     await renderApp();
     await click('Manual');
-    for (let i = 0; i < 8; i++) await click('Take photo');
+    await click('Take photo');
+    expect(mocks.success).toHaveBeenCalledOnce();
+    expect(container.querySelector('.scanner-alert')).toBeNull();
+    for (let i = 0; i < 7; i++) await click('Take photo');
     expect(mocks.capture).toHaveBeenCalledTimes(8);
     expect(mocks.queueFull).toHaveBeenCalledOnce();
+    expect(container.querySelector('.scanner-alert strong')?.textContent).toBe('Scan Queue Full');
     expect(mocks.complete).not.toHaveBeenCalled();
     expect(container.querySelector('.session-state')?.textContent).toBe('Queue full · wait for photos to save');
     expect(container.querySelector('.scan-count-spinner')).not.toBeNull();
     expect(container.querySelector('.scan-count')?.getAttribute('aria-label')).toContain('8 processing');
     expect(button('Take photo').disabled).toBe(true);
 
+    await act(async () => vi.advanceTimersByTimeAsync(2000));
     await act(async () => saveFirst());
     expect(button('Take photo').disabled).toBe(false);
     await click('Take photo');
     expect(mocks.queueFull).toHaveBeenCalledTimes(2);
+    await act(async () => vi.advanceTimersByTimeAsync(2999));
+    expect(container.querySelector('.scanner-alert strong')?.textContent).toBe('Scan Queue Full');
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(container.querySelector('.scanner-alert')).toBeNull();
     await act(async () => saveSecond());
     expect(container.querySelector('.scan-count')?.textContent).toBe('9 / 50');
     expect(container.querySelector('.scan-count-spinner')).toBeNull();
@@ -558,6 +568,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await tick(100);
     expect(mocks.capture).toHaveBeenCalledTimes(3);
     expect(mocks.complete).toHaveBeenCalledOnce();
+    expect(container.querySelector('.scanner-alert strong')?.textContent).toBe('Batch Full');
     expect(mocks.success).toHaveBeenCalledTimes(2);
     expect(mocks.accept).toHaveBeenCalledTimes(2);
     expect(container.querySelector('.scan-count')?.textContent).toBe('1 / 3');
@@ -586,6 +597,8 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await click('Take photo');
     expect(mocks.complete).toHaveBeenCalledOnce();
     expect(mocks.error).toHaveBeenCalled();
+    expect(container.querySelector('.scanner-alert strong')?.textContent).toBe('Scanner Error');
+    expect(container.querySelector('.scanner-alert p')?.textContent).toContain('JPEG encoding failed');
     expect(button('Take photo').disabled).toBe(false);
     await click('Take photo');
     expect(mocks.complete).toHaveBeenCalledTimes(2);

@@ -11,6 +11,12 @@ import { zoomRect } from './core/zoom';
 import { defaultBatchName, defaults, message, ordered, validBatchTarget, type AttemptInfo, type Batch, type Scan, type Settings } from './core/types';
 
 export type Session = 'idle' | 'starting' | 'scanning' | 'paused' | 'complete';
+export type ScannerAlert = {
+  id: number;
+  kind: 'batch-full' | 'queue-full' | 'error' | 'error-preview';
+  detail?: string;
+};
+
 export function useScanner() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [batch, setBatch] = useState<Batch>(); const batchRef = useRef<Batch | undefined>(undefined);
@@ -24,6 +30,7 @@ export function useScanner() {
   const cameraConfig = useRef<{ resolution: number; id: string } | undefined>(undefined);
   const [session, setSession] = useState<Session>('idle'); const sessionRef = useRef<Session>('idle');
   const [error, updateError] = useState(''); const [notice, setNotice] = useState('');
+  const [alert, setAlert] = useState<ScannerAlert>();
   const [loaded, setLoaded] = useState(false); const [pending, setPending] = useState(0); const [capturing, setCapturing] = useState(false);
   const [storageIssue, setStorageIssue] = useState(''); const storageIssueRef = useRef('');
   const [cameraPhase, setCameraPhase] = useState<'off' | 'requesting' | 'ready'>('off');
@@ -40,7 +47,22 @@ export function useScanner() {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const controller = useRef<CapturePipeline | undefined>(undefined);
   const camera = useRef<Camera | undefined>(undefined); const audio = useRef<ScannerAudio | undefined>(undefined);
-  const setError = useCallback((value: string) => { updateError(value); if (value) audio.current?.error(); }, []);
+  const showAlert = useCallback((kind: ScannerAlert['kind'], detail?: string) => {
+    setAlert(previous => ({ id: (previous?.id ?? 0) + 1, kind, detail }));
+  }, []);
+  const setError = useCallback((value: string) => {
+    updateError(value);
+    if (value) {
+      showAlert('error', value);
+      audio.current?.error();
+    }
+  }, [showAlert]);
+
+  useEffect(() => {
+    if (!alert) return;
+    const timer = setTimeout(() => setAlert(current => current === alert ? undefined : current), 3000);
+    return () => clearTimeout(timer);
+  }, [alert]);
   const detector = useRef(new MotionDetector());
   const captureBusy = useRef(false);
   const announcedBatch = useRef<string | undefined>(undefined); const wakeLock = useRef<{ release(): Promise<void> } | undefined>(undefined);
@@ -85,6 +107,7 @@ export function useScanner() {
   const announceBatchLimit = (id: string) => {
     if (announcedBatch.current === id) return;
     announcedBatch.current = id;
+    showAlert('batch-full');
     audio.current?.complete();
   };
 
@@ -264,7 +287,10 @@ export function useScanner() {
         }
         if (automatic) setCountdown('snapped');
         if (c.atBatchLimit) announceBatchLimit(currentBatch.id);
-        else if (c.queueFull) audio.current?.queueFull();
+        else if (c.queueFull) {
+          showAlert('queue-full');
+          audio.current?.queueFull();
+        }
         else audio.current?.success();
       }, flipInterface));
     }
@@ -633,13 +659,17 @@ export function useScanner() {
     return () => clearInterval(timer);
   }, [storageIssue]);
   const original = useCallback(async (id: string) => (await controller.current?.original(id)), []);
-  return { videoRef, batch, batchName, scans, attempts: [...attempts.filter(item => !retained.some(photo => photo.id === item.id)), ...retained], settings, setSettings: updateSettings, resetSettings, setCaptureMode, setZoom, zoomGesture, session, error, setError, notice, loaded, pending, capturing, queueFull: controller.current?.queueFull ?? false, batchAtLimit: controller.current?.atBatchLimit ?? false, storageIssue,
+  return { videoRef, batch, batchName, scans, attempts: [...attempts.filter(item => !retained.some(photo => photo.id === item.id)), ...retained], settings, setSettings: updateSettings, resetSettings, setCaptureMode, setZoom, zoomGesture, session, error, setError, notice, alert, loaded, pending, capturing, queueFull: controller.current?.queueFull ?? false, batchAtLimit: controller.current?.atBatchLimit ?? false, storageIssue,
     cameraPhase, connectCamera, openBrowserSuggested,
     reading, countdown, cameraSize, capabilities, devices, start, takePhoto, pause: () => pause(), stop,
     keepOriginal, resizeBatch, removeScans, discard, clear, switchCamera, control, renameBatch,
     original,
     updateScan: async (scan: Scan) => { await storage.accept(scan); setScans(items => ordered(items.map(s => s.id === scan.id ? scan : s))); },
     testSound: async () => { await audio.current?.unlock(); audio.current?.success(); },
-    testErrorSound: async () => { await audio.current?.unlock(); audio.current?.error(); },
+    testErrorSound: async () => {
+      await audio.current?.unlock();
+      showAlert('error-preview');
+      audio.current?.error();
+    },
   };
 }
