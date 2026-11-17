@@ -41,6 +41,7 @@ export class CapturePipeline {
   }
 
   get count() { return this.controller.count; }
+  get capturedCount() { return this.controller.capturedCount; }
   get pending() { return this.controller.pending; }
   get nextOrdinal() { return this.controller.nextOrdinal; }
   get complete() { return this.controller.complete; }

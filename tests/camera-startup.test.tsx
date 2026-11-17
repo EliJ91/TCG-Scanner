@@ -355,6 +355,23 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await tick(150, card);
     expect(mocks.capture).toHaveBeenCalledOnce();
   });
+  it('detects a new stacked card in the first frame after an automatic zoom change', async () => {
+    const first = printedCard(), second = printedCard(1);
+    const { tick } = await startAutoPreview(100, first, false, {
+      settings: { stackCards: true, zoom: 2, autoZoom: true, autoZoomInterval: 1, autoZoomOutPercent: 50 },
+    });
+    await tick();
+    await tick(33, first);
+    await tick(100);
+    expect(mocks.capture).toHaveBeenCalledOnce();
+    expect(mocks.zoom).toHaveBeenLastCalledWith(1.5);
+
+    await tick(33, second);
+    await tick(33, second);
+    await tick(100);
+    expect(mocks.capture).toHaveBeenCalledTimes(2);
+    expect(mocks.zoom).toHaveBeenLastCalledWith(1.25);
+  });
   it('pauses Auto when the scan count opens the gallery and waits for an explicit resume', async () => {
     const card = printedCard();
     const { tick } = await startAutoPreview(100, card);
@@ -868,6 +885,30 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.zoom).toHaveBeenLastCalledWith(1.25);
     await act(async () => finishSaving());
     expect(container.querySelector('.scan-count')?.textContent).toBe('4 / 50');
+  });
+  it('follows the batch count after deleting a photo', async () => {
+    vi.stubGlobal('URL', class extends URL {
+      static createObjectURL = vi.fn(() => 'blob:gallery-scan');
+      static revokeObjectURL = vi.fn();
+    });
+    localStorage.setItem('cardslinger-settings', JSON.stringify({
+      ...defaults, zoom: 2, autoZoom: true, autoZoomInterval: 2, autoZoomOutPercent: 50,
+    }));
+    await renderApp();
+    await click('Manual');
+    await click('Take photo');
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
+    await click('Pause scanning');
+    await click('1 / 50');
+    await act(async () => container.querySelector('.scan-tile')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
+    await click('Delete selected');
+    await click('Delete image');
+    await act(async () => container.querySelector<HTMLButtonElement>('dialog[open] [aria-label="Close dialog"]')!.click());
+
+    await click('Take photo');
+    expect(mocks.zoom).toHaveBeenLastCalledWith(2);
+    await click('Take photo');
+    expect(mocks.zoom).toHaveBeenLastCalledWith(1.5);
   });
   it('offers a confirmed batch reset from the Gallery', async () => {
     await renderApp();

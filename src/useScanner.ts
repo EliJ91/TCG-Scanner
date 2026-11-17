@@ -43,7 +43,6 @@ export function useScanner() {
   const setError = useCallback((value: string) => { updateError(value); if (value) audio.current?.error(); }, []);
   const detector = useRef(new MotionDetector());
   const captureBusy = useRef(false);
-  const photosTaken = useRef(0);
   const announcedBatch = useRef<string | undefined>(undefined); const wakeLock = useRef<{ release(): Promise<void> } | undefined>(undefined);
   const mounted = useRef(true);
   const startToken = useRef(0);
@@ -90,7 +89,6 @@ export function useScanner() {
   };
 
   const makeController = (b: Batch, count: number) => {
-    photosTaken.current = count;
     const pipeline = new CapturePipeline(b, count, {
       saved: scan => {
         if (!mounted.current) return;
@@ -260,9 +258,8 @@ export function useScanner() {
       await c.capture(() => camera.current!.capture(alternateCapture, quality, () => {
         finishWaitingForFrame();
         if (!mounted.current || controller.current !== c) return;
-        photosTaken.current++;
         const { autoZoom, autoZoomInterval, autoZoomOutPercent, zoom } = settingsRef.current;
-        if (autoZoom && photosTaken.current % autoZoomInterval === 0) {
+        if (autoZoom && c.capturedCount % autoZoomInterval === 0) {
           setZoom(1 + (zoom - 1) * (1 - autoZoomOutPercent / 100));
         }
         if (automatic) setCountdown('snapped');
@@ -302,6 +299,13 @@ export function useScanner() {
       }
     }
 
+    const sampleMotion = (zoom: number, flipped: boolean, now: number) => {
+      const crop = zoomRect(video.videoWidth, video.videoHeight, zoom);
+      ctx.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, canvas.width, canvas.height);
+      toLuma(ctx.getImageData(0, 0, canvas.width, canvas.height).data, gray, flipped);
+      return detector.current.update(gray, now, card.detect(gray));
+    };
+
     function inspect(freshFrame: boolean) {
       const now = performance.now();
       const c = controller.current, motion = detector.current;
@@ -321,17 +325,21 @@ export function useScanner() {
         return;
       }
       // Check the current pixels at the deadline too, in case movement just resumed.
-      const crop = zoomRect(video.videoWidth, video.videoHeight, zoom);
-      ctx.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, canvas.width, canvas.height);
-      toLuma(ctx.getImageData(0, 0, canvas.width, canvas.height).data, gray, flipInterface);
-      const next = motion.update(gray, now, card.detect(gray));
+      const next = sampleMotion(zoom, flipInterface, now);
       const canCapture = c.hasCapacity && !editingBatch.current && !captureBusy.current && !storageIssueRef.current;
       schedule(canCapture ? motion.deadline : null);
       if (now - lastUI > 100) {
         setReading(next);
         lastUI = now;
       }
-      if (next.state === 'ready' && canCapture) void capture(true);
+      if (next.state === 'ready' && canCapture) {
+        void capture(true);
+        const adjustedZoom = settingsRef.current.zoom;
+        if (settingsRef.current.stackCards && adjustedZoom !== zoom) {
+          // Use the frame just captured at the new zoom to detect the next card without a gap.
+          sampleMotion(adjustedZoom, flipInterface, now);
+        }
+      }
     }
 
     const tick = () => {

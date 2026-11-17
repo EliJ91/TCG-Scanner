@@ -21,6 +21,10 @@ export class BatchController<T> {
   ) { this.count = initial; this.nextOrdinal = nextOrdinal; }
   get target() { return this.batchTarget; }
   get pending() { return this.slots.length; }
+  // At shutter time, include queued frames that have yet to save and skip known failures.
+  get capturedCount() {
+    return this.count + this.slots.filter(({ result }) => !result || !('error' in result)).length;
+  }
   get complete() { return this.count >= this.target; }
   get hasCapacity() { return this.running && !this.complete && this.pending < this.queueLimit && this.count + this.pending < this.target; }
   get atBatchLimit() { return this.count + this.pending >= this.target; }
