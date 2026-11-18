@@ -880,7 +880,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await input('.auto-zoom-settings input[type="number"]', '2');
     await input('[aria-label="Zoom out amount"]', '5');
     expect(JSON.parse(localStorage.getItem('cardslinger-settings')!)).toMatchObject({
-      autoZoom: true, autoZoomInterval: 2, autoZoomOutPercent: 50,
+      autoZoom: true, autoZoomInterval: 2, autoZoomOutPercent: 25,
     });
     await click('Done');
     await click('Manual');
@@ -890,12 +890,12 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await click('Take photo');
     expect(mocks.zoom).toHaveBeenLastCalledWith(2);
     await click('Take photo');
-    expect(mocks.zoom).toHaveBeenLastCalledWith(1.5);
+    expect(mocks.zoom).toHaveBeenLastCalledWith(1.75);
     expect(mocks.accept).toHaveBeenCalledOnce();
     await click('Take photo');
-    expect(mocks.zoom).toHaveBeenLastCalledWith(1.5);
+    expect(mocks.zoom).toHaveBeenLastCalledWith(1.75);
     await click('Take photo');
-    expect(mocks.zoom).toHaveBeenLastCalledWith(1.25);
+    expect(mocks.zoom).toHaveBeenLastCalledWith(1.5625);
     await act(async () => finishSaving());
     expect(container.querySelector('.scan-count')?.textContent).toBe('4 / 50');
   });

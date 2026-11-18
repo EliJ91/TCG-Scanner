@@ -15,7 +15,9 @@ export const defaults: Settings = {
 };
 export const motionSensitivityRange = { min: 0.03, max: 0.22, step: 0.005 } as const;
 export const photoWaitTimes: readonly number[] = [10, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
-export const autoZoomOutLevels: readonly number[] = [1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+export const autoZoomOutLevels: readonly number[] = [
+  1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100,
+];
 export interface Batch {
   id: string; number: number; name: string; target: number; createdAt: number;
   status: 'paused' | 'scanning' | 'complete'; nextOrdinal: number;
