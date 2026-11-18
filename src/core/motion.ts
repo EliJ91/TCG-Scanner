@@ -73,7 +73,9 @@ export class MotionDetector {
       previous.set(gray);
     } else this.previous = gray.slice();
 
-    const moving = this.score >= this.sensitivity;
+    // A new card on the stack can change only the artwork within the frame.
+    const threshold = this.stackCards && this.awaitingNextCard ? this.sensitivity / 2 : this.sensitivity;
+    const moving = this.score >= threshold;
     if (this.needsRemoval) {
       this.emptyFrames = presence === 'empty' ? this.emptyFrames + 1 : 0;
       if (this.emptyFrames >= 2) this.needsRemoval = false;

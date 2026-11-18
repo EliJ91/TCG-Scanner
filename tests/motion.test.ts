@@ -56,7 +56,8 @@ describe('card-gated motion', () => {
   });
 
   it('restarts the countdown when a new frame moves', () => {
-    const d = new MotionDetector(200), first = printedCard(0), moved = printedCard(1);
+    const d = new MotionDetector(200), first = printedCard();
+    const moved = printedCard(1, 248, 241, { left: 18, top: 24, right: 78, bottom: 96 });
     sample(d, first, 0); sample(d, first, 33);
     expect(sample(d, moved, 232).state).toBe('moving');
     expect(d.deadline).toBeNull();

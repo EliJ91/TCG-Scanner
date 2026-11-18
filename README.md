@@ -70,7 +70,7 @@ Deleting a stored scan reduces the count and pauses the scanner, including a pre
 | --- | --- | --- |
 | Capture mode | Auto | Manual takes one snapshot per tap |
 | Wait before each photo | 100 ms | 10 ms, then 100 ms increments from 100 ms to 1 second |
-| Ignore small movements | 12.5% | Adjustable from 12.5% to 31.5% of the frame changing before the countdown restarts |
+| Ignore small movements | 22% | Adjustable from 22% to 41% of the frame changing before the countdown restarts |
 | Zoom | 1× | Pinch the preview for a 1–3× center crop; capture and motion use identical framing |
 | Photo quality | Best | Choose Lowest, Balanced, or Best |
 

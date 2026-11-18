@@ -6,7 +6,7 @@ export interface Settings {
   volume: number; muted: boolean; galleryNewestFirst: boolean; flipInterface: boolean;
   resolution: number; useImageCapture: boolean; batchTarget: number;
 }
-export const motionSensitivityRange = { min: 0.125, max: 0.315, step: 0.005 } as const;
+export const motionSensitivityRange = { min: 0.22, max: 0.41, step: 0.005 } as const;
 
 export const defaults: Settings = {
   captureVersion: 3, cameraId: '', torch: false,

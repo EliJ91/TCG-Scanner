@@ -396,6 +396,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.start).toHaveBeenCalledOnce();
   });
   it('starts a 10 ms countdown on confirmed stillness and cancels it when a fresh frame shows movement', async () => {
+    const moved = printedCard(1, 248, 241, { left: 18, top: 24, right: 78, bottom: 96 });
     const { tick, scene, video } = await startAutoPreview(10, printedCard(), true);
     await tick();
     expect(container.querySelector('.auto-countdown:not([hidden])')).toBeNull();
@@ -403,12 +404,12 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(container.querySelector('.auto-countdown:not([hidden])')).not.toBeNull();
     await tick(9);
     expect(mocks.capture).not.toHaveBeenCalled();
-    scene(printedCard(1));
+    scene(moved);
     video.currentTime = .043;
     await act(async () => { await vi.advanceTimersByTimeAsync(1); });
     expect(mocks.capture).not.toHaveBeenCalled();
     expect(container.querySelector('.auto-countdown:not([hidden])')).toBeNull();
-    await tick(23, printedCard(1));
+    await tick(23, moved);
     await tick(10);
     expect(mocks.capture).toHaveBeenCalledTimes(1);
     expect(mocks.capture).toHaveBeenCalledWith(false, 1, expect.any(Function), true);
