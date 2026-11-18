@@ -18,11 +18,11 @@ describe('browser-cached camera preferences',()=>{
     expect(normalizeSettings({...defaults,stabilityMs:180}).stabilityMs).toBe(200);
   });
   it('keeps saved movement thresholds within the slider range', () => {
-    expect(normalizeSettings({ sensitivity: 0.035 }).sensitivity).toBe(0.22);
-    expect(normalizeSettings({ sensitivity: 0.125 }).sensitivity).toBe(0.22);
-    expect(normalizeSettings({ sensitivity: 0.22 }).sensitivity).toBe(0.22);
-    expect(normalizeSettings({ sensitivity: 0.3 }).sensitivity).toBe(0.3);
-    expect(normalizeSettings({ sensitivity: 0.45 }).sensitivity).toBe(0.41);
+    expect(normalizeSettings({ sensitivity: 0.035 }).sensitivity).toBe(0.25);
+    expect(normalizeSettings({ sensitivity: 0.22 }).sensitivity).toBe(0.25);
+    expect(normalizeSettings({ sensitivity: 0.25 }).sensitivity).toBe(0.25);
+    expect(normalizeSettings({ sensitivity: 0.45 }).sensitivity).toBe(0.45);
+    expect(normalizeSettings({ sensitivity: 0.55 }).sensitivity).toBe(0.5);
   });
   it('leaves room for the IndexedDB fallback if the synchronous cache is absent or damaged',()=>{
     expect(readCachedSettings()).toBeUndefined();
