@@ -6,14 +6,15 @@ export interface Settings {
   volume: number; muted: boolean; galleryNewestFirst: boolean; flipInterface: boolean;
   resolution: number; useImageCapture: boolean; batchTarget: number;
 }
+export const motionSensitivityRange = { min: 0.125, max: 0.315, step: 0.005 } as const;
+
 export const defaults: Settings = {
   captureVersion: 3, cameraId: '', torch: false,
-  captureMode: 'auto', stackCards: false, zoom: 1, stabilityMs: 100, sensitivity: 0.035, quality: 1,
+  captureMode: 'auto', stackCards: false, zoom: 1, stabilityMs: 100, sensitivity: motionSensitivityRange.min, quality: 1,
   autoZoom: false, autoZoomInterval: 10, autoZoomOutPercent: 20,
   volume: 0.6, muted: false, galleryNewestFirst: false, flipInterface: false,
   resolution: 2560, useImageCapture: false, batchTarget: 50,
 };
-export const motionSensitivityRange = { min: 0.03, max: 0.22, step: 0.005 } as const;
 export const photoWaitTimes: readonly number[] = [10, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
 export const autoZoomOutLevels: readonly number[] = [
   1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100,
