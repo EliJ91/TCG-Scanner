@@ -9,6 +9,38 @@ function sample(d: MotionDetector, frame: Uint8Array, now: number) {
 }
 
 describe('card-gated motion', () => {
+  it.each([false, true])('detects a one-level pixel change at zero tolerance and still permits stillness (stacking %s)', stacking => {
+    const detector = new MotionDetector(100, 0);
+    detector.setStackCards(stacking);
+    const card = printedCard();
+    sample(detector, card, 0);
+    expect(sample(detector, card, 33).state).toBe('stabilizing');
+    const moved = card.slice();
+    moved[0]--;
+    expect(sample(detector, moved, 66).state).toBe('moving');
+    expect(detector.deadline).toBeNull();
+    expect(sample(detector, moved, 99).state).toBe('stabilizing');
+    expect(detector.advance(199).state).toBe('ready');
+    detector.consume();
+    expect(sample(detector, moved, 232)).toMatchObject({ state: 'waiting', awaitingNextCard: true });
+  });
+
+  it.each([false, true])('ignores even full-frame movement at maximum tolerance without duplicating a card (stacking %s)', stacking => {
+    const detector = new MotionDetector(100, 1);
+    detector.setStackCards(stacking);
+    const first = emptyFrame().map((_, index) => index % 2 ? 30 : 220);
+    const moved = first.map(value => 250 - value);
+    detector.update(first, 0, 'card');
+    expect(detector.update(moved, 33, 'card')).toMatchObject({ score: 1, state: 'stabilizing' });
+    expect(detector.update(first, 66, 'card').state).toBe('stabilizing');
+    expect(detector.advance(133).state).toBe('ready');
+    detector.consume();
+    detector.update(first, 166, 'card');
+    expect(detector.update(moved, 199, 'card')).toMatchObject({ score: 1, state: 'waiting', awaitingNextCard: true });
+    detector.update(emptyFrame(), 232, 'empty');
+    expect(detector.update(emptyFrame(), 265, 'empty').awaitingNextCard).toBe(false);
+  });
+
   it.each([248, 45])('distinguishes a silver-bordered card from a plain surface at brightness %i', level => {
     expect(presence.detect(emptyFrame(level))).toBe('empty');
     expect(presence.detect(printedCard(0, level))).toBe('card');

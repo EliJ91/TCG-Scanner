@@ -782,6 +782,41 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.saveBatch).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'paused', nextOrdinal: 3 }));
     expect(container.textContent).toContain('Scanning paused');
   });
+  it('adjusts movement tolerance one point at a time, respects both endpoints, and restores the saved value', async () => {
+    await renderApp();
+    const openSettings = async () => {
+      await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
+      await click('Settings');
+      await act(async () => container.querySelector<HTMLElement>('.advanced-settings summary')!.click());
+    };
+    await openSettings();
+    const slider = () => container.querySelector<HTMLInputElement>('[aria-label="Ignore small movements"]')!;
+    const less = () => container.querySelector<HTMLButtonElement>('[aria-label="Ignore less movement"]')!;
+    const more = () => container.querySelector<HTMLButtonElement>('[aria-label="Ignore more movement"]')!;
+    expect([slider().min, slider().max, slider().step, slider().value]).toEqual(['0', '100', '1', '25']);
+    await input('[aria-label="Ignore small movements"]', '38');
+    await act(async () => less().click());
+    expect(slider().value).toBe('37');
+    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!).sensitivity).toBe(0.37);
+    await act(async () => more().click());
+    expect(slider().value).toBe('38');
+    await input('[aria-label="Ignore small movements"]', '0');
+    expect(less().disabled).toBe(true);
+    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!).sensitivity).toBe(0);
+    await act(async () => more().click());
+    expect(slider().value).toBe('1');
+    await input('[aria-label="Ignore small movements"]', '100');
+    expect(more().disabled).toBe(true);
+    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!).sensitivity).toBe(1);
+    await act(async () => less().click());
+    expect(slider().getAttribute('aria-valuetext')).toBe('99 out of 100');
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await renderApp();
+    await openSettings();
+    expect(slider().value).toBe('99');
+    expect(mocks.settings).toHaveBeenLastCalledWith(expect.objectContaining({ sensitivity: 0.99 }));
+  });
   it('restores cached camera controls and resets settings without deleting the saved batch', async () => {
     mocks.capabilities={torch:true,exposureMode:['manual','continuous'],focusMode:['manual','continuous']};
     localStorage.setItem('cardslinger-settings',JSON.stringify({...defaults,cameraId:'rear-wide',resolution:3840,zoom:2,torch:true,focusLocked:true,focusDistance:2,lockCamera:true,debug:true,quality:0.86}));

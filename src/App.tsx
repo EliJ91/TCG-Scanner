@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
-import { ArrowDownToLine, ArrowDownUp, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Coffee, Focus, Images, Layers3, LoaderCircle, Menu, MessageSquare, Pause, Pencil, Play, RotateCw, ScanLine, Settings2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X, Zap } from 'lucide-react';
+import { ArrowDownToLine, ArrowDownUp, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Coffee, Focus, Images, Layers3, LoaderCircle, Menu, MessageSquare, Minus, Pause, Pencil, Play, Plus, RotateCw, ScanLine, Settings2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X, Zap } from 'lucide-react';
 import { FeedbackForm } from './FeedbackForm';
 import { useScanner, type ScannerAlert } from './useScanner';
 import { useTheme } from './useTheme';
@@ -156,6 +156,10 @@ export default function App() {
   useEffect(() => () => clearTimeout(galleryHold.current?.timer), []);
   const busy = s.session === 'starting' || s.session === 'scanning';
   const autoMode = s.settings.captureMode === 'auto';
+  const movementTolerance = Math.round(s.settings.sensitivity * 100);
+  const setMovementTolerance = (value: number) => s.setSettings({
+    ...s.settings, sensitivity: Math.max(0, Math.min(100, value)) / 100,
+  });
   const editingDisabled = busy || s.pending > 0 || working;
   const target = s.settings.batchTarget;
   const count = s.scans.length, quantity = s.batch?.target ?? target;
@@ -564,11 +568,11 @@ export default function App() {
       <details className="advanced-settings"><summary><span>Advanced settings<small>Camera, photo quality, and motion controls</small></span><ChevronRight size={18} /></summary><div>
         {busy && <div className="settings-pause-note"><p>Pause scanning to change these settings.</p><button className="button outline" onClick={s.pause}><Pause size={16} />Pause scanning</button></div>}
         <h3><Focus size={16} /> Photos</h3>
-        <Setting label="Ignore small movements" hint="In Auto, move toward More if small shakes restart the green bar. Move toward Less if the scanner misses movement when you place a card.">
+        <Setting label="Ignore small movements" value={`${movementTolerance} / 100`} hint="In Auto, 0 ignores no movement and 100 ignores all movement. Increase the value if small shakes restart the green bar.">
           <div className="range-with-labels">
-            <span aria-hidden="true">Less</span>
-            <input aria-label="Ignore small movements" disabled={busy} type="range" {...motionSensitivityRange} value={s.settings.sensitivity} onChange={e => s.setSettings({ ...s.settings, sensitivity: +e.target.value })} />
-            <span aria-hidden="true">More</span>
+            <button type="button" className="icon-button movement-step" aria-label="Ignore less movement" disabled={busy || movementTolerance === 0} onClick={() => setMovementTolerance(movementTolerance - 1)}><Minus size={18} aria-hidden="true" /></button>
+            <input aria-label="Ignore small movements" aria-valuetext={`${movementTolerance} out of 100`} disabled={busy} type="range" min={motionSensitivityRange.min * 100} max={motionSensitivityRange.max * 100} step={motionSensitivityRange.step * 100} value={movementTolerance} onChange={event => setMovementTolerance(event.currentTarget.valueAsNumber)} />
+            <button type="button" className="icon-button movement-step" aria-label="Ignore more movement" disabled={busy || movementTolerance === 100} onClick={() => setMovementTolerance(movementTolerance + 1)}><Plus size={18} aria-hidden="true" /></button>
           </div>
         </Setting>
         <label className="select-setting">Photo quality

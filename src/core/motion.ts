@@ -61,7 +61,7 @@ export class MotionDetector {
       let shift = 0;
       for (let i = 0; i < gray.length; i++) shift += gray[i] - previous[i];
       shift /= gray.length;
-      const threshold = Math.max(11, this.noise * 3.5);
+      const threshold = this.sensitivity === 0 ? 0 : Math.max(11, this.noise * 3.5);
       let residual = 0, changed = 0;
       for (let i = 0; i < gray.length; i++) {
         const difference = Math.abs(gray[i] - previous[i] - shift);
@@ -75,7 +75,7 @@ export class MotionDetector {
 
     // A new card on the stack can change only the artwork within the frame.
     const threshold = this.stackCards && this.awaitingNextCard ? this.sensitivity / 2 : this.sensitivity;
-    const moving = this.score >= threshold;
+    const moving = this.sensitivity < 1 && this.score > threshold;
     if (this.needsRemoval) {
       this.emptyFrames = presence === 'empty' ? this.emptyFrames + 1 : 0;
       if (this.emptyFrames >= 2) this.needsRemoval = false;

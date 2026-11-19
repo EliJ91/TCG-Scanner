@@ -6,11 +6,11 @@ export interface Settings {
   volume: number; muted: boolean; galleryNewestFirst: boolean; flipInterface: boolean;
   resolution: number; useImageCapture: boolean; batchTarget: number;
 }
-export const motionSensitivityRange = { min: 0.25, max: 0.5, step: 0.005 } as const;
+export const motionSensitivityRange = { min: 0, max: 1, step: 0.01 } as const;
 
 export const defaults: Settings = {
   captureVersion: 3, cameraId: '', torch: false,
-  captureMode: 'auto', stackCards: false, zoom: 1, stabilityMs: 100, sensitivity: motionSensitivityRange.min, quality: 1,
+  captureMode: 'auto', stackCards: false, zoom: 1, stabilityMs: 100, sensitivity: 0.25, quality: 1,
   autoZoom: false, autoZoomInterval: 10, autoZoomOutPercent: 20,
   volume: 0.6, muted: false, galleryNewestFirst: false, flipInterface: false,
   resolution: 2560, useImageCapture: false, batchTarget: 50,
