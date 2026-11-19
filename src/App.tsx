@@ -156,9 +156,9 @@ export default function App() {
   useEffect(() => () => clearTimeout(galleryHold.current?.timer), []);
   const busy = s.session === 'starting' || s.session === 'scanning';
   const autoMode = s.settings.captureMode === 'auto';
-  const movementTolerance = Math.round(s.settings.sensitivity * 100);
+  const movementTolerance = Math.round((s.settings.sensitivity - motionSensitivityRange.min) * 10000);
   const setMovementTolerance = (value: number) => s.setSettings({
-    ...s.settings, sensitivity: Math.max(0, Math.min(100, value)) / 100,
+    ...s.settings, sensitivity: (motionSensitivityRange.min * 10000 + Math.max(0, Math.min(100, value))) / 10000,
   });
   const editingDisabled = busy || s.pending > 0 || working;
   const target = s.settings.batchTarget;
@@ -568,10 +568,10 @@ export default function App() {
       <details className="advanced-settings"><summary><span>Advanced settings<small>Camera, photo quality, and motion controls</small></span><ChevronRight size={18} /></summary><div>
         {busy && <div className="settings-pause-note"><p>Pause scanning to change these settings.</p><button className="button outline" onClick={s.pause}><Pause size={16} />Pause scanning</button></div>}
         <h3><Focus size={16} /> Photos</h3>
-        <Setting label="Ignore small movements" value={`${movementTolerance} / 100`} hint="In Auto, 0 ignores no movement and 100 ignores all movement. Increase the value if small shakes restart the green bar.">
+        <Setting label="Ignore small movements" value={`${movementTolerance} / 100`} hint="Fine-tune Auto movement tolerance from 99% at 0 to 100% at 100. Higher values ignore more movement.">
           <div className="range-with-labels">
             <button type="button" className="icon-button movement-step" aria-label="Ignore less movement" disabled={busy || movementTolerance === 0} onClick={() => setMovementTolerance(movementTolerance - 1)}><Minus size={18} aria-hidden="true" /></button>
-            <input aria-label="Ignore small movements" aria-valuetext={`${movementTolerance} out of 100`} disabled={busy} type="range" min={motionSensitivityRange.min * 100} max={motionSensitivityRange.max * 100} step={motionSensitivityRange.step * 100} value={movementTolerance} onChange={event => setMovementTolerance(event.currentTarget.valueAsNumber)} />
+            <input aria-label="Ignore small movements" aria-valuetext={`${movementTolerance} out of 100`} disabled={busy} type="range" min="0" max="100" step="1" value={movementTolerance} onChange={event => setMovementTolerance(event.currentTarget.valueAsNumber)} />
             <button type="button" className="icon-button movement-step" aria-label="Ignore more movement" disabled={busy || movementTolerance === 100} onClick={() => setMovementTolerance(movementTolerance + 1)}><Plus size={18} aria-hidden="true" /></button>
           </div>
         </Setting>

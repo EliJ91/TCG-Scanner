@@ -17,13 +17,13 @@ describe('browser-cached camera preferences',()=>{
     expect(normalizeSettings({...defaults,stabilityMs:10}).stabilityMs).toBe(10);
     expect(normalizeSettings({...defaults,stabilityMs:180}).stabilityMs).toBe(200);
   });
-  it('rounds saved movement thresholds to one-point steps and keeps both endpoints', () => {
-    expect(normalizeSettings({ sensitivity: 0.035 }).sensitivity).toBe(0.04);
-    expect(normalizeSettings({ sensitivity: 0.22 }).sensitivity).toBe(0.22);
-    expect(normalizeSettings({ sensitivity: 0.25 }).sensitivity).toBe(0.25);
-    expect(normalizeSettings({ sensitivity: 0.45 }).sensitivity).toBe(0.45);
-    expect(normalizeSettings({ sensitivity: -0.1 }).sensitivity).toBe(0);
-    expect(normalizeSettings({ sensitivity: 0 }).sensitivity).toBe(0);
+  it('migrates old movement thresholds and preserves hundredths of a percent when restoring settings', () => {
+    expect(normalizeSettings({ sensitivity: 0.25 }).sensitivity).toBe(0.99);
+    expect(normalizeSettings({ sensitivity: 0 }).sensitivity).toBe(0.99);
+    expect(normalizeSettings({ sensitivity: 0.99 }).sensitivity).toBe(0.99);
+    expect(normalizeSettings({ sensitivity: 0.9901 }).sensitivity).toBe(0.9901);
+    expect(normalizeSettings({ sensitivity: 0.99375 }).sensitivity).toBe(0.9938);
+    expect(normalizeSettings({ sensitivity: 0.9999 }).sensitivity).toBe(0.9999);
     expect(normalizeSettings({ sensitivity: 1 }).sensitivity).toBe(1);
     expect(normalizeSettings({ sensitivity: 1.1 }).sensitivity).toBe(1);
   });

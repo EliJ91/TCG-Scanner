@@ -21,7 +21,7 @@ export function normalizeSettings(saved?: SavedSettings): Settings {
     ? photoWaitTimes.reduce((closest, wait) => Math.abs(wait - savedWait) < Math.abs(closest - savedWait) ? wait : closest)
     : defaults.stabilityMs;
   next.sensitivity = Number.isFinite(next.sensitivity)
-    ? Math.max(motionSensitivityRange.min, Math.min(motionSensitivityRange.max, Math.round(next.sensitivity * 100) / 100))
+    ? Math.max(motionSensitivityRange.min, Math.min(motionSensitivityRange.max, Math.round(next.sensitivity * 10000) / 10000))
     : defaults.sensitivity;
   next.quality = Number.isFinite(next.quality)
     ? Math.max(8, Math.min(10, Math.round(next.quality * 10))) / 10

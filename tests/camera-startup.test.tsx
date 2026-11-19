@@ -356,7 +356,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.capture).toHaveBeenCalledOnce();
   });
   it('detects a new stacked card in the first frame after an automatic zoom change', async () => {
-    const first = printedCard(), second = printedCard(1);
+    const first = printedCard(), second = printedCard(1, 0, 7);
     const { tick } = await startAutoPreview(100, first, false, {
       settings: { stackCards: true, zoom: 2, autoZoom: true, autoZoomInterval: 1, autoZoomOutPercent: 50 },
     });
@@ -396,7 +396,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.start).toHaveBeenCalledOnce();
   });
   it('starts a 10 ms countdown on confirmed stillness and cancels it when a fresh frame shows movement', async () => {
-    const moved = printedCard(1, 248, 241, { left: 18, top: 24, right: 78, bottom: 96 });
+    const moved = printedCard(1, 0, 7);
     const { tick, scene, video } = await startAutoPreview(10, printedCard(), true);
     await tick();
     expect(container.querySelector('.auto-countdown:not([hidden])')).toBeNull();
@@ -471,7 +471,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
   it('uses the Card Slinger setting to capture successive cards placed on top during a slow save', async () => {
     let finishSaving!: () => void;
     mocks.accept.mockImplementationOnce(() => new Promise<void>(resolve => { finishSaving = resolve; }));
-    const first = printedCard(), second = printedCard(1), third = printedCard(2);
+    const first = printedCard(), second = printedCard(1, 0, 7), third = printedCard(2);
     const { tick } = await startAutoPreview(100, first);
     await tick();
     await tick(33, first);
@@ -554,7 +554,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
         copied();
         return new Promise(resolve => { finishEncoding = () => resolve(jpeg); });
       });
-    const first = printedCard(), second = printedCard(1), third = printedCard(2), fourth = printedCard(3);
+    const first = printedCard(), second = printedCard(1, 0, 7), third = printedCard(2), fourth = printedCard(3);
     const { tick } = await startAutoPreview(100, first, false, { settings: { batchTarget: 3, stackCards: true } });
     await tick();
     await tick(33, first);
@@ -793,16 +793,16 @@ describe('manual capture, continuous errors, and batch naming', () => {
     const slider = () => container.querySelector<HTMLInputElement>('[aria-label="Ignore small movements"]')!;
     const less = () => container.querySelector<HTMLButtonElement>('[aria-label="Ignore less movement"]')!;
     const more = () => container.querySelector<HTMLButtonElement>('[aria-label="Ignore more movement"]')!;
-    expect([slider().min, slider().max, slider().step, slider().value]).toEqual(['0', '100', '1', '25']);
+    expect([slider().min, slider().max, slider().step, slider().value]).toEqual(['0', '100', '1', '0']);
     await input('[aria-label="Ignore small movements"]', '38');
     await act(async () => less().click());
     expect(slider().value).toBe('37');
-    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!).sensitivity).toBe(0.37);
+    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!).sensitivity).toBe(0.9937);
     await act(async () => more().click());
     expect(slider().value).toBe('38');
     await input('[aria-label="Ignore small movements"]', '0');
     expect(less().disabled).toBe(true);
-    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!).sensitivity).toBe(0);
+    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!).sensitivity).toBe(0.99);
     await act(async () => more().click());
     expect(slider().value).toBe('1');
     await input('[aria-label="Ignore small movements"]', '100');
@@ -815,7 +815,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await renderApp();
     await openSettings();
     expect(slider().value).toBe('99');
-    expect(mocks.settings).toHaveBeenLastCalledWith(expect.objectContaining({ sensitivity: 0.99 }));
+    expect(mocks.settings).toHaveBeenLastCalledWith(expect.objectContaining({ sensitivity: 0.9999 }));
   });
   it('restores cached camera controls and resets settings without deleting the saved batch', async () => {
     mocks.capabilities={torch:true,exposureMode:['manual','continuous'],focusMode:['manual','continuous']};

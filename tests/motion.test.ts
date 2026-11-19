@@ -89,7 +89,7 @@ describe('card-gated motion', () => {
 
   it('restarts the countdown when a new frame moves', () => {
     const d = new MotionDetector(200), first = printedCard();
-    const moved = printedCard(1, 248, 241, { left: 18, top: 24, right: 78, bottom: 96 });
+    const moved = printedCard(1, 0, 7);
     sample(d, first, 0); sample(d, first, 33);
     expect(sample(d, moved, 232).state).toBe('moving');
     expect(d.deadline).toBeNull();
@@ -124,7 +124,7 @@ describe('card-gated motion', () => {
   });
 
   it('waits for motion after a stack capture and still requires a visible, settled card', () => {
-    const d = new MotionDetector(10), card = printedCard(), next = printedCard(1), empty = emptyFrame();
+    const d = new MotionDetector(10), card = printedCard(), next = printedCard(1, 0, 7), empty = emptyFrame();
     d.setStackCards(true);
     sample(d, card, 0); sample(d, card, 33);
     expect(d.advance(43).state).toBe('ready');
