@@ -5,6 +5,7 @@ import { Camera, type CameraCapabilities } from './core/camera';
 import { CameraAccessError } from './core/camera-access';
 import { CardPresenceDetector, previewHeight, previewWidth } from './core/card-presence';
 import { MotionDetector, toLuma, type MotionReading } from './core/motion';
+import { FocusDetector } from './core/focus';
 import { ScannerAudio } from './core/audio';
 import { storage } from './core/storage';
 import { zoomRect } from './core/zoom';
@@ -302,10 +303,13 @@ export function useScanner() {
     const video = videoRef.current;
     if (session !== 'scanning' || cameraPhase !== 'ready' || !video) return;
     const canvas = document.createElement('canvas');
-    canvas.width = previewWidth;
-    canvas.height = previewHeight;
+    canvas.width = previewWidth * 2;
+    canvas.height = previewHeight * 2;
     const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
-    const gray = new Uint8Array(canvas.width * canvas.height);
+    const gray = new Uint8Array(previewWidth * previewHeight);
+    const focusGray = new Uint8Array(canvas.width * canvas.height);
+    const focus = new FocusDetector();
+    let focusFrameTime = -1, focusZoom = settingsRef.current.zoom;
     const card = new CardPresenceDetector();
     const useVideoFrames = typeof video.requestVideoFrameCallback === 'function';
     let frame = 0, lastFrameAt = performance.now(), lastVideoTime = -1, lastUI = 0;
@@ -325,11 +329,24 @@ export function useScanner() {
       }
     }
 
-    const sampleMotion = (zoom: number, flipped: boolean, now: number) => {
+    const sampleMotion = (zoom: number, flipped: boolean, now: number, freshFrame: boolean) => {
       const crop = zoomRect(video.videoWidth, video.videoHeight, zoom);
       ctx.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, canvas.width, canvas.height);
-      toLuma(ctx.getImageData(0, 0, canvas.width, canvas.height).data, gray, flipped);
-      return detector.current.update(gray, now, card.detect(gray));
+      toLuma(ctx.getImageData(0, 0, canvas.width, canvas.height).data, focusGray, flipped);
+      for (let y = 0; y < previewHeight; y++) {
+        for (let x = 0; x < previewWidth; x++) {
+          const index = y * 2 * canvas.width + x * 2;
+          gray[y * previewWidth + x] = (focusGray[index] + focusGray[index + 1] + focusGray[index + canvas.width] + focusGray[index + canvas.width + 1]) / 4;
+        }
+      }
+      const presence = card.detect(gray);
+      if (presence !== 'card' || zoom !== focusZoom) focus.reset();
+      focusZoom = zoom;
+      const focused = focus.update(focusGray, canvas.width, freshFrame || video.currentTime !== focusFrameTime, camera.current?.focusDistance);
+      focusFrameTime = video.currentTime;
+      const next = detector.current.update(gray, now, presence, focused);
+      if (next.awaitingNextCard) focus.reset();
+      return next;
     };
 
     function inspect(freshFrame: boolean) {
@@ -342,6 +359,7 @@ export function useScanner() {
       }
       if (freshFrame) lastFrameAt = now;
       if (captureMode !== 'auto' || zoomAdjusting.current || video.readyState < 2) {
+        focus.reset();
         schedule(null);
         return;
       }
@@ -351,7 +369,7 @@ export function useScanner() {
         return;
       }
       // Check the current pixels at the deadline too, in case movement just resumed.
-      const next = sampleMotion(zoom, flipInterface, now);
+      const next = sampleMotion(zoom, flipInterface, now, freshFrame);
       const canCapture = c.hasCapacity && !editingBatch.current && !captureBusy.current && !storageIssueRef.current;
       schedule(canCapture ? motion.deadline : null);
       if (now - lastUI > 100) {
@@ -360,10 +378,11 @@ export function useScanner() {
       }
       if (next.state === 'ready' && canCapture) {
         void capture(true);
+        focus.reset();
         const adjustedZoom = settingsRef.current.zoom;
         if (settingsRef.current.stackCards && adjustedZoom !== zoom) {
           // Use the frame just captured at the new zoom to detect the next card without a gap.
-          sampleMotion(adjustedZoom, flipInterface, now);
+          sampleMotion(adjustedZoom, flipInterface, now, false);
         }
       }
     }

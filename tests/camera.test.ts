@@ -131,6 +131,23 @@ describe('mobile video preview startup', () => {
     await expect(camera.start(1920)).resolves.toMatchObject({ width: preview.videoWidth });
     expect(camera.stream?.active).toBe(true);
   });
+  it('reads changing focus distances and tolerates unavailable camera settings', async () => {
+    const { stream, track } = streamFixture();
+    getUserMedia.mockResolvedValue(stream);
+    const camera = new Camera(new Preview() as unknown as HTMLVideoElement, vi.fn());
+    expect(camera.focusDistance).toBeUndefined();
+    track.getSettings.mockReturnValue({ focusDistance: 1 });
+    await camera.start(1920);
+    expect(camera.focusDistance).toBe(1);
+    track.getSettings.mockReturnValue({ focusDistance: 2 });
+    expect(camera.focusDistance).toBe(2);
+    track.getSettings.mockReturnValue({ focusDistance: NaN });
+    expect(camera.focusDistance).toBeUndefined();
+    track.getSettings.mockImplementation(() => { throw new Error('Settings unavailable'); });
+    expect(camera.focusDistance).toBeUndefined();
+    camera.stop();
+    expect(camera.focusDistance).toBeUndefined();
+  });
   it.each([false, true])('uses the centered zoom crop and resets the flip after capture (alternate method %s)', async alternate => {
     const fixture=streamFixture();getUserMedia.mockResolvedValue(fixture.stream);
     const drawImage = vi.fn();

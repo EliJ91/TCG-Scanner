@@ -19,6 +19,12 @@ export class Camera {
   private controlQueue = Promise.resolve();
   private baseConstraints: MediaTrackConstraints = {};
   private zoom = 1;
+  get focusDistance(): number | undefined {
+    try {
+      const settings = this.stream?.getVideoTracks()[0]?.getSettings() as (MediaTrackSettings & { focusDistance?: number }) | undefined;
+      return Number.isFinite(settings?.focusDistance) ? settings?.focusDistance : undefined;
+    } catch { return undefined; }
+  }
   setZoom(value: number) { this.zoom = Math.max(1, Math.min(3, Number.isFinite(value) ? value : 1)); }
   constructor(public video: HTMLVideoElement, private lost: (reason: string) => void, private canUseCamera = () => true) {}
   async start(width: number, deviceId?: string) {

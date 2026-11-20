@@ -32,3 +32,18 @@ export function printedCard(seed = 0, background = 248, border = 241, bounds = {
   }
   return frame;
 }
+
+export function softenedFrame(frame: Uint8Array) {
+  const result = frame.slice();
+  for (let y = 1; y < previewHeight - 1; y++) {
+    for (let x = 1; x < previewWidth - 1; x++) {
+      const index = y * previewWidth + x;
+      let sum = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) sum += frame[index + dy * previewWidth + dx];
+      }
+      result[index] = (frame[index] + sum / 9) / 2;
+    }
+  }
+  return result;
+}

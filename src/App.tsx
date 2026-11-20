@@ -324,7 +324,7 @@ export default function App() {
     setShowMenu(true);
   };
   const openGallery = () => {
-    pauseAuto();
+    if (busy) s.pause();
     setShowGallery(true);
   };
   const openFromMenu = (open: () => void) => { setShowMenu(false); open(); };
@@ -398,6 +398,7 @@ export default function App() {
     if (!autoMode) scannerStatus = 'Manual · tap to take a photo';
     else if (showCountdown && !snapped) scannerStatus = 'Hold still';
     else if (s.reading?.awaitingNextCard) scannerStatus = s.settings.stackCards ? 'Place the next card on top' : 'Remove the card';
+    else if (s.reading?.state === 'focusing') scannerStatus = 'Focusing';
     else if (s.reading?.state === 'moving') scannerStatus = 'Card moving';
     else scannerStatus = 'Place a card';
   }
@@ -611,13 +612,13 @@ export default function App() {
         </div>
         <div className="guide-step">
           <h3>Take photos in Auto or Manual</h3>
-          <p>In <strong>Auto</strong>, place a card and tap <strong>Start scanning</strong>. Once the card is still, the green bar fills. The app takes a photo when the bar is full.</p>
+          <p>In <strong>Auto</strong>, place a card and tap <strong>Start scanning</strong>. Keep the card still while <strong>Focusing</strong> is shown. The green bar fills once the view is sharp and still. The app takes a photo when the bar is full.</p>
           <p>Lift each card and briefly show the empty surface before placing the next. To stack cards, turn on <strong>Using Card Slinger</strong> in Settings and place each new card on top.</p>
           <p>In <strong>Manual</strong>, tap <strong>Take photo</strong> for each card.</p>
         </div>
         <div className="guide-step">
           <h3>Review and download your photos</h3>
-          <p>Tap the photo count below the camera to open the <strong>Gallery</strong>. Opening it or the menu pauses Auto. To continue, return to the camera and tap <strong>Resume scanning</strong>.</p>
+          <p>Tap the photo count below the camera to open the <strong>Gallery</strong>. Capture pauses so you can review or delete photos in either mode. Opening the menu also pauses Auto. To continue in Auto, return to the camera and tap <strong>Resume scanning</strong>.</p>
           <p>After your first photo saves, you can choose <strong>Export ZIP</strong> from the menu or Gallery at any time. The app pauses scanning and finishes saving your photos. Tap <strong>Download ZIP</strong> to save them in one file.</p>
         </div>
         <div className="guide-callout"><ShieldCheck size={18} /><p>Your photos are saved in this browser. Download the ZIP before starting a new batch or clearing browser data.</p></div>

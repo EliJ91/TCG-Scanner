@@ -1,7 +1,7 @@
 import type { CardPresence } from './card-presence';
 import { defaults } from './types';
 
-export type MotionState = 'waiting' | 'moving' | 'stabilizing' | 'ready';
+export type MotionState = 'waiting' | 'moving' | 'focusing' | 'stabilizing' | 'ready';
 export interface MotionReading {
   score: number; noise: number; stability: number; state: MotionState;
   awaitingNextCard: boolean; cycle: number;
@@ -51,7 +51,7 @@ export class MotionDetector {
     }
   }
 
-  update(gray: Uint8Array, now: number, presence: CardPresence): MotionReading {
+  update(gray: Uint8Array, now: number, presence: CardPresence, focused = true): MotionReading {
     if (this.lastTime !== null && now - this.lastTime > 650) this.reset();
     const previous = this.previous;
     this.lastTime = now;
@@ -83,6 +83,9 @@ export class MotionDetector {
     }
     if (presence !== 'card' || this.awaitingNextCard || !previous) {
       this.state = 'waiting';
+      this.stableStart = null;
+    } else if (!focused) {
+      this.state = 'focusing';
       this.stableStart = null;
     } else if (moving) {
       this.state = 'moving';

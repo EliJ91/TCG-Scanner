@@ -7,7 +7,8 @@ import { CameraAccessError } from '../src/core/camera-access';
 import * as exportTools from '../src/core/export';
 import { cacheBatchName, cachedBatchName } from '../src/core/preferences';
 import { defaults, type Settings } from '../src/core/types';
-import { emptyFrame, obstructedFrame, printedCard, shadowedSurface } from './card-frame';
+import { CardPresenceDetector, previewHeight, previewWidth } from '../src/core/card-presence';
+import { emptyFrame, obstructedFrame, printedCard, shadowedSurface, softenedFrame } from './card-frame';
 
 const mocks = vi.hoisted(() => ({
   load: vi.fn(), settings: vi.fn(), saveBatch: vi.fn(), create: vi.fn(), rename: vi.fn(),
@@ -17,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   control: vi.fn(), lock: vi.fn(), focus: vi.fn(), capabilities: {} as {torch?:boolean;exposureMode?:string[];focusMode?:string[];focusDistance?:{min:number;max:number;step:number}},
   unlock: vi.fn(), error: vi.fn(), success: vi.fn(), complete: vi.fn(), queueFull: vi.fn(),
   lost: undefined as ((reason: string) => void) | undefined,
+  focusDistance: undefined as number | undefined,
 }));
 vi.mock('../src/core/storage', () => ({ storage: {
   load: mocks.load, settings: mocks.settings, saveBatch: mocks.saveBatch, create: mocks.create,
@@ -29,7 +31,8 @@ vi.mock('../src/core/camera', () => ({ Camera: class {
   start = async (...args: unknown[]) => { const info = await mocks.start(...args); this.stream = { active: true }; return info; };
   stop = () => { mocks.stop(); this.stream = undefined; };
   setZoom = mocks.zoom; capture = mocks.capture;
-  control = mocks.control; lock = mocks.lock; focus = mocks.focus; focusDistance = 2;
+  control = mocks.control; lock = mocks.lock; focus = mocks.focus;
+  get focusDistance() { return mocks.focusDistance; }
 } }));
 vi.mock('../src/core/audio', () => ({ ScannerAudio: class { unlock = mocks.unlock; error = mocks.error; success = mocks.success; complete = mocks.complete; queueFull = mocks.queueFull; } }));
 
@@ -47,9 +50,15 @@ async function startAutoPreview(stabilityMs: number, initial: Uint8Array, flipIn
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
   let frame!: FrameRequestCallback;
   vi.stubGlobal('requestAnimationFrame', vi.fn(callback => { frame = callback; return 1; }));
-  const pixels = new Uint8ClampedArray(initial.length * 4);
+  const pixels = new Uint8ClampedArray(initial.length * 16);
   function scene(values: Uint8Array) {
-    for (let i = 0; i < values.length; i++) pixels[i * 4] = pixels[i * 4 + 1] = pixels[i * 4 + 2] = values[i];
+    for (let y = 0; y < previewHeight * 2; y++) {
+      for (let x = 0; x < previewWidth * 2; x++) {
+        const index = (y * previewWidth * 2 + x) * 4;
+        const value = values[Math.floor(y / 2) * previewWidth + Math.floor(x / 2)];
+        pixels[index] = pixels[index + 1] = pixels[index + 2] = value;
+      }
+    }
   }
   scene(initial);
   vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue({ drawImage: vi.fn(), getImageData: () => ({ data: pixels }) } as unknown as CanvasRenderingContext2D);
@@ -77,6 +86,7 @@ beforeEach(() => {
   localStorage.clear();
   vi.spyOn(document, 'hasFocus').mockReturnValue(true);
   mocks.capabilities={}; mocks.control.mockResolvedValue(undefined); mocks.lock.mockResolvedValue(undefined); mocks.focus.mockResolvedValue(2);
+  mocks.focusDistance = undefined;
   mocks.load.mockResolvedValue(loaded); mocks.settings.mockResolvedValue(undefined); mocks.saveBatch.mockResolvedValue(undefined);
   mocks.start.mockResolvedValue({ width: 1280, height: 720 }); mocks.unlock.mockResolvedValue(true);
   mocks.capture.mockImplementation(async (_alternate, _quality, frameCopied) => {
@@ -415,6 +425,45 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.capture).toHaveBeenCalledWith(false, 1, expect.any(Function), true);
     expect(container.querySelector('.auto-countdown.is-snapped')).not.toBeNull();
   });
+  it('cancels the Auto shutter when sharpness drops and waits for focus to settle again', async () => {
+    const card = printedCard(), blurred = softenedFrame(card);
+    expect(new CardPresenceDetector().detect(blurred)).toBe('card');
+    const { tick, scene, video } = await startAutoPreview(10, card);
+    await tick();
+    await tick(33, card);
+    await tick(9);
+    scene(blurred);
+    video.currentTime = 0.043;
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(mocks.capture).not.toHaveBeenCalled();
+    expect(container.querySelector('.auto-countdown:not([hidden])')).toBeNull();
+    await tick(33, blurred);
+    await tick(100, blurred);
+    expect(mocks.capture).not.toHaveBeenCalled();
+    expect(container.querySelector('.session-state')?.textContent).toBe('Focusing');
+    await tick(33, card);
+    await tick(33, card);
+    await tick(10);
+    expect(mocks.capture).toHaveBeenCalledOnce();
+    expect(mocks.success).toHaveBeenCalledOnce();
+  });
+  it('holds the Auto shutter while the camera reports a changing focus distance', async () => {
+    mocks.focusDistance = 1;
+    const card = printedCard();
+    const { tick } = await startAutoPreview(10, card);
+    await tick();
+    await tick(33, card);
+    mocks.focusDistance = 2;
+    await tick(10);
+    expect(mocks.capture).not.toHaveBeenCalled();
+    expect(container.querySelector('.auto-countdown:not([hidden])')).toBeNull();
+    mocks.focusDistance = 3;
+    await tick(33, card);
+    expect(mocks.capture).not.toHaveBeenCalled();
+    await tick(33, card);
+    await tick(10);
+    expect(mocks.capture).toHaveBeenCalledOnce();
+  });
   it.each([false, true])('rearms after card removal during a slow encode and save (flipped %s)', async flipped => {
     const jpeg = { blob: new Blob(['first JPEG'], { type: 'image/jpeg' }), width: 1280, height: 720 };
     let finishEncoding!: (image: typeof jpeg) => void, finishSaving!: () => void;
@@ -617,6 +666,40 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await act(async () => vi.advanceTimersByTimeAsync(3000));
     expect(container.querySelector('.scan-count')?.textContent).toBe('1 / 1');
     expect(mocks.complete).toHaveBeenCalledOnce();
+  });
+  it.each([false, true])('deletes photos from an active Manual batch through the gallery (menu and bulk %s)', async menu => {
+    vi.stubGlobal('URL', class extends URL {
+      static createObjectURL = vi.fn(() => 'blob:manual-photo');
+      static revokeObjectURL = vi.fn();
+    });
+    vi.stubGlobal('Image', class { decode = vi.fn().mockResolvedValue(undefined); });
+    await renderApp();
+    await click('Manual');
+    await click('Take photo');
+    await click('Take photo');
+    expect(container.querySelector('.session-state')?.textContent).toBe('Manual · tap to take a photo');
+    if (menu) {
+      await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
+      await act(async () => container.querySelector<HTMLButtonElement>('nav button:has(svg.lucide-images)')!.click());
+      await act(async () => container.querySelector('.scan-tile')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
+      await click('Select all');
+      expect(button('Delete selected').disabled).toBe(false);
+      await click('Delete selected');
+      await click('Delete 2 photos');
+    } else {
+      await click('2 / 50');
+      await act(async () => container.querySelector<HTMLButtonElement>('.scan-tile')!.click());
+      expect(button('Delete').disabled).toBe(false);
+      await click('Delete');
+      await click('Delete image');
+    }
+    expect(mocks.deleteScans).toHaveBeenCalledOnce();
+    expect(mocks.deleteScans.mock.calls[0][0]).toHaveLength(menu ? 2 : 1);
+    expect(container.querySelector('.scan-count')?.textContent).toBe(menu ? '0 / 50' : '1 / 50');
+    await act(async () => container.querySelector<HTMLButtonElement>('dialog[open] [aria-label="Close dialog"]')!.click());
+    await click('Take photo');
+    expect(mocks.capture).toHaveBeenCalledTimes(3);
+    expect(container.querySelector('.scan-count')?.textContent).toBe(menu ? '1 / 50' : '2 / 50');
   });
   it('saves each manual photo and opens those photos from the scan count', async () => {
     let urlNumber = 0;
