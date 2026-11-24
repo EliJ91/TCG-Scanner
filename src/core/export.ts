@@ -2,9 +2,21 @@ import JSZip from 'jszip';
 import { filename, ordered, type Scan } from './types';
 export async function createZip(scans: Scan[], onProgress: (percent: number) => void, newestFirst = false) {
   const zip = new JSZip();
-  const exportScans = ordered(scans);
-  if (newestFirst) exportScans.reverse();
-  for (const [i, scan] of exportScans.entries()) zip.file(filename(i), await scan.blob.arrayBuffer());
+  const usedNames = new Set<string>();
+  const nextTimestamps = new Map<number, number>();
+  const files = ordered(scans).map(scan => {
+    const savedTime = new Date(scan.capturedAt).getTime();
+    const capturedAt = Number.isFinite(savedTime) ? savedTime : 0;
+    let timestamp = nextTimestamps.get(capturedAt) ?? capturedAt;
+    let name = filename(timestamp);
+    // Keep every photo if two captures have the same millisecond timestamp.
+    while (usedNames.has(name)) name = filename(++timestamp);
+    usedNames.add(name);
+    nextTimestamps.set(capturedAt, timestamp + 1);
+    return { scan, name };
+  });
+  if (newestFirst) files.reverse();
+  for (const { scan, name } of files) zip.file(name, await scan.blob.arrayBuffer());
   return zip.generateAsync({ type: 'blob', compression: 'STORE', streamFiles: true }, meta => onProgress(Math.round(meta.percent)));
 }
 export function downloadArchive(file: File) {

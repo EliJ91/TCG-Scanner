@@ -15,6 +15,18 @@ export function shadowedSurface() {
   return frame;
 }
 
+export function noisySurface(seed = 1) {
+  const frame = emptyFrame(180);
+  for (let y = 0; y < previewHeight; y++) {
+    for (let x = 0; x < previewWidth; x++) {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      const amplitude = x > 35 && x < 125 && y > 20 && y < 100 ? 45 : 6;
+      frame[y * previewWidth + x] += seed % (amplitude * 2 + 1) - amplitude;
+    }
+  }
+  return frame;
+}
+
 export function obstructedFrame() {
   const frame = emptyFrame();
   for (let y = 18; y < 102; y++) frame.fill(120 + Math.round(y / 4), y * previewWidth + 40, y * previewWidth + 120);

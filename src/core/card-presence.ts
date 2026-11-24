@@ -40,13 +40,16 @@ export class CardPresenceDetector {
       light = Math.max(light, this.means[index]);
       surfaceDetail += this.details[index] / 4;
     }
-    let different = 0, textured = 0, firstRow = -1, firstCol = -1;
+    const surfaceLevels = corners.map(index => this.means[index]).sort((a, b) => a - b);
+    const surfaceMean = (surfaceLevels[1] + surfaceLevels[2]) / 2;
+    let different = 0, contrasting = 0, textured = 0, firstRow = -1, firstCol = -1;
     let variedRows = false, variedCols = false;
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < columns; col++) {
         const index = row * columns + col, mean = this.means[index], detail = this.details[index];
         const printed = detail > Math.max(3.5, surfaceDetail + 2.5);
         if (printed || mean < dark - 18 || mean > light + 18) different++;
+        if (Math.abs(mean - surfaceMean) > 18) contrasting++;
         if (!printed) continue;
         if (textured === 0) { firstRow = row; firstCol = col; }
         variedRows ||= row !== firstRow;
@@ -54,7 +57,7 @@ export class CardPresenceDetector {
         textured++;
       }
     }
-    if (different >= 6 && textured >= 4 && variedRows && variedCols) return 'card';
+    if (different >= 6 && contrasting >= 2 && textured >= 4 && variedRows && variedCols) return 'card';
     if (different <= 1) return 'empty';
     return 'uncertain';
   }

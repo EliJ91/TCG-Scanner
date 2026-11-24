@@ -5,7 +5,7 @@ import { useScanner, type ScannerAlert } from './useScanner';
 import { useTheme } from './useTheme';
 import { BlobImage, PhotoViewer, useReviewPhoto } from './PhotoViewer';
 import { createZip, downloadArchive, rotateScan } from './core/export';
-import { archiveFilename, autoZoomOutLevels, defaultBatchName, filename, maxBatchTarget, message, motionSensitivityRange, photoNumber, photoWaitTimes, validBatchTarget, type Batch, type Scan } from './core/types';
+import { archiveFilename, autoZoomOutLevels, defaultBatchName, filename, maxBatchTarget, message, motionSensitivityRange, photoTimestamp, photoWaitTimes, validBatchTarget, type Batch, type Scan } from './core/types';
 
 const photoQualities = [
   { value: 0.8, label: 'Lowest' },
@@ -174,7 +174,6 @@ export default function App() {
   const requestedPhoto = galleryScans[activeIndex];
   const reviewedPhoto = useReviewPhoto(requestedPhoto);
   const active = reviewedPhoto?.scan ?? requestedPhoto;
-  const displayedIndex = active?.id === selected ? activeIndex : galleryScans.findIndex(scan => scan.id === active?.id);
   const captureIndex = (index: number) => newestFirst ? count - 1 - index : index;
   const movePhoto = (direction: -1 | 1) => {
     const next = galleryScans[activeIndex + direction];
@@ -287,7 +286,7 @@ export default function App() {
         onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') heldPhoto.current = undefined; }}
         onClick={() => openScan(scan.id)}>
         <div className="scan-image"><BlobImage blob={scan.thumbnail ?? scan.blob} alt={`Scanned card ${imageIndex + 1}`} loading="lazy" draggable={false} /><span aria-hidden="true">{picked !== false && <Check size={12} />}</span></div>
-        <span className="scan-name">{photoNumber(imageIndex)}</span><span className="scan-meta">{scan.width && scan.height ? `${scan.width} × ${scan.height}` : 'JPEG'}</span>
+        <span className="scan-name">{photoTimestamp(scan.capturedAt)}</span><span className="scan-meta">{scan.width && scan.height ? `${scan.width} × ${scan.height}` : 'JPEG'}</span>
       </button>;
     })}</div> : <div className="gallery-empty"><div className="empty-icon"><Images size={26} strokeWidth={1.5} /></div><strong>Your collection starts here</strong><p>Saved photos appear here.</p></div>}
     {s.attempts.length > 0 && <div className="attempts">
@@ -305,7 +304,7 @@ export default function App() {
               const url = URL.createObjectURL(raw);
               const anchor = document.createElement('a');
               anchor.href = url;
-              anchor.download = filename(photo.ordinal);
+              anchor.download = filename(photo.capturedAt);
               anchor.click();
               setTimeout(() => URL.revokeObjectURL(url), 60000);
             })}>Save original</button>
@@ -638,7 +637,7 @@ export default function App() {
       </div>
     </Dialog>}
     {exportOpen && s.batch && <BatchExport batch={s.batch} scans={s.scans} newestFirst={newestFirst} saving={s.pending > 0} disabled={editingDisabled} rename={s.renameBatch} close={() => setExportOpen(false)} completed={result => { setExportOpen(false); setClearPrompt(result); }} />}
-    {active && <Dialog title={photoNumber(captureIndex(displayedIndex < 0 ? activeIndex : displayedIndex))} close={() => setSelected(undefined)} wide>
+    {active && <Dialog title={photoTimestamp(active.capturedAt)} close={() => setSelected(undefined)} wide>
       <PhotoViewer photoId={active.id} src={reviewedPhoto?.url} flipped={s.settings.flipInterface} onSwipe={movePhoto} />
       <div className="review-meta"><span>{active.width && active.height ? `${active.width} × ${active.height} · JPEG` : 'JPEG'}</span></div>
       <div className="dialog-footer review-actions">
@@ -650,7 +649,7 @@ export default function App() {
     </Dialog>}
     {deleteIds && <Dialog title={deleteIds.length === 1 ? 'Delete this scan?' : `Delete ${deleteIds.length} photos?`} close={() => { if (!working) setDeleteIds(undefined); }}>
       <div className="confirm-content">
-        <p>Exported filenames stay sequential. Resume scanning to fill the open batch slots.</p>
+        <p>Resume scanning to fill the open batch slots.</p>
         {deleteError && <p className="name-error" role="alert">{deleteError}</p>}
       </div>
       <div className="dialog-footer">

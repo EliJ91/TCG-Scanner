@@ -39,8 +39,13 @@ export function originalScan(attempt: Attempt): Scan {
   const { id, batchId, ordinal, capturedAt, raw } = attempt;
   return { id, batchId, ordinal, capturedAt, blob: raw, rotated: false };
 }
-export const photoNumber = (index: number) => String(index + 1).padStart(4, '0');
-export const filename = (index: number) => `${photoNumber(index)}.jpg`;
+export function photoTimestamp(capturedAt: number) {
+  const timestamp = new Date(capturedAt).getTime();
+  const date = new Date(Number.isFinite(timestamp) ? timestamp : 0);
+  const parts = [date.getMonth() + 1, date.getDate(), date.getFullYear() % 100, date.getHours(), date.getMinutes(), date.getSeconds()];
+  return `${parts.map(value => String(value).padStart(2, '0')).join('-')}-${String(date.getMilliseconds()).padStart(3, '0')}`;
+}
+export const filename = (capturedAt: number) => `${photoTimestamp(capturedAt)}.jpg`;
 export const defaultBatchName = (number: number) => `Batch#${String(number).padStart(3, '0')}`;
 export const maxBatchTarget = 10000;
 export const validBatchTarget = (target: number, count = 0) => Number.isInteger(target) && target >= Math.max(1, count) && target <= maxBatchTarget;

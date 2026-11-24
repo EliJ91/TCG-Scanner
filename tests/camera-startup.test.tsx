@@ -6,9 +6,9 @@ import App from '../src/App';
 import { CameraAccessError } from '../src/core/camera-access';
 import * as exportTools from '../src/core/export';
 import { cacheBatchName, cachedBatchName } from '../src/core/preferences';
-import { defaults, type Settings } from '../src/core/types';
+import { defaults, photoTimestamp, type Settings } from '../src/core/types';
 import { CardPresenceDetector, previewHeight, previewWidth } from '../src/core/card-presence';
-import { emptyFrame, obstructedFrame, printedCard, shadowedSurface, softenedFrame } from './card-frame';
+import { emptyFrame, noisySurface, obstructedFrame, printedCard, shadowedSurface, softenedFrame } from './card-frame';
 
 const mocks = vi.hoisted(() => ({
   load: vi.fn(), settings: vi.fn(), saveBatch: vi.fn(), create: vi.fn(), rename: vi.fn(),
@@ -46,6 +46,7 @@ async function renderApp() { await act(async () => root.render(<App />)); }
 async function click(label: string) { await act(async () => button(label).click()); }
 async function startAutoPreview(stabilityMs: number, initial: Uint8Array, flipInterface = false, options: {
   settings?: Partial<Settings>;
+  warmup?: boolean;
 } = {}) {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
   let frame!: FrameRequestCallback;
@@ -72,6 +73,14 @@ async function startAutoPreview(stabilityMs: number, initial: Uint8Array, flipIn
     if (values) { scene(values); video.currentTime += 0.033; }
     frame(performance.now());
   });
+  // Other scenarios start after the camera's initial exposure-settling window.
+  if (options.warmup !== false) {
+    await tick(0, initial);
+    await tick(33, initial);
+    await tick(33, initial);
+    await act(async () => vi.advanceTimersByTimeAsync(184));
+    video.currentTime = 0;
+  }
   return { tick, scene, video };
 }
 async function input(selector: string, value: string) {
@@ -405,6 +414,24 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.capture).toHaveBeenCalledOnce();
     expect(mocks.start).toHaveBeenCalledOnce();
   });
+  it.each([false, true])('ignores card-like startup frames and a noisy empty surface before capturing a real card (stacking and flip %s)', async stacking => {
+    const initial = printedCard();
+    const { tick } = await startAutoPreview(10, initial, stacking, {
+      settings: { stackCards: stacking }, warmup: false,
+    });
+    await tick();
+    await tick(33, initial);
+    await tick(10);
+    expect(mocks.capture).not.toHaveBeenCalled();
+    for (let i = 0; i < 8; i++) await tick(50, noisySurface(i + 1));
+    expect(mocks.capture).not.toHaveBeenCalled();
+    expect(mocks.success).not.toHaveBeenCalled();
+    await tick(33, initial);
+    await tick(33, initial);
+    await tick(10);
+    expect(mocks.capture).toHaveBeenCalledOnce();
+    expect(mocks.success).toHaveBeenCalledOnce();
+  });
   it('starts a 10 ms countdown on confirmed stillness and cancels it when a fresh frame shows movement', async () => {
     const moved = printedCard(1, 0, 7);
     const { tick, scene, video } = await startAutoPreview(10, printedCard(), true);
@@ -712,6 +739,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await renderApp();
     await click('Manual');
     for (let i = 0; i < 5; i++) await click('Take photo');
+    const names = mocks.accept.mock.calls.map(([scan]) => photoTimestamp(scan.capturedAt));
     expect(mocks.capture).toHaveBeenCalledTimes(5);
     expect(mocks.accept).toHaveBeenCalledTimes(5);
     const original = await mocks.capture.mock.results[0].value;
@@ -722,7 +750,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     const gallery = container.querySelector('dialog[open]');
     expect(gallery?.querySelector('h2')?.textContent).toBe('Gallery');
     expect(gallery?.querySelectorAll('img')).toHaveLength(5);
-    expect(gallery?.querySelector('.scan-name')?.textContent).toBe('0001');
+    expect(gallery?.querySelector('.scan-name')?.textContent).toBe(names[0]);
     await act(async () => gallery?.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')?.click());
     await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
     await click('Settings');
@@ -731,13 +759,13 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(JSON.parse(localStorage.getItem('cardslinger-settings')!).galleryNewestFirst).toBe(true);
     await click('Done');
     await click('5 / 50');
-    expect(container.querySelector('.scan-name')?.textContent).toBe('0005');
+    expect(container.querySelector('.scan-name')?.textContent).toBe(names[4]);
     await act(async () => container.querySelector<HTMLButtonElement>('.scan-tile')!.click());
     expect(container.querySelector('dialog[open] img[alt="Full-resolution scanned card"]')).not.toBeNull();
     await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Next card"]')!.click());
     const viewer = () => container.querySelector<HTMLDivElement>('.review-image')!;
     const title = () => viewer().closest('dialog')?.querySelector('h2')?.textContent;
-    expect(title()).toBe('0004');
+    expect(title()).toBe(names[3]);
 
     const touch = (type: string, id: number, x: number, y: number) => {
       const event = new MouseEvent(type, { bubbles: true, clientX: x, clientY: y });
@@ -756,17 +784,17 @@ describe('manual capture, continuous errors, and batch naming', () => {
     let finishDecode!: () => void;
     decode.mockImplementationOnce(() => new Promise(resolve => { finishDecode = resolve; }));
     await swipe(220, 120);
-    expect(title()).toBe('0004');
+    expect(title()).toBe(names[3]);
     expect(image.src).toBe(currentUrl);
     expect(dialog?.open).toBe(true);
     await act(async () => finishDecode());
-    expect(title()).toBe('0003');
+    expect(title()).toBe(names[2]);
     expect(viewer()).toBe(frame);
     expect(viewer().closest('dialog')).toBe(dialog);
     expect(viewer().querySelector('img')).toBe(image);
     expect(image.src).not.toBe(currentUrl);
     await swipe(120, 220);
-    expect(title()).toBe('0004');
+    expect(title()).toBe(names[3]);
 
     vi.spyOn(viewer(), 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 300, 300));
     Object.defineProperties(image, { offsetWidth: { value: 240 }, offsetHeight: { value: 260 } });
@@ -780,7 +808,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     const zoomed = image.style.transform;
     expect(zoomed).toContain('scale(2)');
     await swipe(220, 120);
-    expect(title()).toBe('0004');
+    expect(title()).toBe(names[3]);
     expect(image.style.transform).toContain('scale(2)');
     expect(image.style.transform).not.toBe(zoomed);
 
@@ -792,9 +820,9 @@ describe('manual capture, continuous errors, and batch naming', () => {
       touch('pointerup', 2, 175, 150);
     });
     expect(image.style.transform).toBe('translate(0px, 0px) scale(1)');
-    expect(title()).toBe('0004');
+    expect(title()).toBe(names[3]);
     await swipe(220, 120);
-    expect(title()).toBe('0003');
+    expect(title()).toBe(names[2]);
 
     for (const selector of ['dialog:has(.review-image)', 'dialog:has(.gallery-grid)']) {
       await act(async () => container.querySelector<HTMLButtonElement>(`${selector} [aria-label="Close dialog"]`)!.click());
@@ -802,9 +830,9 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Flip Interface"]')!.click());
     await click('5 / 50');
     await act(async () => container.querySelector<HTMLButtonElement>('.scan-tile')!.click());
-    expect(title()).toBe('0005');
+    expect(title()).toBe(names[4]);
     await swipe(120, 220);
-    expect(title()).toBe('0004');
+    expect(title()).toBe(names[3]);
     expect(viewer().querySelector('img')?.style.transform).toBe('translate(0px, 0px) scale(1)');
   });
   it('selects photos with a hold and can retry a failed bulk delete', async () => {
@@ -815,7 +843,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     });
     const batch = { id: 'bulk-delete', number: 1, name: 'Batch#001', target: 3, createdAt: 1, status: 'complete', nextOrdinal: 3 };
     const scans = Array.from({ length: 3 }, (_, ordinal) => ({
-      id: `photo-${ordinal}`, batchId: batch.id, ordinal, blob: new Blob([`photo-${ordinal}`]),
+      id: `photo-${ordinal}`, batchId: batch.id, ordinal, capturedAt: new Date(2026, 10, 24, 13, 4, 5, ordinal).getTime(), blob: new Blob([`photo-${ordinal}`]),
     }));
     mocks.load.mockResolvedValueOnce({ ...loaded, batch, scans });
     await renderApp();
@@ -860,7 +888,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await click('Delete 2 photos');
     expect(mocks.deleteScans).toHaveBeenLastCalledWith(['photo-0', 'photo-2']);
     expect(container.querySelectorAll('.scan-tile')).toHaveLength(1);
-    expect(container.querySelector('.scan-name')?.textContent).toBe('0001');
+    expect(container.querySelector('.scan-name')?.textContent).toBe(photoTimestamp(scans[1].capturedAt));
     expect(container.querySelector('.scan-count')?.textContent).toBe('1 / 3');
     expect(mocks.saveBatch).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'paused', nextOrdinal: 3 }));
     expect(container.textContent).toContain('Scanning paused');

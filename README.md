@@ -31,7 +31,7 @@ Fonts and app assets are bundled locally. Use `npm ci` for a reproducible instal
 3. Choose **Auto** or **Manual**. In Auto, place the first card and tap **Start scanning**. The green bar fills during the stillness delay. Remove each card and briefly show the bare surface before placing the next one, or turn on **Using Card Slinger** in Settings to place each new card on top. Set **Wait before each photo** from **10 ms to 1 second** in Settings. In Manual, tap **Take photo**.
 4. Pinch the camera view to zoom in or out and frame the photo. The camera focuses automatically. If the lightning bolt appears beside the menu, tap it to turn the flashlight on or off.
 5. The camera dings when it takes a photo. The completion alarm plays after the batch target is saved.
-6. Tap the scan count to open the **Gallery**. Open a photo to rotate it or swipe left or right to browse. Pinch to zoom, then drag to pan. Choose **Export ZIP** from the menu or gallery and edit the batch name before downloading. It defaults to `Batch#001`, `Batch#002`, and so on, and your edit is remembered for later exports. The archive uses that name, such as `Batch#001.zip` or `Trade night.zip`. Photos are numbered `0001.jpg`, `0002.jpg`, and so on in the selected gallery order.
+6. Tap the scan count to open the **Gallery**. Open a photo to rotate it or swipe left or right to browse. Pinch to zoom, then drag to pan. Choose **Export ZIP** from the menu or gallery and edit the batch name before downloading. It defaults to `Batch#001`, `Batch#002`, and so on, and your edit is remembered for later exports. The archive uses that name, such as `Batch#001.zip` or `Trade night.zip`. Photo filenames use local capture time in `MM-DD-YY-HH-MM-SS-MS` format, with a 24-hour clock and three-digit milliseconds, such as `11-24-26-13-04-05-006.jpg`.
 7. Tap **Download ZIP** to save the archive. The app offers to start a fresh batch after requesting the download. Check your archive before confirming.
 
 The centered scanner includes an editable batch name, camera view with pinch zoom, capture mode, scan count, and capture control. Tap the count to open the Gallery. Touch and hold a photo to select it, then tap other photos to add them. Choose **Delete selected** to remove them together. **Menu** gives access to Batch Settings, Gallery, downloads, settings, and the guide. Opening the Gallery or Menu pauses Auto until you tap **Resume scanning**. The camera stays open. Thumbnails render only while the gallery is open.
@@ -102,7 +102,7 @@ Motion analysis samples a small preview when the video advances. The stillness d
 
 The camera snapshot is copied synchronously from the stabilized video frame before JPEG encoding. `takePhoto()` is deliberately not used: it may interrupt preview, add shutter latency, or change camera behavior. Optional `ImageCapture.grabFrame()` is available for device evaluation. A missed transition between sampled frames cannot be inferred from identical stationary artwork.
 
-The controller reserves one slot during capture and storage. The count advances after the write succeeds. ZIP filenames follow capture order.
+The controller reserves one slot during capture and storage. The count advances after the write succeeds. ZIP entries follow the selected gallery order and keep capture timestamps as filenames. If photos share a millisecond, ZIP filenames advance by one millisecond to keep every photo.
 
 ## HTTPS deployment and offline installation
 

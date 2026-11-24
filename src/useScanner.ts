@@ -36,6 +36,7 @@ export function useScanner() {
   const [storageIssue, setStorageIssue] = useState(''); const storageIssueRef = useRef('');
   const [cameraPhase, setCameraPhase] = useState<'off' | 'requesting' | 'ready'>('off');
   const cameraPhaseRef = useRef<'off' | 'requesting' | 'ready'>('off');
+  const cameraReadyAt = useRef(0);
   const [openBrowserSuggested, setOpenBrowserSuggested] = useState(false);
   const cameraRequest = useRef<Promise<void> | undefined>(undefined); const cameraEpoch = useRef(0);
   const previewWanted = useRef(true); const reconnectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -72,7 +73,11 @@ export function useScanner() {
   const editingBatch = useRef(false);
   const canUseCamera = () => mounted.current && !pageExited.current && !windowBlurred.current && !document.hidden && document.hasFocus();
   const changeSession = (value: Session) => { sessionRef.current = value; if (mounted.current) setSession(value); };
-  const changeCameraPhase = (value: 'off' | 'requesting' | 'ready') => { cameraPhaseRef.current = value; if (mounted.current) setCameraPhase(value); };
+  const changeCameraPhase = (value: 'off' | 'requesting' | 'ready') => {
+    if (value === 'ready') cameraReadyAt.current = performance.now();
+    cameraPhaseRef.current = value;
+    if (mounted.current) setCameraPhase(value);
+  };
   const updateAttempts = (items: AttemptInfo[]) => { attemptsRef.current = items; if (mounted.current) setAttempts(items); };
   const setCurrentBatchName = (name: string, number: number) => {
     nameRef.current = name;
@@ -313,6 +318,8 @@ export function useScanner() {
     const card = new CardPresenceDetector();
     const useVideoFrames = typeof video.requestVideoFrameCallback === 'function';
     let frame = 0, lastFrameAt = performance.now(), lastVideoTime = -1, lastUI = 0;
+    const startupUntil = cameraReadyAt.current + 250;
+    let startupFrames = performance.now() >= startupUntil ? 3 : 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let scheduledDeadline: number | null = null;
 
@@ -342,7 +349,8 @@ export function useScanner() {
       const presence = card.detect(gray);
       if (presence !== 'card' || zoom !== focusZoom) focus.reset();
       focusZoom = zoom;
-      const focused = focus.update(focusGray, canvas.width, freshFrame || video.currentTime !== focusFrameTime, camera.current?.focusDistance);
+      const focused = presence === 'card'
+        && focus.update(focusGray, canvas.width, freshFrame || video.currentTime !== focusFrameTime, camera.current?.focusDistance);
       focusFrameTime = video.currentTime;
       const next = detector.current.update(gray, now, presence, focused);
       if (next.awaitingNextCard) focus.reset();
@@ -365,6 +373,13 @@ export function useScanner() {
       }
       if (!freshFrame && now - lastFrameAt > 650) {
         resetMotion();
+        schedule(null);
+        return;
+      }
+      if (freshFrame) startupFrames++;
+      if (now < startupUntil || startupFrames < 3) {
+        resetMotion();
+        focus.reset();
         schedule(null);
         return;
       }

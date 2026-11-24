@@ -5,7 +5,7 @@ import { storage } from '../src/core/storage';
 import { createZip } from '../src/core/export';
 import { archiveFilename, defaultBatchName, filename, type Scan } from '../src/core/types';
 const scan = (batchId: string, ordinal: number): Scan => ({
-  id: crypto.randomUUID(), batchId, ordinal, capturedAt: Date.now(), blob: new Blob([`image-${ordinal}`]), thumbnail: new Blob(),
+  id: crypto.randomUUID(), batchId, ordinal, capturedAt: new Date(2026, 10, 24, 13, 4, 5, ordinal).getTime(), blob: new Blob([`image-${ordinal}`]), thumbnail: new Blob(),
   width: 900, height: 1257, rotated: false,
 });
 describe('storage, recovery, filenames, ZIP', () => {
@@ -30,9 +30,9 @@ describe('storage, recovery, filenames, ZIP', () => {
     expect(archiveFilename('..', 1)).toBe('Batch#001.zip');
     expect(archiveFilename('CON', 1)).toBe('_CON.zip');
   });
-  it('generates gap-free names including numbers above 9999', () => {
-    expect([0,1,9,99].map(filename)).toEqual(['0001.jpg','0002.jpg','0010.jpg','0100.jpg']);
-    expect(filename(9999)).toBe('10000.jpg');
+  it('formats local capture timestamps with 24-hour time and three-digit milliseconds', () => {
+    expect(filename(new Date(2026, 0, 2, 3, 4, 5, 6).getTime())).toBe('01-02-26-03-04-05-006.jpg');
+    expect(filename(new Date(2026, 10, 24, 23, 59, 58, 987).getTime())).toBe('11-24-26-23-59-58-987.jpg');
   });
   it('persists a photo directly and recovers the unfinished batch', async () => {
     const b = await storage.create(3), a = scan(b.id, 2);
@@ -64,23 +64,35 @@ describe('storage, recovery, filenames, ZIP', () => {
     expect((await storage.load()).scans.map(photo => photo.id)).toEqual([photos[1].id]);
     await storage.clear(batch.id);
   });
-  it('exports in capture order, with no gaps from failures or deletion', async () => {
+  it('exports capture timestamps in capture order after failures or deletion', async () => {
     const data = [scan('test', 9), scan('test', 1), scan('test', 4)];
     const progress: number[] = [];
     const blob = await createZip(data, p => progress.push(p));
     const zip = await JSZip.loadAsync(await blob.arrayBuffer());
-    expect(Object.keys(zip.files)).toEqual(['0001.jpg','0002.jpg','0003.jpg']);
-    expect(await zip.file('0001.jpg')!.async('string')).toBe('image-1');
-    expect(await zip.file('0003.jpg')!.async('string')).toBe('image-9');
+    expect(Object.keys(zip.files)).toEqual([filename(data[1].capturedAt), filename(data[2].capturedAt), filename(data[0].capturedAt)]);
+    expect(await zip.file(filename(data[1].capturedAt))!.async('string')).toBe('image-1');
+    expect(await zip.file(filename(data[0].capturedAt))!.async('string')).toBe('image-9');
     expect(progress.at(-1)).toBe(100);
   });
-  it('numbers the newest photos first in a newest-first ZIP', async () => {
+  it('keeps timestamp names when exporting the newest photos first', async () => {
     const scans = [scan('test', 4), scan('test', 1), scan('test', 9)];
     const blob = await createZip(scans, () => {}, true);
     const zip = await JSZip.loadAsync(await blob.arrayBuffer());
-    expect(Object.keys(zip.files)).toEqual(['0001.jpg', '0002.jpg', '0003.jpg']);
+    expect(Object.keys(zip.files)).toEqual([filename(scans[2].capturedAt), filename(scans[0].capturedAt), filename(scans[1].capturedAt)]);
     expect(await Promise.all(Object.values(zip.files).map(file => file.async('string'))))
       .toEqual(['image-9', 'image-4', 'image-1']);
+  });
+  it('keeps every photo when timestamps collide and keeps names stable when order is reversed', async () => {
+    const photos = [scan('test', 0), scan('test', 1), scan('test', 2)];
+    photos[1].capturedAt = photos[0].capturedAt;
+    const forward = await createZip(photos, () => {});
+    const reversed = await createZip(photos, () => {}, true);
+    const forwardZip = await JSZip.loadAsync(await forward.arrayBuffer());
+    const reverseZip = await JSZip.loadAsync(await reversed.arrayBuffer());
+    const names = Object.keys(forwardZip.files);
+    expect(names).toEqual(photos.map((_, index) => filename(photos[0].capturedAt + index)));
+    expect(Object.keys(reverseZip.files)).toEqual([...names].reverse());
+    expect(await Promise.all(Object.values(forwardZip.files).map(file => file.async('string')))).toEqual(['image-0', 'image-1', 'image-2']);
   });
   it('creates increasing batch archive numbers and resets image numbering', async () => {
     const a = await storage.create(10), b = await storage.create(10);

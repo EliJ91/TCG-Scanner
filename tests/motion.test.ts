@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { CardPresenceDetector } from '../src/core/card-presence';
 import { MotionDetector, toLuma } from '../src/core/motion';
-import { emptyFrame, obstructedFrame, printedCard, shadowedSurface } from './card-frame';
+import { emptyFrame, noisySurface, obstructedFrame, printedCard, shadowedSurface } from './card-frame';
 
 const presence = new CardPresenceDetector();
 function sample(d: MotionDetector, frame: Uint8Array, now: number) {
@@ -9,6 +9,11 @@ function sample(d: MotionDetector, frame: Uint8Array, now: number) {
 }
 
 describe('card-gated motion', () => {
+  it.each([1, 8, 144])('does not identify noise on an empty surface as a card (seed %s)', seed => {
+    const frame = noisySurface(seed);
+    expect(presence.detect(frame)).not.toBe('card');
+    expect(presence.detect(frame.slice().reverse())).not.toBe('card');
+  });
   it.each([false, true])('detects a one-level pixel change at zero tolerance and still permits stillness (stacking %s)', stacking => {
     const detector = new MotionDetector(100, 0);
     detector.setStackCards(stacking);

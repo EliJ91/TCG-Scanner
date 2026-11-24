@@ -37,7 +37,7 @@ export function FeedbackForm({ endpoint, close }: { endpoint: string; close: () 
 
   return <form onSubmit={submit}>
     <div className="confirm-content">
-      <p className="dialog-intro">All messages are completely anonymous and help development.</p>
+      <p className="dialog-intro">All messages are completely anonymous and help development. Request features, report bugs, send thanks, or share other feedback.</p>
       <label className="select-setting feedback-subject">Subject (optional)
         <input name="subject" maxLength={feedbackSubjectLimit} disabled={sending} />
       </label>
