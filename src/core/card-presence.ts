@@ -15,6 +15,8 @@ export class CardPresenceDetector {
   private means = new Float32Array(columns * rows);
   private details = new Float32Array(columns * rows);
 
+  get brightnessPattern() { return this.means; }
+
   detect(gray: Uint8Array): CardPresence {
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < columns; col++) {

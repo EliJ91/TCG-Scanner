@@ -47,6 +47,8 @@ async function click(label: string) { await act(async () => button(label).click(
 async function startAutoPreview(stabilityMs: number, initial: Uint8Array, flipInterface = false, options: {
   settings?: Partial<Settings>;
   warmup?: boolean;
+  cameraIdleMs?: number;
+  videoFrames?: boolean;
 } = {}) {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
   let frame!: FrameRequestCallback;
@@ -61,12 +63,18 @@ async function startAutoPreview(stabilityMs: number, initial: Uint8Array, flipIn
       }
     }
   }
-  scene(initial);
+  const startingFrame = options.warmup === false ? initial : emptyFrame();
+  scene(startingFrame);
   vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue({ drawImage: vi.fn(), getImageData: () => ({ data: pixels }) } as unknown as CanvasRenderingContext2D);
   localStorage.setItem('cardslinger-settings', JSON.stringify({ ...defaults, stabilityMs, flipInterface, ...options.settings }));
   await renderApp();
   const video = container.querySelector('video')!;
   Object.defineProperties(video, { videoWidth: { value: 1280 }, videoHeight: { value: 720 }, readyState: { value: 4 } });
+  if (options.videoFrames) {
+    video.requestVideoFrameCallback = vi.fn(callback => { frame = now => callback(now, {} as VideoFrameCallbackMetadata); return 1; });
+    video.cancelVideoFrameCallback = vi.fn();
+  }
+  if (options.cameraIdleMs) await act(async () => vi.advanceTimersByTimeAsync(options.cameraIdleMs!));
   await click('Start scanning');
   const tick = (ms = 0, values?: Uint8Array) => act(async () => {
     await vi.advanceTimersByTimeAsync(ms);
@@ -75,10 +83,11 @@ async function startAutoPreview(stabilityMs: number, initial: Uint8Array, flipIn
   });
   // Other scenarios start after the camera's initial exposure-settling window.
   if (options.warmup !== false) {
-    await tick(0, initial);
-    await tick(33, initial);
-    await tick(33, initial);
+    await tick(0, startingFrame);
+    await tick(33, startingFrame);
+    await tick(33, startingFrame);
     await act(async () => vi.advanceTimersByTimeAsync(184));
+    scene(initial);
     video.currentTime = 0;
   }
   return { tick, scene, video };
@@ -413,6 +422,74 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await tick(100);
     expect(mocks.capture).toHaveBeenCalledOnce();
     expect(mocks.start).toHaveBeenCalledOnce();
+  });
+  it.each([
+    { flipped: false, videoFrames: false }, { flipped: true, videoFrames: false },
+    { flipped: false, videoFrames: true }, { flipped: true, videoFrames: true },
+  ])('does not scan the unchanged starting background even when it looks like a card ($flipped, video frames $videoFrames)', async ({ flipped, videoFrames }) => {
+    // A printed playmat can satisfy the appearance heuristic without a card.
+    const background = printedCard(0, 180);
+    expect(new CardPresenceDetector().detect(background)).toBe('card');
+    const { tick } = await startAutoPreview(10, background, flipped, {
+      settings: { stackCards: true, sensitivity: 1 }, warmup: false, cameraIdleMs: 5000, videoFrames,
+    });
+    for (let i = 0; i < 16; i++) await tick(50, background);
+    expect(mocks.capture).not.toHaveBeenCalled();
+    expect(mocks.success).not.toHaveBeenCalled();
+    expect(container.querySelector('.auto-countdown:not([hidden])')).toBeNull();
+    await tick(33, obstructedFrame());
+    await tick(33, background);
+    await tick(33, background);
+    await tick(100, background);
+    expect(mocks.capture).not.toHaveBeenCalled();
+    const placed = printedCard(1, 180, 241, { left: 30, top: 12, right: 125, bottom: 108 });
+    await tick(33, placed);
+    await tick(33, placed);
+    await tick(10);
+    expect(mocks.capture).toHaveBeenCalledOnce();
+    expect(mocks.success).toHaveBeenCalledOnce();
+  });
+  it('keeps a placement made during the Start warm-up when the preview is already settled', async () => {
+    const card = printedCard();
+    const { tick } = await startAutoPreview(10, emptyFrame(), false, { warmup: false, cameraIdleMs: 5000 });
+    await tick(0, emptyFrame());
+    await tick(50, card);
+    await tick(33, card);
+    await tick(10);
+    expect(mocks.capture).not.toHaveBeenCalled();
+    await tick(160, card);
+    await tick(33, card);
+    await tick(10);
+    expect(mocks.capture).toHaveBeenCalledOnce();
+  });
+  it('allows a card already visible before Start to be lifted and replaced in the same position', async () => {
+    const card = printedCard();
+    const { tick } = await startAutoPreview(10, card, false, { warmup: false, cameraIdleMs: 5000 });
+    for (let i = 0; i < 8; i++) await tick(50, card);
+    expect(mocks.capture).not.toHaveBeenCalled();
+    await tick(33, emptyFrame());
+    await tick(33, emptyFrame());
+    await tick(33, card);
+    await tick(33, card);
+    await tick(10);
+    expect(mocks.capture).toHaveBeenCalledOnce();
+  });
+  it('keeps removal and replacement scanning working when switching from Manual to Auto', async () => {
+    const card = printedCard();
+    const { tick } = await startAutoPreview(100, card);
+    await click('Manual');
+    await click('Take photo');
+    expect(mocks.capture).toHaveBeenCalledOnce();
+    await click('Auto');
+    await tick(33, card);
+    await tick(150, card);
+    expect(mocks.capture).toHaveBeenCalledOnce();
+    await tick(33, emptyFrame());
+    await tick(33, emptyFrame());
+    await tick(33, card);
+    await tick(33, card);
+    await tick(100);
+    expect(mocks.capture).toHaveBeenCalledTimes(2);
   });
   it.each([false, true])('ignores card-like startup frames and a noisy empty surface before capturing a real card (stacking and flip %s)', async stacking => {
     const initial = printedCard();

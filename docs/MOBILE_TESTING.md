@@ -6,6 +6,8 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 
 - [ ] Open a trusted HTTPS root URL. First load and cache the complete production build online.
 - [ ] Open the app: confirm that the native camera request/preview opens automatically before scanning. If the browser requires a gesture, tap Enable camera. Verify no photos are taken before Start scanning or Take photo.
+- [ ] Leave the preview open for at least five seconds over an empty surface, then tap Start scanning. Leave it untouched for five more seconds: no photo, ding, or green countdown should appear. Repeat with a printed playmat, small lighting changes, Flip Interface, and the highest movement tolerance. Place a card afterward and confirm the green bar and capture work normally.
+- [ ] Start Auto with a card already visible. Confirm it waits, then lift the card, briefly show the empty surface, and replace it in the same position. Confirm one photo is taken. Repeat after a new batch, switching camera, and changing from Manual to Auto; verify no duplicate of the last manual photo.
 - [ ] Deny camera permission; confirm an actionable message. Allow Camera in browser site settings, tap Enable camera again, and verify rear camera selection.
 - [ ] Open inside an embedded/in-app browser that blocks camera access. Verify an actionable message and the direct Safari/Chrome link. Repeat in the full mobile browser.
 - [ ] With storage loading slowly or unavailable, Enable camera must still request permission and show the preview. Capturing remains disabled until persistent storage is ready.

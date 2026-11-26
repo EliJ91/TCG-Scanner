@@ -6,6 +6,7 @@ import { CameraAccessError } from './core/camera-access';
 import { CardPresenceDetector, previewHeight, previewWidth } from './core/card-presence';
 import { MotionDetector, toLuma, type MotionReading } from './core/motion';
 import { FocusDetector } from './core/focus';
+import { FirstPlacementGuard } from './core/first-placement';
 import { ScannerAudio } from './core/audio';
 import { storage } from './core/storage';
 import { zoomRect } from './core/zoom';
@@ -66,6 +67,7 @@ export function useScanner() {
     return () => clearTimeout(timer);
   }, [alert]);
   const detector = useRef(new MotionDetector());
+  const initialPlacement = useRef(new FirstPlacementGuard());
   const captureBusy = useRef(false);
   const announcedBatch = useRef<string | undefined>(undefined); const wakeLock = useRef<{ release(): Promise<void> } | undefined>(undefined);
   const mounted = useRef(true);
@@ -74,7 +76,10 @@ export function useScanner() {
   const canUseCamera = () => mounted.current && !pageExited.current && !windowBlurred.current && !document.hidden && document.hasFocus();
   const changeSession = (value: Session) => { sessionRef.current = value; if (mounted.current) setSession(value); };
   const changeCameraPhase = (value: 'off' | 'requesting' | 'ready') => {
-    if (value === 'ready') cameraReadyAt.current = performance.now();
+    if (value === 'ready') {
+      cameraReadyAt.current = performance.now();
+      if (initialPlacement.current.waiting) initialPlacement.current.reset();
+    }
     cameraPhaseRef.current = value;
     if (mounted.current) setCameraPhase(value);
   };
@@ -192,6 +197,7 @@ export function useScanner() {
         setCurrentBatchName(b.name, b.number);
         updateAttempts(data.attempts);
         resetMotion(data.scans.length > 0 || data.attempts.length > 0);
+        if (data.scans.length > 0 || data.attempts.length > 0) initialPlacement.current.complete();
         announcedBatch.current = data.scans.length >= b.target ? b.id : undefined;
         changeSession(data.scans.length >= b.target ? 'complete' : 'paused');
         makeController(b, data.scans.length);
@@ -280,6 +286,7 @@ export function useScanner() {
       captureBusy.current = false;
       if (mounted.current) setCapturing(false);
     }
+    initialPlacement.current.complete();
     detector.current.consume();
     setReading(detector.current.advance(performance.now()));
     if (!automatic) setCountdown(null);
@@ -317,9 +324,13 @@ export function useScanner() {
     const focus = new FocusDetector();
     let focusFrameTime = -1, focusZoom = settingsRef.current.zoom;
     const card = new CardPresenceDetector();
+    const placement = initialPlacement.current;
+    let placementWasCard = false;
+    let placementZoom = settingsRef.current.zoom, placementFlipped = settingsRef.current.flipInterface, placementTorch = settingsRef.current.torch;
     const useVideoFrames = typeof video.requestVideoFrameCallback === 'function';
     let frame = 0, lastFrameAt = performance.now(), lastVideoTime = -1, lastUI = 0;
-    const startupUntil = cameraReadyAt.current + 250;
+    const startupUntil = settingsRef.current.captureMode === 'auto'
+      ? Math.max(cameraReadyAt.current, placement.start(performance.now())) + 250 : 0;
     let startupFrames = performance.now() >= startupUntil ? 3 : 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let scheduledDeadline: number | null = null;
@@ -337,7 +348,7 @@ export function useScanner() {
       }
     }
 
-    const sampleMotion = (zoom: number, flipped: boolean, now: number, freshFrame: boolean) => {
+    const sampleMotion = (zoom: number, flipped: boolean, now: number, freshFrame: boolean, calibrating = false) => {
       const crop = zoomRect(video.videoWidth, video.videoHeight, zoom);
       ctx.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, canvas.width, canvas.height);
       toLuma(ctx.getImageData(0, 0, canvas.width, canvas.height).data, focusGray, flipped);
@@ -347,7 +358,13 @@ export function useScanner() {
           gray[y * previewWidth + x] = (focusGray[index] + focusGray[index + 1] + focusGray[index + canvas.width] + focusGray[index + canvas.width + 1]) / 4;
         }
       }
-      const presence = card.detect(gray);
+      const appearance = card.detect(gray);
+      const torch = settingsRef.current.torch;
+      const framingChanged = zoom !== placementZoom || flipped !== placementFlipped || torch !== placementTorch;
+      const placed = placement.changed(card.brightnessPattern, calibrating || (framingChanged && !placementWasCard), freshFrame && appearance === 'empty');
+      placementWasCard = placed && appearance === 'card';
+      placementZoom = zoom; placementFlipped = flipped; placementTorch = torch;
+      const presence = placed ? appearance : 'uncertain';
       if (presence !== 'card' || zoom !== focusZoom) focus.reset();
       focusZoom = zoom;
       const focused = presence === 'card'
@@ -355,6 +372,7 @@ export function useScanner() {
       focusFrameTime = video.currentTime;
       const next = detector.current.update(gray, now, presence, focused);
       if (next.awaitingNextCard) focus.reset();
+      next.awaitingPlacement = placement.waiting && !placed;
       return next;
     };
 
@@ -379,9 +397,13 @@ export function useScanner() {
       }
       if (freshFrame) startupFrames++;
       if (now < startupUntil || startupFrames < 3) {
+        // Learn the current background on real frames before arming the first
+        // placement, even when the preview was opened long before Start.
+        const next = sampleMotion(zoom, flipInterface, now, freshFrame, now < cameraReadyAt.current + 250);
         resetMotion();
         focus.reset();
         schedule(null);
+        setReading(next);
         return;
       }
       // Check the current pixels at the deadline too, in case movement just resumed.
@@ -428,7 +450,7 @@ export function useScanner() {
       clearInterval(watchdog);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, cameraPhase]);
+  }, [session, cameraPhase, settings.captureMode]);
 
   const enableCamera = (deviceId?: string): Promise<void> => {
     if (!canUseCamera()) return Promise.reject(new CameraAccessError('cancelled', 'Camera startup interrupted.'));
@@ -640,7 +662,7 @@ export function useScanner() {
     batchRef.current = undefined; setBatch(undefined); setScans([]); updateAttempts([]); setRetained([]);
     controller.current?.dispose(); controller.current = undefined; storageIssueRef.current = ''; setStorageIssue('');
     nextBatchNumber.current = nextNumber; setCurrentBatchName(nextName, nextNumber);
-    resetMotion(false); setReading(undefined);
+    resetMotion(false); initialPlacement.current.reset(); setReading(undefined);
     announcedBatch.current = undefined; changeSession('idle'); setError(''); setNotice('Ready for a new batch.');
   };
   const switchCamera = async (id: string) => {

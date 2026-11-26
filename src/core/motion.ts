@@ -5,6 +5,7 @@ export type MotionState = 'waiting' | 'moving' | 'focusing' | 'stabilizing' | 'r
 export interface MotionReading {
   score: number; noise: number; stability: number; state: MotionState;
   awaitingNextCard: boolean; cycle: number;
+  awaitingPlacement?: boolean;
 }
 
 /** One quiet interval per placement, with optional motion-based rearming for stacks. */

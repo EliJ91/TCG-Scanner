@@ -401,6 +401,7 @@ export default function App() {
     if (!autoMode) scannerStatus = 'Manual · tap to take a photo';
     else if (showCountdown && !snapped) scannerStatus = 'Hold still';
     else if (s.reading?.awaitingNextCard) scannerStatus = s.settings.stackCards ? 'Place the next card on top' : 'Remove the card';
+    else if (s.reading?.awaitingPlacement) scannerStatus = 'Place or move a card';
     else if (s.reading?.state === 'focusing') scannerStatus = 'Focusing';
     else if (s.reading?.state === 'moving') scannerStatus = 'Card moving';
     else scannerStatus = 'Place a card';
@@ -622,7 +623,7 @@ export default function App() {
         </div>
         <div className="guide-step">
           <h3>Take photos in Auto or Manual</h3>
-          <p>In <strong>Auto</strong>, place a card and tap <strong>Start scanning</strong>. Keep the card still while <strong>Focusing</strong> is shown. The green bar fills once the view is sharp and still. The app takes a photo when the bar is full.</p>
+          <p>In <strong>Auto</strong>, tap <strong>Start scanning</strong>, then place a card. If a card is already in view, lift and replace it or move it slightly. Keep it still while <strong>Focusing</strong> is shown. The green bar fills once the view is sharp and still, then the app takes a photo. After resuming, place or move the next card.</p>
           <p>Lift each card and briefly show the empty surface before placing the next. To stack cards, turn on <strong>Using Card Slinger</strong> in Settings and place each new card on top.</p>
           <p>In <strong>Manual</strong>, tap <strong>Take photo</strong> for each card.</p>
         </div>
