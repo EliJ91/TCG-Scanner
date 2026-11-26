@@ -22,7 +22,11 @@ export function FeedbackForm({ endpoint, close }: { endpoint: string; close: () 
         body: JSON.stringify({ subject: String(form.get('subject') ?? '').trim(), message }),
         signal: AbortSignal.timeout(15000),
       });
-      if (response.status === 429) { setError('Too many messages. Try again in a minute.'); return; }
+      if (response.status === 429) {
+        const result = await response.json().catch(() => null) as { error?: unknown } | null;
+        setError(typeof result?.error === 'string' ? result.error : 'Too many messages. Please try again later.');
+        return;
+      }
       if (response.status !== 201) throw new Error('Submission failed');
       setSent(true);
     } catch {

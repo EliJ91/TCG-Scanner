@@ -20,11 +20,12 @@ function setup() {
       delete: async key => { messages.delete(key); },
     },
     SUBMISSION_LIMIT: { limit: vi.fn(async () => ({ success: true })) },
+    FEEDBACK_LIMIT: { getByName: vi.fn(() => ({ fetch: vi.fn(async () => new Response(null, { status: 204 })) })) },
   };
   const request = (path: string, options?: RequestInit) => worker.fetch(new Request(workerOrigin + path, options), env);
   const post = (message: string, fields: { subject?: unknown; category?: string } = {}, from = origin) => request('/feedback', {
     method: 'POST',
-    headers: { Origin: from, 'Content-Type': 'application/json' },
+    headers: { Origin: from, 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.7' },
     body: JSON.stringify({ ...fields, message }),
   });
   async function signIn(id: number, expectedState = true) {
@@ -81,6 +82,33 @@ it('waits for the inbox to be configured before accepting feedback', async () =>
   expect((await post('Thank you!')).status).toBe(503);
   expect((await request('/inbox')).status).toBe(503);
   expect(messages.size).toBe(0);
+});
+
+it('blocks feedback when the shared budget is full or unavailable and never writes an unreserved message', async () => {
+  const { messages, env, post } = setup();
+  const fetch = vi.fn(async (_request: Request) => Response.json({ error: 'Daily feedback limit reached.' }, { status: 429, headers: { 'Retry-After': '3600' } }));
+  vi.mocked(env.FEEDBACK_LIMIT.getByName).mockReturnValue({ fetch });
+  const full = await post('hello');
+  expect(full.status).toBe(429);
+  expect(full.headers.get('Retry-After')).toBe('3600');
+  expect(full.headers.get('Access-Control-Allow-Origin')).toBe(origin);
+  expect(await full.json()).toEqual({ error: 'Daily feedback limit reached.' });
+  expect(env.FEEDBACK_LIMIT.getByName).toHaveBeenCalledWith('global');
+  const body = await (fetch.mock.calls[0][0] as Request).json();
+  expect(body.client).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  expect(JSON.stringify(body)).not.toContain('203.0.113.7');
+  fetch.mockResolvedValueOnce(new Response(null, { status: 503 }));
+  expect((await post('hello again')).status).toBe(503);
+  fetch.mockRejectedValueOnce(new Error('Counter unavailable'));
+  expect((await post('one more attempt')).status).toBe(503);
+  expect(messages.size).toBe(0);
+});
+
+it('does not contact the shared counter for invalid submissions or requests without a trusted client address', async () => {
+  const { env, request, post } = setup();
+  expect((await post('   ')).status).toBe(400);
+  expect((await request('/feedback', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'hello' }) })).status).toBe(503);
+  expect(env.FEEDBACK_LIMIT.getByName).not.toHaveBeenCalled();
 });
 
 it('checks the signed OAuth state and denies a GitHub account with the wrong ID', async () => {

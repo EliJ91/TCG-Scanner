@@ -1,5 +1,6 @@
 import { feedbackCategories, feedbackMessageLimit, feedbackSubjectLimit, type FeedbackCategory } from '../src/core/feedback';
 import { inbox, page, type Feedback } from './inbox';
+export { FeedbackLimits } from './limits';
 
 interface Env {
   SCANNER_URL: string;
@@ -16,6 +17,7 @@ interface Env {
     delete(key: string): Promise<void>;
   };
   SUBMISSION_LIMIT: { limit(options: { key: string }): Promise<{ success: boolean }> };
+  FEEDBACK_LIMIT: { getByName(name: string): { fetch(request: Request): Promise<Response> } };
 }
 
 const oauthCookie = '__Host-feedback_oauth';
@@ -174,10 +176,27 @@ async function submit(request: Request, env: Env) {
   if (request.method !== 'POST') return reply(405);
   if (!signInConfigured(env)) return reply(503);
   if (request.headers.get('Content-Type')?.split(';')[0].trim() !== 'application/json') return reply(415);
-  const { success } = await env.SUBMISSION_LIMIT.limit({ key: request.headers.get('CF-Connecting-IP') ?? 'unknown' });
-  if (!success) return reply(429);
+  const ip = request.headers.get('CF-Connecting-IP');
+  if (!ip) return reply(503);
+  const { success } = await env.SUBMISSION_LIMIT.limit({ key: ip });
+  if (!success) {
+    headers.set('Content-Type', 'application/json');
+    headers.set('Retry-After', '60');
+    return new Response(JSON.stringify({ error: 'Please wait a minute between messages.' }), { status: 429, headers });
+  }
   const submission = await readSubmission(request);
   if (!submission) return reply(400);
+  const client = encode(new Uint8Array(await crypto.subtle.sign('HMAC', await signingKey(env.SESSION_SECRET), encoder.encode('feedback-rate-limit\n' + ip))));
+  const reservation = await env.FEEDBACK_LIMIT.getByName('global').fetch(new Request('https://feedback-limit/reserve', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client }),
+  }));
+  if (reservation.status === 429) {
+    headers.set('Content-Type', 'application/json');
+    headers.set('Retry-After', reservation.headers.get('Retry-After') ?? '60');
+    return new Response(reservation.body, { status: 429, headers });
+  }
+  // An unavailable counter must never allow an unmetered KV write.
+  if (reservation.status !== 204) return reply(503);
   const now = Date.now();
   const id = `${String(9_999_999_999_999 - now).padStart(13, '0')}-${crypto.randomUUID()}`;
   const feedback: Feedback = { ...submission, id, createdAt: new Date(now).toISOString() };

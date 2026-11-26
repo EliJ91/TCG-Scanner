@@ -148,6 +148,8 @@ The feedback Worker stores each anonymous message as a separate JSON entry in Cl
 
 KV changes can take about a minute to appear across locations. [Workers KV consistency](https://developers.cloudflare.com/kv/concepts/how-kv-works/)
 
+Feedback is limited to **100 submissions per UTC day overall**, **3 per internet connection per UTC day**, and at least **one minute between messages**. A single SQLite-backed Durable Object reserves each submission atomically before the KV write, including concurrent requests from different locations. Failed writes retain their reservation. When the counter is unavailable, new submissions stop instead of bypassing the limit. The counter stores keyed address hashes, not raw IP addresses, and replaces its daily records on the next UTC day. Existing feedback and owner access are preserved. These limits leave headroom under KV's 1,000 free writes per day; other apps share account quotas, and large request floods can still reach free Worker request limits. SQLite-backed Durable Objects are available on Workers Free, where exhausted quotas fail rather than enabling paid overages. No paid plan is required or enabled. [Durable Objects free quotas](https://developers.cloudflare.com/durable-objects/platform/pricing/)
+
 ## Validation and limitations
 
 `npm test` covers capture, motion, camera controls, storage recovery, batch limits, and ZIP export.

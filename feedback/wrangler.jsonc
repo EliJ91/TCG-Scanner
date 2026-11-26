@@ -11,7 +11,13 @@
   "kv_namespaces": [
     { "binding": "FEEDBACK" }
   ],
+  "durable_objects": {
+    "bindings": [{ "name": "FEEDBACK_LIMIT", "class_name": "FeedbackLimits" }]
+  },
+  "migrations": [
+    { "tag": "feedback-limits-v1", "new_sqlite_classes": ["FeedbackLimits"] }
+  ],
   "ratelimits": [
-    { "name": "SUBMISSION_LIMIT", "namespace_id": "59631669", "simple": { "limit": 5, "period": 60 } }
+    { "name": "SUBMISSION_LIMIT", "namespace_id": "59631669", "simple": { "limit": 1, "period": 60 } }
   ]
 }
