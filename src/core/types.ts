@@ -1,4 +1,5 @@
-export interface Settings {
+import { imageAdjustmentDefaults, type ImageAdjustments } from './image-adjustments';
+export interface Settings extends ImageAdjustments {
   captureVersion: number; cameraId: string; torch: boolean;
   captureMode: 'auto' | 'manual'; stackCards: boolean; zoom: number;
   autoZoom: boolean; autoZoomInterval: number; autoZoomOutPercent: number;
@@ -9,6 +10,7 @@ export interface Settings {
 export const motionSensitivityRange = { min: 0.99, max: 1, step: 0.0001 } as const;
 
 export const defaults: Settings = {
+  ...imageAdjustmentDefaults,
   captureVersion: 3, cameraId: '', torch: false,
   captureMode: 'auto', stackCards: false, zoom: 1, stabilityMs: 100, sensitivity: motionSensitivityRange.min, quality: 1,
   autoZoom: false, autoZoomInterval: 10, autoZoomOutPercent: 20,

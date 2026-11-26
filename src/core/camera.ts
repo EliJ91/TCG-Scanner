@@ -1,6 +1,8 @@
 import { CameraAccessError, cameraErrorName, requestCameraStream } from './camera-access';
 import { zoomRect } from './zoom';
 import type { Snapshot } from './types';
+import { neutralAdjustments, normalizeImageAdjustments, type ImageAdjustments } from './image-adjustments';
+import { encodeAdjustedFrame } from './adjusted-capture';
 
 export interface CameraCapabilities {
   torch?: boolean; zoom?: { min: number; max: number; step: number };
@@ -95,7 +97,8 @@ export class Camera {
     return { ready, check: () => check(), cleanup: () => cleanup() };
   }
   /** Canvas draw is synchronous: copies the exact stabilized frame before async encoding. */
-  async capture(useImageCapture = false, quality = 1, frameCopied?: () => void, flipped = false): Promise<Snapshot> {
+  async capture(useImageCapture = false, quality = 1, frameCopied?: () => void, flipped = false, imageSettings?: ImageAdjustments): Promise<Snapshot> {
+    const imageAdjustments = normalizeImageAdjustments(imageSettings);
     if (!this.stream?.active || this.video.readyState < 2) throw new Error('Camera is not delivering frames. Waiting for reconnection.');
     let bitmap: ImageBitmap | undefined;
     if (useImageCapture && this.grabber) { try { bitmap = await this.grabber.grabFrame(); } catch { /* Compatible fallback below. */ } }
@@ -110,6 +113,13 @@ export class Camera {
     } finally {
       if (flipped) ctx.resetTransform();
       bitmap?.close();
+    }
+    if (!neutralAdjustments(imageAdjustments)) {
+      // Snapshot the final raw zoom crop before another shutter can reuse the
+      // canvas. Color processing and JPEG encoding run off the capture path.
+      const encoding = encodeAdjustedFrame(createImageBitmap(this.canvas), imageAdjustments, quality);
+      frameCopied?.();
+      return { blob: await encoding, width: crop.width, height: crop.height };
     }
     // toBlob copies the canvas before encoding, so the next shutter can reuse it.
     const encoding = new Promise<Blob>((resolve, reject) => {

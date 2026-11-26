@@ -434,7 +434,8 @@ describe('manual capture, continuous errors, and batch naming', () => {
   });
   it('starts a 10 ms countdown on confirmed stillness and cancels it when a fresh frame shows movement', async () => {
     const moved = printedCard(1, 0, 7);
-    const { tick, scene, video } = await startAutoPreview(10, printedCard(), true);
+    const imageAdjustments = { brightness: 50, contrast: 150, saturation: 150, gamma: 2 };
+    const { tick, scene, video } = await startAutoPreview(10, printedCard(), true, { settings: imageAdjustments });
     await tick();
     expect(container.querySelector('.auto-countdown:not([hidden])')).toBeNull();
     await tick(33, printedCard());
@@ -449,7 +450,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await tick(23, moved);
     await tick(10);
     expect(mocks.capture).toHaveBeenCalledTimes(1);
-    expect(mocks.capture).toHaveBeenCalledWith(false, 1, expect.any(Function), true);
+    expect(mocks.capture).toHaveBeenCalledWith(false, 1, expect.any(Function), true, imageAdjustments);
     expect(container.querySelector('.auto-countdown.is-snapped')).not.toBeNull();
   });
   it('cancels the Auto shutter when sharpness drops and waits for focus to settle again', async () => {
@@ -1014,7 +1015,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
   it('uses the flipped orientation for an alternate manual photo', async () => {
     localStorage.setItem('cardslinger-settings', JSON.stringify({ ...defaults, flipInterface: true, useImageCapture: true }));
     await renderApp(); await click('Manual'); await click('Take photo');
-    expect(mocks.capture).toHaveBeenCalledWith(true, 1, expect.any(Function), true);
+    expect(mocks.capture).toHaveBeenCalledWith(true, 1, expect.any(Function), true, {brightness:100,contrast:100,saturation:100,gamma:1});
     expect(mocks.accept).toHaveBeenCalledOnce();
   });
   it('zooms out at the selected photo interval while saves are still queued', async () => {

@@ -267,6 +267,7 @@ export function useScanner() {
     const currentBatch = batchRef.current;
     if (!currentBatch || !c?.hasCapacity || editingBatch.current || captureBusy.current || cameraPhaseRef.current !== 'ready' || storageIssueRef.current || !canUseCamera()) return;
     const { useImageCapture, quality, flipInterface } = settingsRef.current;
+    const imageAdjustments = { brightness: settingsRef.current.brightness, contrast: settingsRef.current.contrast, saturation: settingsRef.current.saturation, gamma: settingsRef.current.gamma };
     const alternateCapture = !automatic && useImageCapture;
     if (alternateCapture) {
       captureBusy.current = true;
@@ -298,7 +299,7 @@ export function useScanner() {
           audio.current?.queueFull();
         }
         else audio.current?.success();
-      }, flipInterface));
+      }, flipInterface, imageAdjustments));
     }
     catch (err) { setError(`Photo could not be taken: ${message(err)}. Try again.`); }
     finally { finishWaitingForFrame(); }

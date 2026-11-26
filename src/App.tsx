@@ -2,6 +2,8 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Poin
 import { ArrowDownToLine, ArrowDownUp, ArrowLeft, ArrowRight, Camera, Check, CheckCheck, ChevronRight, CircleHelp, Coffee, Focus, Images, Layers3, LoaderCircle, Menu, MessageSquare, Minus, Pause, Pencil, Play, Plus, RotateCw, ScanLine, Settings2, ShieldCheck, Square, Trash2, TriangleAlert, Volume2, X, Zap } from 'lucide-react';
 import { FeedbackForm } from './FeedbackForm';
 import { useScanner, type ScannerAlert } from './useScanner';
+import { ImageAdjustments } from './ImageAdjustments';
+import { useImageAdjustmentFilter } from './ImageAdjustmentFilter';
 import { useTheme } from './useTheme';
 import { BlobImage, PhotoViewer, useReviewPhoto } from './PhotoViewer';
 import { createZip, downloadArchive, rotateScan } from './core/export';
@@ -33,11 +35,11 @@ function ScannerAlertBanner({ alert }: { alert: ScannerAlert }) {
   </div>;
 }
 
-function Dialog({ title, children, close, wide = false }: { title: string; children: ReactNode; close: () => void; wide?: boolean }) {
+function Dialog({ title, children, close, wide = false, className = '' }: { title: string; children: ReactNode; close: () => void; wide?: boolean; className?: string }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   useEffect(() => { const dialog = ref.current; dialog?.showModal(); return () => dialog?.close(); }, []);
-  return <dialog ref={ref} aria-labelledby={titleId} className={wide ? 'dialog wide' : 'dialog'} onCancel={event => { event.preventDefault(); close(); }} onClick={e => { if (e.target === e.currentTarget) close(); }}>
+  return <dialog ref={ref} aria-labelledby={titleId} className={`${wide ? 'dialog wide' : 'dialog'} ${className}`} onCancel={event => { event.preventDefault(); close(); }} onClick={e => { if (e.target === e.currentTarget) close(); }}>
     <div className="dialog-heading"><h2 id={titleId}>{title}</h2><button className="icon-button" onClick={close} aria-label="Close dialog"><X size={20} /></button></div>
     {children}
   </dialog>;
@@ -130,6 +132,7 @@ function BatchExport({ batch, scans, newestFirst, saving, disabled, rename, clos
 export default function App() {
   const s = useScanner();
   const theme = useTheme();
+  const imageFilter = useImageAdjustmentFilter(s.settings);
   const [showMenu, setShowMenu] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [showBatch, setShowBatch] = useState(false);
@@ -140,6 +143,7 @@ export default function App() {
   const galleryHold = useRef<{ pointerId: number; x: number; y: number; timer: ReturnType<typeof setTimeout> } | undefined>(undefined);
   const heldPhoto = useRef<string | undefined>(undefined);
   const [showSettings, setShowSettings] = useState(false);
+  const [showImageAdjustments, setShowImageAdjustments] = useState(false);
   const [zoomIntervalDraft, setZoomIntervalDraft] = useState<string>();
   const [showHelp, setShowHelp] = useState(false); const [selected, setSelected] = useState<string>();
   const [clearPrompt, setClearPrompt] = useState<'manual' | DownloadResult>();
@@ -409,6 +413,7 @@ export default function App() {
     void s.renameBatch(nameDraft).then(() => setShowName(false)).catch(err => { setNameError(message(err)); s.setError(message(err)); }).finally(() => setWorking(false));
   };
   return <div className={s.settings.flipInterface ? 'interface-flipped' : undefined}>
+    {imageFilter.definitions}
     <main className="scanner-screen" aria-label="Card scanner">
       <section className="scanner" aria-label="Scanner">
         <div className="scanner-toolbar">
@@ -432,7 +437,7 @@ export default function App() {
           <div className="camera-feed" style={{ width: `${Math.min(1, ratio / .75) * 100}%`, height: `${Math.min(1, .75 / ratio) * 100}%` }}
             onPointerDown={beginZoom} onPointerMove={moveZoom} onPointerUp={finishZoom}
             onPointerCancel={finishZoom} onLostPointerCapture={finishZoom}>
-            <video ref={s.videoRef} style={{ transform: `scale(${s.settings.zoom})${s.settings.flipInterface ? ' rotate(180deg)' : ''}` }} playsInline muted autoPlay aria-label="Live camera preview" />
+            <video ref={s.videoRef} style={{ filter: imageFilter.filter, transform: `scale(${s.settings.zoom})${s.settings.flipInterface ? ' rotate(180deg)' : ''}` }} playsInline muted autoPlay aria-label="Live camera preview" />
           </div>
           {!s.cameraSize.width && <div className="camera-placeholder"><ScanLine size={35} strokeWidth={1.25} /><p>{s.cameraPhase === 'requesting' ? 'Choose Allow to use your camera' : 'Enable your camera to begin'}</p></div>}
         </div>
@@ -567,6 +572,7 @@ export default function App() {
         <div className="sound-previews" role="group" aria-label="Preview sounds"><button className="button outline" onClick={() => void s.testSound()}><Volume2 size={16} />Photo sound</button><button className="button outline" onClick={() => void s.testErrorSound()}><Volume2 size={16} />Error sound</button></div>
       </>}
       <details className="advanced-settings"><summary><span>Advanced settings<small>Camera, photo quality, and motion controls</small></span><ChevronRight size={18} /></summary><div>
+        <button type="button" className="button outline image-adjustment-trigger" disabled={!s.loaded} onClick={() => { if (busy) s.pause(); setShowImageAdjustments(true); }}>Image Adjustments</button>
         {busy && <div className="settings-pause-note"><p>Pause scanning to change these settings.</p><button className="button outline" onClick={s.pause}><Pause size={16} />Pause scanning</button></div>}
         <h3><Focus size={16} /> Photos</h3>
         <Setting label="Ignore small movements" value={`${movementTolerance} / 100`} hint="Fine-tune Auto movement tolerance from 99% at 0 to 100% at 100. Higher values ignore more movement.">
@@ -600,6 +606,10 @@ export default function App() {
       </div></details>
       <p className="setting-hint settings-reset-hint">Reset settings restores the original settings and keeps your saved photos.</p>
     </div><div className="dialog-footer"><button className="button outline" disabled={!s.loaded || busy || s.capturing || working || s.cameraPhase === 'requesting'} title={busy ? 'Pause scanning to reset settings' : 'Restore defaults and keep your photos'} onClick={() => void safe(async () => { await s.resetSettings(); setZoomIntervalDraft(undefined); theme.setDark(window.matchMedia('(prefers-color-scheme: dark)').matches); })}>Reset settings</button><button className="button dark" onClick={() => setShowSettings(false)}>Done</button></div></Dialog>}
+    {showImageAdjustments && <Dialog title="Image Adjustments" className="image-adjustment-dialog" close={() => setShowImageAdjustments(false)}>
+      <ImageAdjustments values={s.settings} source={s.videoRef.current} cameraReady={s.cameraPhase === 'ready'} requesting={s.cameraPhase === 'requesting'} zoom={s.settings.zoom} flipped={s.settings.flipInterface} loaded={s.loaded} cameraError={s.error}
+        enable={() => void s.connectCamera()} cancel={() => setShowImageAdjustments(false)} save={values => { s.setSettings({ ...s.settings, ...values }); setShowImageAdjustments(false); }} />
+    </Dialog>}
     {showHelp && <Dialog title="Scanning guide" close={() => setShowHelp(false)}>
       <div className="guide-content">
         <div className="guide-step">

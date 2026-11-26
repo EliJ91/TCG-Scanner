@@ -177,6 +177,42 @@ describe('mobile video preview startup', () => {
     await upright;
     camera.stop();
   });
+  it('copies adjusted shots immediately and lets multiple encodes finish after the camera stops', async () => {
+    vi.useFakeTimers();
+    const fixture=streamFixture();getUserMedia.mockResolvedValue(fixture.stream);
+    const drawImage=vi.fn(),toBlob=vi.fn();
+    const canvas={width:0,height:0,getContext:()=>({drawImage}),toBlob};
+    vi.stubGlobal('document',{createElement:()=>canvas});
+    const bitmaps=[{width:640,height:360,close:vi.fn()},{width:640,height:360,close:vi.fn()}];
+    const copy=vi.fn().mockResolvedValueOnce(bitmaps[0]).mockResolvedValueOnce(bitmaps[1]);vi.stubGlobal('createImageBitmap',copy);
+    class Encoder {
+      static current:Encoder;
+      onmessage?: (event:{data:unknown})=>void;
+      onerror?:()=>void;
+      postMessage=vi.fn();terminate=vi.fn();
+      constructor(){Encoder.current=this;}
+    }
+    vi.stubGlobal('Worker',Encoder);vi.stubGlobal('OffscreenCanvas',class {});
+    const preview=new Preview(),camera=new Camera(preview as unknown as HTMLVideoElement,vi.fn());await camera.start(2560);camera.setZoom(2);
+    const copied=vi.fn(),adjustments={brightness:120,contrast:90,saturation:80,gamma:1.2};
+    const first=camera.capture(false,.9,copied,false,adjustments);
+    expect(copied).toHaveBeenCalledOnce();expect(copy).toHaveBeenCalledWith(canvas);
+    adjustments.gamma=2;
+    const second=camera.capture(false,1,copied,false,adjustments);
+    expect(copied).toHaveBeenCalledTimes(2);expect(drawImage).toHaveBeenCalledWith(preview,320,180,640,360,0,0,640,360);
+    await Promise.resolve();await Promise.resolve();
+    const encoder=Encoder.current;
+    expect(encoder.postMessage).toHaveBeenCalledTimes(2);expect(toBlob).not.toHaveBeenCalled();
+    const a=encoder.postMessage.mock.calls[0][0],b=encoder.postMessage.mock.calls[1][0];
+    expect(a.adjustments.gamma).toBe(1.2);expect(b.adjustments.gamma).toBe(2);
+    expect(a.quality).toBe(.9);expect(a.bitmap).toBe(bitmaps[0]);
+    camera.stop();
+    const jpeg=new Blob(['adjusted JPEG']);
+    encoder.onmessage!({data:{id:a.id,blob:jpeg}});encoder.onmessage!({data:{id:b.id,blob:jpeg}});
+    expect(await first).toEqual({blob:jpeg,width:640,height:360});expect(await second).toEqual({blob:jpeg,width:640,height:360});
+    expect(getUserMedia).toHaveBeenCalledOnce();expect(fixture.track.applyConstraints).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(30001);expect(encoder.terminate).toHaveBeenCalledOnce();
+  });
   it('sets Safari inline/muted properties before play and uses actual portrait frame dimensions', async () => {
     const fixture = streamFixture(); getUserMedia.mockResolvedValue(fixture.stream);
     const preview = new Preview(); preview.videoWidth = 720; preview.videoHeight = 1280;

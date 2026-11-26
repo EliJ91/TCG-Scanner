@@ -1,4 +1,5 @@
 import { autoZoomOutLevels, defaults, motionSensitivityRange, photoWaitTimes, validBatchTarget, type Settings } from './types';
+import { normalizeImageAdjustments } from './image-adjustments';
 const key = 'cardslinger-settings';
 const batchNameKey = 'cardslinger-custom-batch-name';
 type SavedSettings = Partial<Settings> & { lockCamera?: boolean; debug?: boolean; focusLocked?: boolean; focusDistance?: number | null; autoAdjustZoom?: boolean };
@@ -6,6 +7,7 @@ type SavedSettings = Partial<Settings> & { lockCamera?: boolean; debug?: boolean
 export function normalizeSettings(saved?: SavedSettings): Settings {
   const { lockCamera: _lockCamera, debug: _debug, focusLocked: _focusLocked, focusDistance: _focusDistance, autoAdjustZoom: _autoAdjustZoom, ...current } = saved ?? {};
   const next = { ...defaults, ...current };
+  Object.assign(next, normalizeImageAdjustments(current));
   const version = current.captureVersion ?? 0;
   if (version < 2 || (version === 2 && next.stabilityMs === 220)) next.stabilityMs = defaults.stabilityMs;
   next.captureVersion = defaults.captureVersion;

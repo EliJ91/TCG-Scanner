@@ -4,11 +4,22 @@ import { describe, it, expect } from 'vitest';
 import { storage } from '../src/core/storage';
 import { createZip } from '../src/core/export';
 import { archiveFilename, defaultBatchName, filename, type Scan } from '../src/core/types';
+import { defaults } from '../src/core/types';
 const scan = (batchId: string, ordinal: number): Scan => ({
   id: crypto.randomUUID(), batchId, ordinal, capturedAt: new Date(2026, 10, 24, 13, 4, 5, ordinal).getTime(), blob: new Blob([`image-${ordinal}`]), thumbnail: new Blob(),
   width: 900, height: 1257, rotated: false,
 });
 describe('storage, recovery, filenames, ZIP', () => {
+  it('restores saved image adjustments and exports final JPEG bytes without processing them again',async()=>{
+    const settings={...defaults,brightness:123,contrast:87,saturation:112,gamma:1.4};
+    await storage.settings(settings);expect((await storage.load()).settings).toEqual(settings);
+    const jpeg=new Uint8Array([255,216,255,224,12,34,56,255,217]);
+    const batch=await storage.create(2),photo={...scan(batch.id,0),blob:new Blob([jpeg],{type:'image/jpeg'})};
+    await storage.accept(photo);const recovered=await storage.load();expect(await recovered.scans[0].blob.arrayBuffer()).toEqual(jpeg.buffer);
+    const archive=await JSZip.loadAsync(await (await createZip(recovered.scans,()=>{})).arrayBuffer());
+    const file=Object.values(archive.files)[0];expect(await file.async('uint8array')).toEqual(jpeg);
+    await storage.clear(batch.id);await storage.settings(defaults);
+  });
   it('keeps a renamed batch and its next ordinal during concurrent scan metadata writes', async () => {
     const b = await storage.create(5, 'Before scanning');
     await Promise.all([

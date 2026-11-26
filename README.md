@@ -42,6 +42,14 @@ Tap **Flip Interface** beside the flashlight above the camera when your phone is
 
 Turn on **Newest first in gallery and ZIP** in Settings to see your latest scans at the top of the Gallery and export them first.
 
+### Image Adjustments
+
+Open **Menu → Settings → Advanced settings → Image Adjustments** to preview brightness, contrast and saturation from 50–150%, and gamma from 0.5–2.0. Sliders and number inputs stay synchronized. The defaults (100%, 100%, 100%, 1.0) preserve the original image. **Save** applies the four values to new photos and remembers them in the existing settings cache and IndexedDB record. **Cancel**, closing the dialog, or pressing Escape discards changes. **Reset to Defaults** resets the draft; tap Save to commit it. Previously saved photos are unchanged.
+
+The editor borrows the scanner's existing camera stream; its Enable camera button uses the normal camera startup path. Closing it detaches only the editor video, leaving the scanner camera available. The preview stays visible above scrollable controls on small screens.
+
+Preview color uses native SVG channel transfers in sRGB, including an actual gamma exponent of `1 / gamma`, without a JavaScript video-processing loop. Brightness, contrast, saturation and gamma use the same ordering and clipping in captured images. Motion, presence and focus detection continue sampling the raw video. The current capture pipeline crops only for zoom framing; adjustments run after that crop and orientation, before the single JPEG encode. Non-neutral captures copy their frame immediately and use one reusable background worker with lookup tables, allowing later photos while earlier images encode and save. Neutral captures retain the original fast capture path. ZIP export, rotation and recovery use saved JPEGs without applying the adjustments again. The worker is cached with the app for offline use.
+
 ### Mobile camera access
 
 The preview opens independently of saved-data loading. **Enable camera** remains available when browser policy requires a tap. Capture starts when you choose **Start scanning** or **Take photo**.
