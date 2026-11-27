@@ -19,7 +19,7 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 - [ ] Tap the visible batch name/pencil, save a new name before the first photo, rename during scanning, and reload. The scanner and ZIP dialog must show the same persisted name.
 - [ ] Toggle light/dark through Menu → Settings; reload to confirm persistence. Dark mode must use pure black and neutral gray surfaces. Check contrast and controls in both modes.
 - [ ] Turn on Flip Interface and hold the phone upside down. Capture a card in Auto and Manual and compare the preview, Gallery, and exported JPEG orientation. Use the scanner controls, scroll Settings, and try swiping and panning in the Gallery. Reload and turn the setting off again.
-- [ ] Settings should show Dark mode, Newest first in gallery and ZIP, Using Card Slinger, Wait before each photo, Sounds, and Volume. Open Advanced settings to find photo/camera controls. Confirm the descriptions are clear and Done is always reachable on a small screen.
+- [ ] Settings should show Dark mode, Newest first in gallery and ZIP, Wait before each photo, Sounds, and Volume. The Card Slinger toggle should be absent. Open Advanced settings to find photo/camera controls. Confirm the descriptions are clear and Done is always reachable on a small screen.
 - [ ] At 320, 375, 390, and 430 px widths, verify the scanner is horizontally centered and its Start/Pause control fits on screen. No sidebar, bottom navigation, batch panel, or recent-card thumbnails should be visible until opened from Menu.
 
 ## Motion and framing
@@ -29,8 +29,8 @@ Record phone model, OS, browser version, camera resolution, lighting, stability 
 - [ ] Switch Auto/Manual while active. Keep the same preview and batch, with no extra stationary duplicate.
 - [ ] Slide in a card and hold still. Check for one ding and one JPEG with the same framing as the preview.
 - [ ] Leave it stationary for 30 seconds: no duplicate scans.
-- [ ] With Using Card Slinger off, slide another card directly over the last. Confirm Auto waits for the bare surface before scanning again.
-- [ ] Turn on Using Card Slinger. Stack successive cards and confirm Auto takes one photo each time the top card settles. Confirm a stationary stack does not repeat and a bare surface does not trigger the shutter.
+- [ ] Remove a scanned card, leave the bare surface visible longer than the photo delay, then place another card. Confirm the empty surface is never photographed and the replacement scans after it settles.
+- [ ] Stack successive cards, then switch between stacking and removal within the same batch at movement tolerance 90. Confirm one photo per settled placement and no repeated stationary photo. Repeat after loading an older browser preference with Card Slinger turned off; both methods must still work.
 - [ ] Remove the card and leave the bare surface visible for at least two camera frames. Check that Auto waits for the next card to settle. Repeat with Flip Interface on and a light shadow on the surface.
 - [ ] Repeat with two or more identical-artwork cards. Count physical cards against saved images.
 - [ ] Test yellow, white, silver, and dark borders; textured and holographic cards; slight rotation; mild perspective. Inspect corners at full resolution.

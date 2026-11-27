@@ -8,7 +8,7 @@ export interface MotionReading {
   awaitingPlacement?: boolean;
 }
 
-/** One quiet interval per placement, with optional motion-based rearming for stacks. */
+/** One quiet interval per placement, rearmed by removal or a new card on top. */
 export class MotionDetector {
   private previous?: Uint8Array;
   private noise = 2;
@@ -18,19 +18,12 @@ export class MotionDetector {
   private lastTime: number | null = null;
   private needsRemoval = false;
   private emptyFrames = 0;
-  private stackCards = defaults.stackCards;
   private movedSinceCapture = false;
   private cycle = 0;
   constructor(public stabilityMs = defaults.stabilityMs, public sensitivity = defaults.sensitivity) {}
 
   get deadline() { return this.state === 'stabilizing' && this.stableStart !== null ? this.stableStart + this.stabilityMs : null; }
   private get awaitingNextCard() { return this.needsRemoval && !this.movedSinceCapture; }
-
-  setStackCards(enabled: boolean) {
-    if (enabled === this.stackCards) return;
-    this.stackCards = enabled;
-    this.reset();
-  }
 
   reset(requireRemoval = this.needsRemoval) {
     this.previous = undefined;
@@ -45,11 +38,9 @@ export class MotionDetector {
     this.cycle++;
     const { previous, lastTime } = this;
     this.reset(true);
-    if (this.stackCards) {
-      // Compare the next frame to the one just captured, even during JPEG encoding.
-      this.previous = previous;
-      this.lastTime = lastTime;
-    }
+    // Compare the next frame to the one just captured, even during JPEG encoding.
+    this.previous = previous;
+    this.lastTime = lastTime;
   }
 
   update(gray: Uint8Array, now: number, presence: CardPresence, focused = true): MotionReading {
@@ -75,12 +66,12 @@ export class MotionDetector {
     } else this.previous = gray.slice();
 
     // A new card on the stack can change only the artwork within the frame.
-    const threshold = this.stackCards && this.awaitingNextCard ? this.sensitivity / 2 : this.sensitivity;
+    const threshold = this.awaitingNextCard ? this.sensitivity / 2 : this.sensitivity;
     const moving = this.sensitivity < 1 && this.score > threshold;
     if (this.needsRemoval) {
       this.emptyFrames = presence === 'empty' ? this.emptyFrames + 1 : 0;
       if (this.emptyFrames >= 2) this.needsRemoval = false;
-      if (this.stackCards && moving) this.movedSinceCapture = true;
+      if (moving) this.movedSinceCapture = true;
     }
     if (presence !== 'card' || this.awaitingNextCard || !previous) {
       this.state = 'waiting';

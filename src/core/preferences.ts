@@ -2,16 +2,15 @@ import { autoZoomOutLevels, defaults, motionSensitivityRange, photoWaitTimes, va
 import { normalizeImageAdjustments } from './image-adjustments';
 const key = 'cardslinger-settings';
 const batchNameKey = 'cardslinger-custom-batch-name';
-type SavedSettings = Partial<Settings> & { lockCamera?: boolean; debug?: boolean; focusLocked?: boolean; focusDistance?: number | null; autoAdjustZoom?: boolean };
+type SavedSettings = Partial<Settings> & { lockCamera?: boolean; debug?: boolean; focusLocked?: boolean; focusDistance?: number | null; autoAdjustZoom?: boolean; stackCards?: boolean };
 /** Migrate saved settings to the current controls. */
 export function normalizeSettings(saved?: SavedSettings): Settings {
-  const { lockCamera: _lockCamera, debug: _debug, focusLocked: _focusLocked, focusDistance: _focusDistance, autoAdjustZoom: _autoAdjustZoom, ...current } = saved ?? {};
+  const { lockCamera: _lockCamera, debug: _debug, focusLocked: _focusLocked, focusDistance: _focusDistance, autoAdjustZoom: _autoAdjustZoom, stackCards: _stackCards, ...current } = saved ?? {};
   const next = { ...defaults, ...current };
   Object.assign(next, normalizeImageAdjustments(current));
   const version = current.captureVersion ?? 0;
   if (version < 2 || (version === 2 && next.stabilityMs === 220)) next.stabilityMs = defaults.stabilityMs;
   next.captureVersion = defaults.captureVersion;
-  next.stackCards = current.stackCards === true;
   next.flipInterface = current.flipInterface === true;
   if (!validBatchTarget(next.batchTarget)) next.batchTarget = defaults.batchTarget;
   next.autoZoom = current.autoZoom === true;

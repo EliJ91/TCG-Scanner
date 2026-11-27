@@ -1,7 +1,7 @@
 import { imageAdjustmentDefaults, type ImageAdjustments } from './image-adjustments';
 export interface Settings extends ImageAdjustments {
   captureVersion: number; cameraId: string; torch: boolean;
-  captureMode: 'auto' | 'manual'; stackCards: boolean; zoom: number;
+  captureMode: 'auto' | 'manual'; zoom: number;
   autoZoom: boolean; autoZoomInterval: number; autoZoomOutPercent: number;
   stabilityMs: number; sensitivity: number; quality: number;
   volume: number; muted: boolean; galleryNewestFirst: boolean; flipInterface: boolean;
@@ -12,7 +12,7 @@ export const motionSensitivityRange = { min: 0.99, max: 1, step: 0.0001 } as con
 export const defaults: Settings = {
   ...imageAdjustmentDefaults,
   captureVersion: 3, cameraId: '', torch: false,
-  captureMode: 'auto', stackCards: false, zoom: 1, stabilityMs: 100, sensitivity: motionSensitivityRange.min, quality: 1,
+  captureMode: 'auto', zoom: 1, stabilityMs: 100, sensitivity: motionSensitivityRange.min, quality: 1,
   autoZoom: false, autoZoomInterval: 10, autoZoomOutPercent: 20,
   volume: 0.6, muted: false, galleryNewestFirst: false, flipInterface: false,
   resolution: 2560, useImageCapture: false, batchTarget: 50,

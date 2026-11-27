@@ -45,7 +45,7 @@ function button(label: string) {
 async function renderApp() { await act(async () => root.render(<App />)); }
 async function click(label: string) { await act(async () => button(label).click()); }
 async function startAutoPreview(stabilityMs: number, initial: Uint8Array, flipInterface = false, options: {
-  settings?: Partial<Settings>;
+  settings?: Partial<Settings> & { stackCards?: boolean };
   warmup?: boolean;
   cameraIdleMs?: number;
   videoFrames?: boolean;
@@ -226,16 +226,17 @@ describe('automatic camera preview independent from scanner initialization', () 
     expect(mocks.control).toHaveBeenLastCalledWith({ torch: false });
     await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
     await click('Settings');
-    const stacking = [...container.querySelectorAll('label')].find(label => label.textContent?.startsWith('Using Card Slinger'))!;
-    await act(async () => stacking.querySelector('input')!.click());
-    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!)).toEqual({ stackCards: true });
+    expect(container.textContent).not.toContain('Using Card Slinger');
+    const galleryOrder = [...container.querySelectorAll('label')].find(label => label.textContent?.startsWith('Newest first in gallery and ZIP'))!;
+    await act(async () => galleryOrder.querySelector('input')!.click());
+    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!)).toEqual({ galleryNewestFirst: true });
     const saved = { ...defaults, torch: true, focusLocked: true, focusDistance: 2, zoom: 2, batchTarget: 25 };
     await act(async () => finish({ ...loaded, settings: saved }));
     expect(mocks.start).toHaveBeenCalledTimes(1);
     expect(mocks.control).toHaveBeenLastCalledWith({ torch: true });
     expect(mocks.focus).not.toHaveBeenCalled();
     expect(mocks.zoom).toHaveBeenLastCalledWith(2);
-    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!)).toEqual({ ...defaults, torch: true, zoom: 2, batchTarget: 25, stackCards: true });
+    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!)).toEqual({ ...defaults, torch: true, zoom: 2, batchTarget: 25, galleryNewestFirst: true });
   });
   it('still requests the camera after storage initialization fails', async () => {
     mocks.load.mockRejectedValue(new Error('Storage blocked')); await renderApp();
@@ -386,7 +387,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
   it('detects a new stacked card in the first frame after an automatic zoom change', async () => {
     const first = printedCard(), second = printedCard(1, 0, 7);
     const { tick } = await startAutoPreview(100, first, false, {
-      settings: { stackCards: true, zoom: 2, autoZoom: true, autoZoomInterval: 1, autoZoomOutPercent: 50 },
+      settings: { zoom: 2, autoZoom: true, autoZoomInterval: 1, autoZoomOutPercent: 50 },
     });
     await tick();
     await tick(33, first);
@@ -431,7 +432,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
     const background = printedCard(0, 180);
     expect(new CardPresenceDetector().detect(background)).toBe('card');
     const { tick } = await startAutoPreview(10, background, flipped, {
-      settings: { stackCards: true, sensitivity: 1 }, warmup: false, cameraIdleMs: 5000, videoFrames,
+      settings: { sensitivity: 1 }, warmup: false, cameraIdleMs: 5000, videoFrames,
     });
     for (let i = 0; i < 16; i++) await tick(50, background);
     expect(mocks.capture).not.toHaveBeenCalled();
@@ -491,10 +492,10 @@ describe('manual capture, continuous errors, and batch naming', () => {
     await tick(100);
     expect(mocks.capture).toHaveBeenCalledTimes(2);
   });
-  it.each([false, true])('ignores card-like startup frames and a noisy empty surface before capturing a real card (stacking and flip %s)', async stacking => {
+  it.each([false, true])('ignores card-like startup frames and a noisy empty surface before capturing a real card (flipped %s)', async flipped => {
     const initial = printedCard();
-    const { tick } = await startAutoPreview(10, initial, stacking, {
-      settings: { stackCards: stacking }, warmup: false,
+    const { tick } = await startAutoPreview(10, initial, flipped, {
+      warmup: false,
     });
     await tick();
     await tick(33, initial);
@@ -622,33 +623,23 @@ describe('manual capture, continuous errors, and batch naming', () => {
     expect(mocks.success).toHaveBeenCalledTimes(3);
     expect(container.querySelector('.scan-count')?.textContent).toBe('3 / 50');
   });
-  it('uses the Card Slinger setting to capture successive cards placed on top during a slow save', async () => {
+  it.each([false,true])('captures removal, replacement and stacking by default during a slow save, ignoring a saved off setting (flipped %s)', async flipped => {
     let finishSaving!: () => void;
     mocks.accept.mockImplementationOnce(() => new Promise<void>(resolve => { finishSaving = resolve; }));
-    const first = printedCard(), second = printedCard(1, 0, 7), third = printedCard(2);
-    const { tick } = await startAutoPreview(100, first);
-    await tick();
-    await tick(33, first);
-    expect(container.querySelector('.auto-countdown:not([hidden])')).not.toBeNull();
-    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open menu"]')!.click());
-    expect(container.querySelector('.auto-countdown:not([hidden])')).toBeNull();
-    expect(container.textContent).toContain('Scanning paused');
-    await click('Settings');
-    const setting = [...container.querySelectorAll('label')].find(label => label.textContent?.startsWith('Using Card Slinger'))!;
-    expect(setting.querySelector('input')?.checked).toBe(false);
-    await act(async () => setting.querySelector('input')!.click());
-    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!).stackCards).toBe(true);
-    await click('Done');
-    await tick(150, first);
-    expect(mocks.capture).not.toHaveBeenCalled();
-    expect(mocks.stop).not.toHaveBeenCalled();
-    await click('Resume scanning');
+    const bounds = { left: 10, top: 12, right: 150, bottom: 108 };
+    const first = printedCard(0,248,241,bounds), second = printedCard(1,248,241,bounds), third = printedCard(2,248,241,bounds);
+    const { tick } = await startAutoPreview(100, first, flipped, { settings: { stackCards: false, sensitivity: 0.999 } });
+    expect(JSON.parse(localStorage.getItem('cardslinger-settings')!)).not.toHaveProperty('stackCards');
     await tick();
     await tick(33, first);
     await tick(100);
     expect(mocks.capture).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain('Place the next card on top');
+    expect(container.textContent).toContain('Place the next card');
     await tick(250, first);
+    expect(mocks.capture).toHaveBeenCalledTimes(1);
+    await tick(33, emptyFrame());
+    await tick(33, emptyFrame());
+    await tick(200, emptyFrame());
     expect(mocks.capture).toHaveBeenCalledTimes(1);
     await tick(33, second);
     await tick(33, second);
@@ -709,7 +700,7 @@ describe('manual capture, continuous errors, and batch naming', () => {
         return new Promise(resolve => { finishEncoding = () => resolve(jpeg); });
       });
     const first = printedCard(), second = printedCard(1, 0, 7), third = printedCard(2), fourth = printedCard(3);
-    const { tick } = await startAutoPreview(100, first, false, { settings: { batchTarget: 3, stackCards: true } });
+    const { tick } = await startAutoPreview(100, first, false, { settings: { batchTarget: 3 } });
     await tick();
     await tick(33, first);
     await tick(100);

@@ -400,7 +400,7 @@ export default function App() {
   else if (s.session === 'scanning') {
     if (!autoMode) scannerStatus = 'Manual · tap to take a photo';
     else if (showCountdown && !snapped) scannerStatus = 'Hold still';
-    else if (s.reading?.awaitingNextCard) scannerStatus = s.settings.stackCards ? 'Place the next card on top' : 'Remove the card';
+    else if (s.reading?.awaitingNextCard) scannerStatus = 'Place the next card';
     else if (s.reading?.awaitingPlacement) scannerStatus = 'Place or move a card';
     else if (s.reading?.state === 'focusing') scannerStatus = 'Focusing';
     else if (s.reading?.state === 'moving') scannerStatus = 'Card moving';
@@ -540,7 +540,6 @@ export default function App() {
       <p className="dialog-intro">This browser saves your settings automatically.</p>
       <Toggle label="Dark mode" hint="Use a black background with light text." checked={theme.dark} onChange={theme.setDark} />
       <Toggle label="Newest first in gallery and ZIP" hint="Show your latest photos first in the Gallery and give them the first file numbers in the ZIP." checked={newestFirst} onChange={galleryNewestFirst => s.setSettings({ ...s.settings, galleryNewestFirst })} />
-      <Toggle label="Using Card Slinger" hint="Turn this on to stack cards in Auto. With it off, remove each card before placing the next." checked={s.settings.stackCards} onChange={stackCards => s.setSettings({ ...s.settings, stackCards })} />
       <div className="auto-zoom">
         <Toggle label="Auto zoom" hint="Zoom out after a set number of photos. Pinch to zoom in first." checked={s.settings.autoZoom} onChange={autoZoom => s.setSettings({ ...s.settings, autoZoom })} />
         <details className="auto-zoom-settings">
@@ -624,7 +623,7 @@ export default function App() {
         <div className="guide-step">
           <h3>Take photos in Auto or Manual</h3>
           <p>In <strong>Auto</strong>, tap <strong>Start scanning</strong>, then place a card. If a card is already in view, lift and replace it or move it slightly. Keep it still while <strong>Focusing</strong> is shown. The green bar fills once the view is sharp and still, then the app takes a photo. After resuming, place or move the next card.</p>
-          <p>Lift each card and briefly show the empty surface before placing the next. To stack cards, turn on <strong>Using Card Slinger</strong> in Settings and place each new card on top.</p>
+          <p>For the next photo, remove the card and place another, or place a new card directly on top. Both methods work automatically. Keep the card still until the photo is taken.</p>
           <p>In <strong>Manual</strong>, tap <strong>Take photo</strong> for each card.</p>
         </div>
         <div className="guide-step">

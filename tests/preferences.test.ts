@@ -5,8 +5,16 @@ import { defaults } from '../src/core/types';
 beforeEach(()=>localStorage.clear());
 describe('browser-cached camera preferences',()=>{
   it('restores the selected camera, zoom, resolution and flashlight before async storage loads',()=>{
-    const saved={...defaults,cameraId:'rear-wide',resolution:3840,zoom:1.8,torch:true,stackCards:true,stabilityMs:200,batchTarget:123};
+    const saved={...defaults,cameraId:'rear-wide',resolution:3840,zoom:1.8,torch:true,stabilityMs:200,batchTarget:123};
     cacheSettings(saved);expect(normalizeSettings(readCachedSettings())).toEqual(saved);
+  });
+  it.each([false,true])('discards the retired card-slinger preference (%s) without changing other settings',stackCards=>{
+    cacheSettings({...defaults,stackCards,zoom:1.8,stabilityMs:200});
+    const restored=normalizeSettings(readCachedSettings());
+    expect(restored).toEqual({...defaults,zoom:1.8,stabilityMs:200});
+    expect(restored).not.toHaveProperty('stackCards');
+    cacheSettings(restored);
+    expect(readCachedSettings()).not.toHaveProperty('stackCards');
   });
   it('migrates the old slow-capture setting and rounds saved delays to the nearest stop',()=>{
     expect(normalizeSettings({stabilityMs:1200,zoom:2}).stabilityMs).toBe(100);

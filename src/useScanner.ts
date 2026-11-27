@@ -241,7 +241,6 @@ export function useScanner() {
 
   useEffect(() => {
     detector.current.stabilityMs = settings.stabilityMs; detector.current.sensitivity = settings.sensitivity;
-    detector.current.setStackCards(settings.stackCards);
     camera.current?.setZoom(settings.zoom);
     if (audio.current) { audio.current.volume = settings.volume; audio.current.muted = settings.muted; }
     if (loaded) void storage.settings(settings).catch(err => setError(`Settings could not be saved: ${message(err)}`));
@@ -250,10 +249,8 @@ export function useScanner() {
   const updateSettings = (next: Settings) => {
     const previous = settingsRef.current;
     for (const key of Object.keys(next) as (keyof Settings)[]) if (next[key] !== previous[key]) editedPreferences.current.add(key);
-    const stackChanged = next.stackCards !== previous.stackCards;
-    if (stackChanged || next.flipInterface !== previous.flipInterface) {
-      if (stackChanged) detector.current.setStackCards(next.stackCards);
-      else detector.current.reset();
+    if (next.flipInterface !== previous.flipInterface) {
+      detector.current.reset();
       setReading(detector.current.advance(performance.now()));
       setCountdown(null);
     }
@@ -418,7 +415,7 @@ export function useScanner() {
         void capture(true);
         focus.reset();
         const adjustedZoom = settingsRef.current.zoom;
-        if (settingsRef.current.stackCards && adjustedZoom !== zoom) {
+        if (adjustedZoom !== zoom) {
           // Use the frame just captured at the new zoom to detect the next card without a gap.
           sampleMotion(adjustedZoom, flipInterface, now, false);
         }

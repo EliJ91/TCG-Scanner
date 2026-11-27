@@ -14,9 +14,8 @@ describe('card-gated motion', () => {
     expect(presence.detect(frame)).not.toBe('card');
     expect(presence.detect(frame.slice().reverse())).not.toBe('card');
   });
-  it.each([false, true])('detects a one-level pixel change at zero tolerance and still permits stillness (stacking %s)', stacking => {
+  it('detects a one-level pixel change at zero tolerance and still permits stillness', () => {
     const detector = new MotionDetector(100, 0);
-    detector.setStackCards(stacking);
     const card = printedCard();
     sample(detector, card, 0);
     expect(sample(detector, card, 33).state).toBe('stabilizing');
@@ -30,9 +29,8 @@ describe('card-gated motion', () => {
     expect(sample(detector, moved, 232)).toMatchObject({ state: 'waiting', awaitingNextCard: true });
   });
 
-  it.each([false, true])('ignores even full-frame movement at maximum tolerance without duplicating a card (stacking %s)', stacking => {
+  it('ignores even full-frame movement at maximum tolerance without duplicating a card', () => {
     const detector = new MotionDetector(100, 1);
-    detector.setStackCards(stacking);
     const first = emptyFrame().map((_, index) => index % 2 ? 30 : 220);
     const moved = first.map(value => 250 - value);
     detector.update(first, 0, 'card');
@@ -114,23 +112,20 @@ describe('card-gated motion', () => {
     expect(d.advance(133).state).toBe('ready');
   });
 
-  it('does not photograph removal, duplicate a card, or rearm on a single empty frame', () => {
+  it('does not photograph the empty surface or repeat a stationary card before a replacement', () => {
     const d = new MotionDetector(10), card = printedCard(), empty = emptyFrame();
     sample(d, card, 0); sample(d, card, 33); expect(d.advance(43).state).toBe('ready');
     d.consume();
-    for (const [i, frame] of [card, printedCard(1), empty, card, card].entries()) {
-      expect(sample(d, frame, 66 + i * 33)).toMatchObject({ state: 'waiting', awaitingNextCard: true });
-    }
-    expect(sample(d, empty, 240).awaitingNextCard).toBe(true);
-    expect(sample(d, empty, 273)).toMatchObject({ state: 'waiting', awaitingNextCard: false });
-    expect(d.advance(600).state).toBe('waiting');
-    sample(d, card, 633); sample(d, card, 666);
-    expect(d.advance(676).state).toBe('ready');
+    for (const now of [66,99,132]) expect(sample(d, card, now)).toMatchObject({ state: 'waiting', awaitingNextCard: true });
+    expect(sample(d, empty, 165).state).toBe('waiting');
+    expect(sample(d, empty, 198).state).toBe('waiting');
+    expect(d.advance(220).state).toBe('waiting');
+    sample(d, card, 231); sample(d, card, 264);
+    expect(d.advance(274).state).toBe('ready');
   });
 
   it('waits for motion after a stack capture and still requires a visible, settled card', () => {
     const d = new MotionDetector(10), card = printedCard(), next = printedCard(1, 0, 7), empty = emptyFrame();
-    d.setStackCards(true);
     sample(d, card, 0); sample(d, card, 33);
     expect(d.advance(43).state).toBe('ready');
     d.consume();
@@ -145,14 +140,19 @@ describe('card-gated motion', () => {
     expect(d.advance(250).state).toBe('waiting');
   });
 
-  it('requires removal again when stacking is switched off mid-placement', () => {
-    const d = new MotionDetector(10), card = printedCard(), next = printedCard(1);
-    d.setStackCards(true);
-    sample(d, card, 0); sample(d, card, 33); d.advance(43); d.consume();
-    sample(d, next, 66);
-    d.setStackCards(false);
-    sample(d, next, 99);
-    expect(sample(d, next, 132)).toMatchObject({ state: 'waiting', awaitingNextCard: true });
+  it.each([false,true])('supports removal and stacking in the same batch at tolerance 90 (flipped %s)', flipped => {
+    const d = new MotionDetector(10,0.999), bounds = { left:10,top:12,right:150,bottom:108 };
+    const orient = (frame:Uint8Array) => flipped ? frame.slice().reverse() : frame;
+    const first=orient(printedCard(0,248,241,bounds)), second=orient(printedCard(1,248,241,bounds)), third=orient(printedCard(2,248,241,bounds));
+    sample(d, first, 0); sample(d, first, 33); expect(d.advance(43).state).toBe('ready'); d.consume();
+    expect(sample(d, first, 66).state).toBe('waiting');
+    expect(sample(d, emptyFrame(), 99).state).toBe('waiting');
+    expect(sample(d, emptyFrame(), 132).state).toBe('waiting');
+    expect(d.advance(160).state).toBe('waiting');
+    sample(d, second, 165); sample(d, second, 198); expect(d.advance(208).state).toBe('ready'); d.consume();
+    expect(sample(d, second, 231).state).toBe('waiting');
+    sample(d, third, 264); sample(d, third, 297); expect(d.advance(307).state).toBe('ready'); d.consume();
+    expect(sample(d, third, 330).state).toBe('waiting');
   });
 
   it('cancels a countdown when the card disappears', () => {
